@@ -50,6 +50,11 @@ export function tick() {
 
 let lastSubCheckMinute = 0;
 
+export function resetEngineState() {
+  lastSubCheckMinute = 0;
+  analyticsCounter = 0;
+}
+
 function handleCPUSubs() {
   if (matchState.awayControl !== 'CPU') return;
   

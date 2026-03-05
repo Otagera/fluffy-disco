@@ -7,6 +7,7 @@
     "dev": "vite dev --port 5173",
     "build": "vite build",
     "preview": "vite preview",
+    "pretest": "svelte-kit sync",
     "test": "vitest src/tests/match-engine.test.ts src/tests/monte-carlo.test.ts src/tests/bdd-tactics.test.ts --run",
     "sim": "vitest run src/tests/batch-simulator.sim.ts",
     "smoke": "vitest run src/tests/smoke.stb.ts",

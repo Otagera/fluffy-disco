@@ -2,6 +2,7 @@ import type { Player } from './types';
 import { matchState } from './matchState.svelte';
 import { PITCH_W, PITCH_H } from './constants';
 import { tacticalRoles } from './roles';
+import { getForwardDir, getOpponentGoalX, getMyGoalX } from './utils';
 
 export type ActionType = 'PASS' | 'SHOOT' | 'DRIBBLE' | 'PRESS' | 'JOCKEY' | 'CLEAR' | 'SUPPORT' | 'OVERLAP';
 
@@ -78,9 +79,7 @@ export function evaluatePlayerActions(player: Player): Action[] {
 }
 
 function scoreShoot(player: Player, multiplier: number): Action {
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
-  const opponentGoalX = (isHome === homeShootsRight) ? 1.0 : 0.0;
+  const opponentGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
   
   const d = Math.abs(opponentGoalX - player.x);
   const isCentral = Math.abs(player.y - 0.5);
@@ -109,9 +108,8 @@ function scoreShoot(player: Player, multiplier: number): Action {
 function scorePass(player: Player, multiplier: number): Action {
   const teammates = matchState.players.filter(p => p.team === player.team && p.id !== player.id);
   const opponents = matchState.players.filter(p => p.team !== player.team);
-  const homeShootsRight = !matchState.sidesSwitched;
   const isHome = player.team === 'home';
-  const forwardDir = (isHome === homeShootsRight) ? 1 : -1;
+  const forwardDir = getForwardDir(player.team, matchState.sidesSwitched);
 
   let bestScore = 0;
   let bestTarget = null;
@@ -160,9 +158,7 @@ function scorePass(player: Player, multiplier: number): Action {
 }
 
 function scoreDribble(player: Player, multiplier: number): Action {
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
-  const opponentGoalX = (isHome === homeShootsRight) ? 1.0 : 0.0;
+  const opponentGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
   
   const d = Math.abs(opponentGoalX - player.x);
   const distScore = linear(d / 0.8);
@@ -177,9 +173,9 @@ function scoreDribble(player: Player, multiplier: number): Action {
 
 function scoreClear(player: Player, multiplier: number): Action {
   const pressureBonus = (player.pressure || 0) * 0.8;
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
-  const ownHalf = (isHome === homeShootsRight) ? player.x < 0.3 : player.x > 0.7;
+  const forwardDir = getForwardDir(player.team, matchState.sidesSwitched);
+  // If moving right (forwardDir=1), own half is < 0.3. If moving left (-1), own half is > 0.7.
+  const ownHalf = forwardDir === 1 ? player.x < 0.3 : player.x > 0.7;
   const ownHalfBonus = ownHalf ? 0.4 : 0;
 
   const score = (pressureBonus + ownHalfBonus) * multiplier;
@@ -209,9 +205,7 @@ function scorePress(player: Player, multiplier: number): Action {
 
   // 2. GOALKEEPER RESTRICTION: Keep the GK in his box
   if (player.role === 'GK') {
-    const homeShootsRight = !matchState.sidesSwitched;
-    const isHome = player.team === 'home';
-    const myGoalX = (isHome === homeShootsRight) ? 0.0 : 1.0;
+    const myGoalX = getMyGoalX(player.team, matchState.sidesSwitched);
     
     const distToMyGoal = Math.abs(b.x - myGoalX);
     const isInBox = distToMyGoal < 0.16 && b.y > 0.2 && b.y < 0.8;
@@ -233,9 +227,7 @@ function scorePress(player: Player, multiplier: number): Action {
   const looseBallBoost = matchState.possessionPlayerId === null ? 1.5 : 1.0;
   
   // PENALTY BOX PANIC: If the ball is in our box, absolutely swarm it
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
-  const myGoalX = (isHome === homeShootsRight) ? 0.0 : 1.0;
+  const myGoalX = getMyGoalX(player.team, matchState.sidesSwitched);
   const distToMyGoal = Math.abs(b.x - myGoalX);
   const isInBox = distToMyGoal < 0.16 && b.y > 0.2 && b.y < 0.8;
   
@@ -270,9 +262,7 @@ function scoreSupport(player: Player, cognitiveLaziness: number): Action {
 
   if (!nearestTeammatesToBall.includes(player.id)) return { type: 'SUPPORT', score: 0, audit: 'Not in group' };
 
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
-  const forwardDir = (isHome === homeShootsRight) ? 1 : -1;
+  const forwardDir = getForwardDir(player.team, matchState.sidesSwitched);
   
   const isAhead = (player.x - b.x) * forwardDir > 0;
   
@@ -293,10 +283,10 @@ function scoreOverlap(player: Player, cognitiveLaziness: number): Action {
   const possessor = matchState.players.find(p => p.id === possessorId);
   if (!possessor || possessor.team !== player.team) return { type: 'OVERLAP', score: 0 };
 
-  const homeShootsRight = !matchState.sidesSwitched;
-  const isHome = player.team === 'home';
+  const forwardDir = getForwardDir(player.team, matchState.sidesSwitched);
 
-  const inAttack = (isHome === homeShootsRight) ? b.x > 0.5 : b.x < 0.5;
+  // If forwardDir is 1 (attacking right), attack is x > 0.5. Else x < 0.5.
+  const inAttack = forwardDir === 1 ? b.x > 0.5 : b.x < 0.5;
   if (!inAttack) return { type: 'OVERLAP', score: 0, audit: 'Not in attacking half' };
 
   const isWide = player.homeY / PITCH_H < 0.3 || player.homeY / PITCH_H > 0.7;
@@ -306,7 +296,7 @@ function scoreOverlap(player: Player, cognitiveLaziness: number): Action {
   // NEW: Use acceleration and work rate
   const physicalFactor = (player.attributes.pace + player.attributes.acceleration + player.attributes.workRate) / 60;
   
-  const isFinalThird = (isHome === homeShootsRight) ? b.x > 0.7 : b.x < 0.3;
+  const isFinalThird = forwardDir === 1 ? b.x > 0.7 : b.x < 0.3;
   const finalThirdBoost = isFinalThird ? 1.6 : 1.0;
 
   const score = 0.7 * staminaFactor * physicalFactor * cognitiveLaziness * finalThirdBoost;

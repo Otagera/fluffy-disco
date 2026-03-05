@@ -118,6 +118,13 @@
     {matchState.homeFormation} <span class="dot">●</span>
   </div>
 
+  {#if matchState.events.length > 0}
+    {@const lastEvent = matchState.events[matchState.events.length - 1]}
+    <div class="event-ticker" class:goal-event={lastEvent.type === 'goal'}>
+      <span class="ticker-min">{lastEvent.minute}'</span> {lastEvent.desc}
+    </div>
+  {/if}
+
   <div class="scoreboard">
     <div class="team-crest home">⚽</div>
     <div class="score-box">
@@ -229,6 +236,37 @@
     border-left: 3px solid #2d8a4a;
   }
   .dot { color: #2d8a4a; margin-left: 5px; }
+
+  .event-ticker {
+    position: absolute;
+    top: 60px;
+    left: 20px;
+    background: rgba(0,0,0,0.7);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    border-left: 3px solid #fff;
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .event-ticker.goal-event {
+    background: rgba(45, 138, 74, 0.9);
+    border-left-color: #ffeb3b;
+    font-weight: bold;
+  }
+  .ticker-min {
+    font-weight: 900;
+    color: #ffeb3b;
+    margin-right: 5px;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
 
   .scoreboard {
     position: absolute;

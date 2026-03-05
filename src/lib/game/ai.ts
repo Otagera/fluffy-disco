@@ -4,6 +4,7 @@ import type { Player } from './types';
 import { evaluatePlayerActions, type Action } from './utilityAI';
 import { MoveToTarget, ExecuteKick, DribbleBall, Sequence, type BTNode } from './behaviorTree';
 import { RoleRegistry } from './roles';
+import { getForwardDir, getMyGoalX, getOpponentGoalX } from './utils';
 
 const behaviors: Record<string, BTNode> = {
   'PASS': new Sequence('pass', [new MoveToTarget(), new ExecuteKick(3.4)]),
@@ -65,11 +66,12 @@ export function calculateEffectivePressure(player: Player) {
     const d = Math.sqrt(dx*dx + dy*dy) || 0.001;
     
     const approachSpeed = -((opp.vx * dx) + (opp.vy * dy)) / d; 
-    const dynamicDecayFactor = 0.35 - (approachSpeed > 0 ? approachSpeed * 0.5 : 0);
+    const rawDecay = 0.35 - (approachSpeed > 0 ? approachSpeed * 0.5 : 0);
+    const dynamicDecayFactor = Math.max(0.08, Math.min(0.45, rawDecay));
 
     let press = Math.exp(-d * dynamicDecayFactor); 
 
-    const forwardDir = player.team === 'home' ? 1 : -1;
+    const forwardDir = getForwardDir(player.team, matchState.sidesSwitched);
     const isOpponentInFront = Math.sign(dx) === forwardDir;
     if (isOpponentInFront) press *= 1.5;
 
@@ -99,8 +101,7 @@ export function updateTacticalAnchors() {
     const leader = leaders[team];
     if (!leader) return;
 
-    let forwardDir = team === 'home' ? 1 : -1;
-    if (matchState.sidesSwitched) forwardDir *= -1;
+    const forwardDir = getForwardDir(team, matchState.sidesSwitched);
 
     const mentality = team === 'home' ? matchState.homeMentality : matchState.awayMentality;
     let mentalityShift = 0;
@@ -144,8 +145,7 @@ export function updateTacticalAnchors() {
     const mentality = p.team === 'home' ? matchState.homeMentality : matchState.awayMentality;
     
     // Determine forward direction based on team AND switch state
-    let forwardDir = p.team === 'home' ? 1 : -1;
-    if (matchState.sidesSwitched) forwardDir *= -1;
+    const forwardDir = getForwardDir(p.team, matchState.sidesSwitched);
 
     const roleDef = RoleRegistry.get(p.tacticalRole) || RoleRegistry.get('GK')!;
     const offsets = roleDef.getPositionalAnchorOffset(b.x, b.y, mentality, forwardDir, isTeamInPossession ?? false);
@@ -168,7 +168,7 @@ export function updateTacticalAnchors() {
       
       // LINE OF CONFRONTATION:
       // If the ball is in the defensive third (within 0.3 of our goal), defenders must step up to confront
-      const myGoalX = p.team === 'home' ? (matchState.sidesSwitched ? 1.0 : 0.0) : (matchState.sidesSwitched ? 0.0 : 1.0);
+      const myGoalX = getMyGoalX(p.team, matchState.sidesSwitched);
       const distToGoal = Math.abs(b.x - myGoalX);
       
       if (distToGoal < 0.3) {
@@ -226,8 +226,9 @@ export function updateTacticalAnchors() {
     // 3. GK POSITIONING
     if (p.role === 'GK') {
       // Goal is at 0.0 or 1.0 depending on team and switch state
-      let ownGoalX = p.team === 'home' ? 0.02 : 0.98;
-      if (matchState.sidesSwitched) ownGoalX = 1 - ownGoalX;
+      let ownGoalX = getMyGoalX(p.team, matchState.sidesSwitched);
+      // Slightly push GK off the goal line
+      ownGoalX += getForwardDir(p.team, matchState.sidesSwitched) * 0.02;
 
       const ownGoalY = 0.5;
       const distToGoal = Math.abs(b.x - ownGoalX);
@@ -244,18 +245,20 @@ export function updateTacticalAnchors() {
       
       if (sp.type === 'corner') {
         if (isAttacking) {
-          if (p.role === 'CB' || p.role === 'FWD') {
+          if (p.tacticalRole === 'CB' || p.role === 'FWD') {
             // Crowd the box
-            const oppGoalX = p.team === 'home' ? (matchState.sidesSwitched ? 0.05 : 0.95) : (matchState.sidesSwitched ? 0.95 : 0.05);
+            const oppGoalX = getOpponentGoalX(p.team, matchState.sidesSwitched);
             targetAnchorX = oppGoalX + (Math.random() - 0.5) * 0.1;
             targetAnchorY = 0.5 + (Math.random() - 0.5) * 0.2;
-          } else if (p.role === 'FB') {
+          } else if (p.tacticalRole === 'FB' || p.tacticalRole === 'WB') {
             // Stay back
-            targetAnchorX = p.team === 'home' ? (matchState.sidesSwitched ? 0.6 : 0.4) : (matchState.sidesSwitched ? 0.4 : 0.6);
+            const myGoalX = getMyGoalX(p.team, matchState.sidesSwitched);
+            // Defend around 40-60% pitch length, but relative to own goal
+            targetAnchorX = myGoalX + getForwardDir(p.team, matchState.sidesSwitched) * 0.4;
           }
         } else if (p.role !== 'GK') {
           // Defending team packs the box
-          const ownGoalX = p.team === 'home' ? (matchState.sidesSwitched ? 0.95 : 0.05) : (matchState.sidesSwitched ? 0.05 : 0.95);
+          const ownGoalX = getMyGoalX(p.team, matchState.sidesSwitched);
           targetAnchorX = ownGoalX + (Math.random() - 0.5) * 0.05;
           targetAnchorY = 0.5 + (Math.random() - 0.5) * 0.2;
         }

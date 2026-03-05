@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { matchState } from '$lib/game/matchState.svelte';
-  import { resetMatch, loadMatchState } from '$lib/game/rules';
+  import { resetMatch, loadMatchState, updateTeamTactics } from '$lib/game/rules';
+  import { formations } from '$lib/game/formations';
   import { startEngine, startClock, stopClock, tick as engineTick } from '$lib/game/engine.svelte';
   import { handleInput } from '$lib/game/input';
   import { downloadReplay, clearReplay } from '$lib/game/recorder';
@@ -19,10 +20,19 @@
   let isSimulating = $state(false);
   let selectedSubOut = $state<number | null>(null);
   let selectedSubIn = $state<number | null>(null);
+  let isHomeManager = $derived(data.managerTeamId === data.homeTeam.id);
+  
+  let currentFormation = $state(data.homeTeam.formation);
+  let currentStyle = $state(data.homeTeam.tacticalStyle);
+  let currentMentality = $state(data.homeTeam.mentality || 'BALANCED');
+  
   let fileInput: HTMLInputElement;
   let resultForm: HTMLFormElement;
 
   onMount(() => {
+    isHomeManager ? currentFormation = data.homeTeam.formation : currentFormation = data.awayTeam.formation;
+    isHomeManager ? currentStyle = data.homeTeam.tacticalStyle : currentStyle = data.awayTeam.tacticalStyle;
+    isHomeManager ? currentMentality = data.homeTeam.mentality : currentMentality = data.awayTeam.mentality;
     // Read any tactical overrides (formation, style, roles) set on the tactics page
     let homeTeam = data.homeTeam;
     let awayTeam = data.awayTeam;
@@ -201,7 +211,13 @@
   function toggleTactics() {
     if (matchState.status === 'PLAYING') {
       matchState.status = 'PAUSED';
+      // Initialize with current state just in case
+      currentFormation = isHomeManager ? matchState.homeFormation : matchState.awayFormation;
+      currentStyle = isHomeManager ? matchState.homeTacticalStyle : matchState.awayTacticalStyle;
+      currentMentality = isHomeManager ? matchState.homeMentality : matchState.awayMentality;
     } else if (matchState.status === 'PAUSED') {
+      // Apply tactical changes on resume
+      updateTeamTactics(isHomeManager ? 'home' : 'away', currentFormation, currentStyle, currentMentality);
       matchState.status = 'PLAYING';
     }
     showTacticsOverlay = !showTacticsOverlay;
@@ -314,7 +330,46 @@
           <h1 style="color: white; margin: 0;">In-Game Management</h1>
           <button class="secondary btn-lg" style="padding: 0.5rem 1rem;" onclick={toggleTactics}>RESUME MATCH</button>
         </div>
-        <p style="color: #ccc; margin-bottom: 1rem; text-align: left;">Subs Remaining: {5 - matchState.homeSubsUsed}/5</p>
+        
+        <!-- TACTICAL CHANGES -->
+        <div class="flex gap-1 mb-2" style="background: #222; padding: 1rem; border-radius: 8px;">
+          <div style="flex: 1;">
+            <h3 style="color: #888; margin-bottom: 0.5rem;">Your Tactics</h3>
+            <div class="flex gap-1 flex-wrap">
+              <select bind:value={currentFormation} class="tactic-select" title="Formation">
+                {#each Object.keys(formations) as f}
+                  <option value={f}>{f}</option>
+                {/each}
+              </select>
+              <select bind:value={currentStyle} class="tactic-select" title="Tactical Style">
+                <option>Tiki-Taka</option>
+                <option>Gegenpress</option>
+                <option>Route One</option>
+                <option>Park the Bus</option>
+                <option>Fluid Counter</option>
+              </select>
+              <select bind:value={currentMentality} class="tactic-select mentality-select" title="Mentality">
+                <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
+                <option value="DEFENSIVE">Defensive</option>
+                <option value="BALANCED">Balanced</option>
+                <option value="ATTACKING">Attacking</option>
+                <option value="ULTRA_ATTACKING">Ultra Attacking</option>
+              </select>
+            </div>
+          </div>
+          <div style="flex: 1; border-left: 1px solid #333; padding-left: 1rem;">
+            <h3 style="color: #888; margin-bottom: 0.5rem;">Opponent Tactics</h3>
+            <p style="color: white; font-weight: bold;">
+              {isHomeManager ? matchState.awayFormation : matchState.homeFormation} • 
+              {isHomeManager ? matchState.awayTacticalStyle : matchState.homeTacticalStyle}
+            </p>
+            <p style="color: var(--danger); font-size: 0.8rem; font-weight: bold;">
+              {(isHomeManager ? matchState.awayMentality : matchState.homeMentality).replace('_', ' ')}
+            </p>
+          </div>
+        </div>
+
+        <p style="color: #ccc; margin-bottom: 1rem; text-align: left;">Subs Remaining: {5 - (isHomeManager ? matchState.homeSubsUsed : matchState.awaySubsUsed)}/5</p>
 
         <div class="grid grid-2 gap-2" style="text-align: left;">
           <div>
@@ -413,21 +468,6 @@
         SKIP TO END
       </button>
     {/if}
-  </div>
-
-  <div class="commentary-card card mt-2">
-    <h3>LIVE COMMENTARY</h3>
-    <div class="events-list">
-      {#each matchState.events.slice().reverse() as event}
-        <div class="event {event.type}">
-          <span class="ev-min">{event.minute}'</span>
-          <span class="ev-desc">{event.desc}</span>
-        </div>
-      {/each}
-      {#if matchState.events.length === 0}
-        <p class="empty-state">Waiting for kickoff...</p>
-      {/if}
-    </div>
   </div>
 </div>
 

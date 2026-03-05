@@ -2,6 +2,7 @@ import { matchState } from './matchState.svelte';
 import { PITCH_W, PITCH_H } from './constants';
 import { resetMatch } from './rules';
 import { emitMatchEvent, emitPassEvent } from './events';
+import { getForwardDir } from './utils';
 
 let dribbleTimer = 0;
 const DRIBBLE_INTERVAL = 24;
@@ -60,7 +61,7 @@ export function updatePhysics() {
 
   // 1. BALL CARRY LOGIC (Fixes Stationary Ball)
   if (possessor) {
-    const forwardDir = possessor.team === 'home' ? 1 : -1;
+    const forwardDir = getForwardDir(possessor.team, matchState.sidesSwitched);
     // Place ball slightly in front of player feet
     b.x = possessor.x + (forwardDir * 0.4) / PITCH_W;
     b.y = possessor.y;

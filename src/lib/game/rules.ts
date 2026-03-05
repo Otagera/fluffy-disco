@@ -3,6 +3,7 @@ import { PITCH_W, PITCH_H } from './constants';
 import { formations } from './formations';
 import type { Player } from './types';
 import { resetPhysics } from './physics';
+import { resetEngineState } from './engine.svelte';
 
 import type { PlayerProfile, TeamProfile } from '../data/types';
 
@@ -212,6 +213,9 @@ export function resetMatch(options: {
     matchState.homeScore = 0;
     matchState.awayScore = 0;
     matchState.events = [];
+    matchState.homeSubsUsed = 0;
+    matchState.awaySubsUsed = 0;
+    resetEngineState();
   }
   
   if (status === 'PLAYING') {
@@ -338,3 +342,48 @@ export function triggerOffside() {
   matchState.ball.vy = 0;
   matchState.ball.vz = 0;
 }
+
+export function updateTeamTactics(team: 'home' | 'away', formation: string, style: string, mentality: string) {
+  if (team === 'home') {
+    matchState.homeFormation = formation;
+    matchState.homeTacticalStyle = style;
+    matchState.homeMentality = mentality as any;
+  } else {
+    matchState.awayFormation = formation;
+    matchState.awayTacticalStyle = style;
+    matchState.awayMentality = mentality as any;
+  }
+
+  const posData = formations[formation] || formations['4-4-2 Wide'];
+  const allTeamPlayers = matchState.players.filter(p => p.team === team).sort((a, b) => a.number - b.number);
+
+  // We assume the first 11 players are the starters. The bench players shouldn't be affected.
+  // The first player should be GK, then outfielders.
+  for (let i = 0; i < 11; i++) {
+    const p = allTeamPlayers[i];
+    if (!p) continue;
+    const pos = posData[i];
+    if (!pos) continue;
+
+    let x = pos.x;
+    let y = pos.y;
+
+    if (team === 'away') {
+      x = 1 - x;
+    }
+
+    if (matchState.sidesSwitched) {
+      x = 1 - x;
+      y = 1 - y;
+    }
+
+    const isWide = pos.y < 0.3 || pos.y > 0.7;
+    const isAdvanced = team === 'home' ? pos.x > 0.35 : (1 - pos.x) > 0.35;
+    
+    p.homeX = x * PITCH_W;
+    p.homeY = y * PITCH_H;
+    p.role = pos.role;
+    p.tacticalRole = getTacticalRole(pos.role, i, isWide, formation, isAdvanced);
+  }
+}
+

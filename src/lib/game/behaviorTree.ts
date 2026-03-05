@@ -5,6 +5,7 @@ import type { Action } from './utilityAI';
 import { resolveActionRoll, applyRollToVector } from './resolution';
 import { calculateShotXG } from './recorder';
 import { emitShotEvent } from './events';
+import { getOpponentGoalX } from './utils';
 
 export type BTStatus = 'SUCCESS' | 'FAILURE' | 'RUNNING';
 
@@ -119,16 +120,13 @@ export class ExecuteKick implements BTNode {
       // Reduce the base power and cap it so passes are more controlled.
       power = Math.max(0.8, Math.min(3.0, (distToTarget / 20) + 0.5));
     } else if (action.type === 'SHOOT') {
-      // Correct direction depends on sidesSwitched
-      const homeShootsRight = !matchState.sidesSwitched;
-      const opponentGoalX = (player.team === 'home' === homeShootsRight) ? 1.0 : 0.0;
+      const opponentGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
       
       targetX = opponentGoalX;
       targetY = 0.5 + (Math.random() - 0.5) * 0.1;
       power = 3.8; 
     } else if (action.type === 'CLEAR') {
-      const homeShootsRight = !matchState.sidesSwitched;
-      const opponentGoalX = (player.team === 'home' === homeShootsRight) ? 1.0 : 0.0;
+      const opponentGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
       targetX = opponentGoalX;
       targetY = Math.random();
       power = 4.5; 
@@ -166,8 +164,7 @@ export class ExecuteKick implements BTNode {
       teamStats.shots++;
       
       // Calculate xG
-      const homeShootsRight = !matchState.sidesSwitched;
-      const targetGoalX = (player.team === 'home' === homeShootsRight) ? 1.0 : 0.0;
+      const targetGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
       const distToGoal = Math.hypot((targetGoalX - b.x) * PITCH_W, (0.5 - b.y) * PITCH_H);
       const angleToGoal = Math.atan2((0.5 - b.y) * PITCH_H, (targetGoalX - b.x) * PITCH_W);
       const xg = calculateShotXG(player, distToGoal, angleToGoal);
@@ -197,8 +194,7 @@ export class DribbleBall implements BTNode {
     if (action.type !== 'DRIBBLE') return 'FAILURE';
     if (matchState.possessionPlayerId !== player.id) return 'FAILURE';
 
-    const homeShootsRight = !matchState.sidesSwitched;
-    const opponentGoalX = (player.team === 'home' === homeShootsRight) ? 1.0 : 0.0;
+    const opponentGoalX = getOpponentGoalX(player.team, matchState.sidesSwitched);
     
     const dxP = opponentGoalX - player.x;
     const dyP = 0.5 - player.y;
