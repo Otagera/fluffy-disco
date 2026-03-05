@@ -355,12 +355,11 @@ export function updateTeamTactics(team: 'home' | 'away', formation: string, styl
   }
 
   const posData = formations[formation] || formations['4-4-2 Wide'];
-  const allTeamPlayers = matchState.players.filter(p => p.team === team).sort((a, b) => a.number - b.number);
-
-  // We assume the first 11 players are the starters. The bench players shouldn't be affected.
-  // The first player should be GK, then outfielders.
+  
+  // Directly iterate the relevant 11 indices in matchState.players
+  const offset = team === 'home' ? 0 : 11;
   for (let i = 0; i < 11; i++) {
-    const p = allTeamPlayers[i];
+    const p = matchState.players[offset + i];
     if (!p) continue;
     const pos = posData[i];
     if (!pos) continue;

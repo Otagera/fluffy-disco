@@ -36,7 +36,8 @@ export function evaluatePlayerActions(player: Player): Action[] {
   const staminaPct = player.currentStamina / 100;
   const fatigue = 1 - staminaPct;
   // High work rate makes players push through fatigue slightly more but tires them faster (handled in physics)
-  const cognitiveLaziness = inverse(fatigue * (0.8 - (player.attributes.workRate / 50)));
+  // TWEAK: Increase the floor of cognitiveLaziness so tired players don't completely stop supporting
+  const cognitiveLaziness = inverse(fatigue * (0.6 - (player.attributes.workRate / 60)));
 
   const rawActions: Action[] = [];
 
@@ -46,8 +47,9 @@ export function evaluatePlayerActions(player: Player): Action[] {
     rawActions.push(scoreDribble(player, modifiers.dribbling * pressureFactor * cognitiveLaziness));
     rawActions.push(scoreClear(player, (1 + (player.pressure || 0) * 1.5) * (1 + fatigue * 0.5)));
   } else {
-    rawActions.push(scorePress(player, modifiers.tackling * inverse(fatigue * 0.9)));
-    rawActions.push(scoreJockey(player, modifiers.holding * (1 + fatigue * 0.4)));
+    rawActions.push(scorePress(player, modifiers.tackling * inverse(fatigue * 0.8)));
+    // TWEAK: Reduce fatigue bonus for Jockeying to prevent it being the only action for tired players
+    rawActions.push(scoreJockey(player, modifiers.holding * (1 + fatigue * 0.2)));
     
     if (player.role === 'FWD' || player.role === 'MID') {
       rawActions.push(scoreSupport(player, cognitiveLaziness));
@@ -141,16 +143,20 @@ function scorePass(player: Player, multiplier: number): Action {
 
     const visionScore = player.attributes.vision / 20;
     
+    // NEW: Recirculation penalty (discourage passing immediately back to the person who just kicked it)
+    const isRecentPasser = matchState.lastKickerId === t.id;
+    const backPassPenalty = isRecentPasser ? 0.4 : 1.0;
+
     // NEW: Crossing bonus if passer is wide and target is in box
     const isPasserWide = player.y < 0.25 || player.y > 0.75;
     const isTargetInBox = Math.abs(t.x - (isHome ? 1.0 : 0.0)) < 0.2 && Math.abs(t.y - 0.5) < 0.3;
     const crossingBonus = (isPasserWide && isTargetInBox) ? (1 + (player.attributes.crossing / 40)) : 1.0;
 
-    const score = distScore * safetyScore * visionScore * progressScore * interceptionPenalty * crossingBonus;
+    const score = distScore * safetyScore * visionScore * progressScore * interceptionPenalty * crossingBonus * backPassPenalty;
     if (score > bestScore) {
       bestScore = score;
       bestTarget = t;
-      bestAudit = `Dist: ${distScore.toFixed(2)} * Safe: ${safetyScore.toFixed(2)} * Vis: ${visionScore.toFixed(2)} * Prog: ${progressScore.toFixed(2)} * CB: ${crossingBonus.toFixed(2)}`;
+      bestAudit = `Dist: ${distScore.toFixed(2)} * Safe: ${safetyScore.toFixed(2)} * Vis: ${visionScore.toFixed(2)} * Prog: ${progressScore.toFixed(2)} * BP: ${backPassPenalty.toFixed(2)}`;
     }
   });
 
