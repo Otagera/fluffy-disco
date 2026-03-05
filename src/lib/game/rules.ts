@@ -221,6 +221,7 @@ export function resetMatch(options: {
   }
   
   if (status === 'PLAYING') {
+    matchState.camera.mode = 'BROADCAST';
     matchState.possessionPlayerId = null;
     matchState.setPiece = {
       type: 'kick-off',

@@ -312,6 +312,24 @@
             <h2 style="font-size: 1.4rem; margin-top: 1rem;">{data.awayTeam.name}</h2>
           </div>
         </div>
+
+        <div class="final-stats-grid">
+          <div class="stat-item">
+            <span>{matchState.stats.home.shots}</span>
+            <label>SHOTS</label>
+            <span>{matchState.stats.away.shots}</span>
+          </div>
+          <div class="stat-item">
+            <span>{matchState.stats.home.dangerousEntries}</span>
+            <label>DANGEROUS ENTRIES</label>
+            <span>{matchState.stats.away.dangerousEntries}</span>
+          </div>
+          <div class="stat-item">
+            <span>{matchState.stats.home.passesCompleted} / {matchState.stats.home.passesAttempted}</span>
+            <label>PASSES</label>
+            <span>{matchState.stats.away.passesCompleted} / {matchState.stats.away.passesAttempted}</span>
+          </div>
+        </div>
         
         <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #333;">
           <button class="primary btn-lg" style="width: 100%; padding: 1.5rem; font-size: 1.2rem;" onclick={() => resultForm.submit()}>
@@ -567,6 +585,27 @@
     text-align: center;
     border: 1px solid #333;
     color: white;
+  }
+
+  .final-stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+  }
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #222;
+    padding-bottom: 8px;
+    font-size: 1.2rem;
+    font-weight: bold;
+  }
+  .stat-item label {
+    font-size: 0.7rem;
+    color: #888;
+    letter-spacing: 1px;
   }
 
   .player-list { display: flex; flex-direction: column; gap: 0.5rem; }

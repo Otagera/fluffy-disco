@@ -1,4 +1,4 @@
-import { type AIState, type Player, type Mentality, type ControlType, type TeamStats, type MatchAnalytics } from './types';
+import { type AIState, type Player, type Mentality, type ControlType, type TeamStats, type MatchAnalytics, type CameraMode } from './types';
 
 export interface MatchState {
   status: 'LOBBY' | 'PLAYING' | 'PAUSED' | 'HALFTIME' | 'FINISHED';
@@ -14,6 +14,12 @@ export interface MatchState {
     vy: number;
     vz: number;
     spin: number;
+  };
+  camera: {
+    mode: CameraMode;
+    zoom: number;
+    x: number;
+    y: number;
   };
   possessionPlayerId: number | null;
   players: Player[];
@@ -100,13 +106,20 @@ export const matchState = $state<MatchState>({
   lastKickType: null,
   lastKickPos: null,
   stats: {
-    home: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0 },
-    away: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0 }
+    home: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0, dangerousEntries: 0 },
+    away: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0, dangerousEntries: 0 }
+  },
+  camera: {
+    mode: 'BROADCAST',
+    zoom: 1.0,
+    x: 0.5,
+    y: 0.5
   },
   analytics: {
     passes: [],
     shots: [],
-    heatmapSamples: []
+    heatmapSamples: [],
+    momentum: []
   },
   replay: {
     frames: [],

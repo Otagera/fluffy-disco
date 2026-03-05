@@ -65,12 +65,15 @@ export interface Ball {
   spin: number;
 }
 
+export type CameraMode = 'TACTICAL' | 'BROADCAST' | 'ACTION';
+
 export interface TeamStats {
   goals: number;
   shots: number;
   passesAttempted: number;
   passesCompleted: number;
   possessionTime: number;
+  dangerousEntries: number;
 }
 
 export interface PassEvent {

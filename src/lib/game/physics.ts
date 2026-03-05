@@ -77,6 +77,18 @@ export function updatePhysics() {
     // Increment true possession time
     if (possessor.team === 'home') matchState.stats.home.possessionTime++;
     else matchState.stats.away.possessionTime++;
+
+    // Track dangerous entries
+    const opponentGoalX = getForwardDir(possessor.team, matchState.sidesSwitched) === 1 ? 1.0 : 0.0;
+    const distToOppGoal = Math.abs(possessor.x - opponentGoalX);
+    const isInBox = distToOppGoal < 0.16 && possessor.y > 0.2 && possessor.y < 0.8;
+    
+    // Check if this is a NEW entry (simple throttle)
+    if (isInBox && (possessor.btState.lastBoxEntryMinute || 0) < Math.floor(matchState.timer / 60)) {
+      possessor.btState.lastBoxEntryMinute = Math.floor(matchState.timer / 60);
+      if (possessor.team === 'home') matchState.stats.home.dangerousEntries++;
+      else matchState.stats.away.dangerousEntries++;
+    }
   } else {
     // 2. REGULAR BALL PHYSICS
     b.vz -= 0.4; 
@@ -263,6 +275,10 @@ function scoreGoal(team: 'home' | 'away') {
   
   const minute = matchState.timer;
   emitMatchEvent('goal', `GOAL! ${team.toUpperCase()} scores!`, minute);
+
+  // Cinematic Zoom
+  matchState.camera.mode = 'ACTION';
+  matchState.camera.zoom = 3.5;
 
   const kickingTeam = team === 'home' ? 'away' : 'home';
   resetMatch({ status: 'PLAYING', kickingTeam });

@@ -52,6 +52,12 @@
   function resumeSecondHalf() {
     resetMatch({ switchSides: true, status: 'PLAYING' });
   }
+
+  function cycleCamera() {
+    const modes: ('TACTICAL' | 'BROADCAST' | 'ACTION')[] = ['TACTICAL', 'BROADCAST', 'ACTION'];
+    const currentIdx = modes.indexOf(matchState.camera.mode);
+    matchState.camera.mode = modes[(currentIdx + 1) % modes.length];
+  }
 </script>
 
 <div class="hud-container">
@@ -77,6 +83,11 @@
             <span class="val">{possessionHome}%</span>
             <span class="label">POSSESSION</span>
             <span class="val">{possessionAway}%</span>
+          </div>
+          <div class="stat-row">
+            <span class="val">{matchState.stats.home.dangerousEntries}</span>
+            <span class="label">DANGEROUS ENTRIES</span>
+            <span class="val">{matchState.stats.away.dangerousEntries}</span>
           </div>
         </div>
         <p class="mt-2 text-gray-400 text-sm">Teams switch sides</p>
@@ -104,8 +115,14 @@
     </div>
   {/if}
 
-  <div class="formation-badge">
-    {matchState.homeFormation} <span class="dot">●</span>
+  <div class="top-left-controls">
+    <div class="formation-badge">
+      {matchState.homeFormation} <span class="dot">●</span>
+    </div>
+
+    <button class="cam-btn" onclick={cycleCamera}>
+      📹 {matchState.camera.mode}
+    </button>
   </div>
 
   {#if matchState.events.length > 0}
@@ -116,13 +133,19 @@
   {/if}
 
   <div class="scoreboard">
-    <div class="team-crest home">⚽</div>
+    <div class="team-crest home" style="background: {homeTeam?.colors?.primary || 'var(--primary)'}"></div>
     <div class="score-box">
-      <span class="score">{matchState.homeScore}</span>
+      <div class="team-names">
+        <span class="team-name">{homeTeam?.shortName || homeTeam?.name?.substring(0,3).toUpperCase() || 'HOM'}</span>
+        <span class="team-name">{awayTeam?.shortName || awayTeam?.name?.substring(0,3).toUpperCase() || 'AWY'}</span>
+      </div>
+      <div class="score-digits">
+        <span class="score">{matchState.homeScore}</span>
+        <span class="score">{matchState.awayScore}</span>
+      </div>
       <span class="clock">{clockDisplay}</span>
-      <span class="score">{matchState.awayScore}</span>
     </div>
-    <div class="team-crest away">⚽</div>
+    <div class="team-crest away" style="background: {awayTeam?.colors?.primary || 'var(--danger)'}"></div>
   </div>
 
   <div class="bottom-hud">
@@ -142,6 +165,23 @@
         <span>{possessionAway}% {awayTeam?.name || 'Away'}</span>
       </div>
     </div>
+
+    <!-- Momentum Sparkline -->
+    {#if matchState.analytics.momentum.length > 1}
+      <div class="momentum-container">
+        <svg viewBox="0 0 100 20" class="momentum-svg" preserveAspectRatio="none">
+          <line x1="0" y1="10" x2="100" y2="10" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" />
+          <polyline
+            points={matchState.analytics.momentum.map((m, i) => `${(i / (matchState.analytics.momentum.length - 1)) * 100},${10 - m * 8}`).join(' ')}
+            fill="none"
+            stroke="#ffeb3b"
+            stroke-width="1"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="momentum-label">MATCH MOMENTUM</span>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -215,21 +255,43 @@
   .stat-row .val { font-size: 24px; font-weight: 900; }
 
   .formation-badge {
-    position: absolute;
-    top: 20px;
-    left: 20px;
     background: rgba(0,0,0,0.8);
     padding: 5px 12px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: bold;
     border-left: 3px solid #2d8a4a;
+    pointer-events: auto;
   }
   .dot { color: #2d8a4a; margin-left: 5px; }
 
+  .top-left-controls {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cam-btn {
+    background: rgba(0,0,0,0.8);
+    color: white;
+    border: 1px solid #444;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+    pointer-events: auto;
+    transition: all 0.2s;
+  }
+  .cam-btn:hover { background: #333; border-color: #666; }
+
   .event-ticker {
     position: absolute;
-    top: 60px;
+    top: 100px;
     left: 20px;
     background: rgba(0,0,0,0.7);
     padding: 6px 12px;
@@ -264,22 +326,64 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    align-items: center;
-    gap: 15px;
-    background: rgba(0,0,0,0.8);
-    padding: 8px 25px;
-    border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    align-items: stretch;
+    background: rgba(0,0,0,0.9);
+    border-radius: 4px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+    border: 1px solid #333;
   }
 
   .score-box {
     display: flex;
-    align-items: center;
-    gap: 20px;
+    flex-direction: column;
+    padding: 5px 20px;
+    min-width: 120px;
   }
-  .score { font-size: 24px; font-weight: 900; }
-  .clock { font-size: 18px; font-family: monospace; color: #aaa; }
-  .team-crest { font-size: 24px; }
+  
+  .team-names {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 900;
+    color: #888;
+    letter-spacing: 1px;
+  }
+
+  .score-digits {
+    display: flex;
+    justify-content: space-between;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1;
+    margin: 4px 0;
+  }
+
+  .clock { 
+    font-size: 12px; 
+    font-family: monospace; 
+    color: #ffeb3b; 
+    text-align: center;
+    border-top: 1px solid #222;
+    padding-top: 4px;
+  }
+
+  .team-crest { 
+    width: 6px;
+  }
+
+  .primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+    font-size: 16px;
+    pointer-events: auto;
+  }
 
   .secondary { 
     background: #333; 
@@ -341,5 +445,25 @@
     font-weight: bold;
     text-transform: uppercase;
     opacity: 0.8;
+  }
+
+  .momentum-container {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .momentum-svg {
+    width: 100%;
+    height: 30px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+  }
+  .momentum-label {
+    font-size: 8px;
+    font-weight: 900;
+    color: #888;
+    letter-spacing: 1px;
   }
 </style>

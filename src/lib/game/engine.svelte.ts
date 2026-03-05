@@ -15,8 +15,12 @@ export function startEngine() {
 }
 
 let analyticsCounter = 0;
+let lastMomentumMinute = -1;
+
 function collectAnalytics() {
   analyticsCounter++;
+  const minute = Math.floor(matchState.timer / 60);
+
   // Sample positions every 2 seconds (120 ticks) for heatmap
   if (analyticsCounter % 120 === 0) {
     matchState.players.forEach(p => {
@@ -27,6 +31,18 @@ function collectAnalytics() {
         playerId: p.id
       });
     });
+  }
+
+  // Momentum calculation (every minute)
+  if (minute > lastMomentumMinute) {
+    lastMomentumMinute = minute;
+    // Simple momentum based on dangerous entries and shots in the last minute
+    // Usually we'd need a rolling window, but for a sparkline, we can just look at the delta
+    const homePower = matchState.stats.home.shots * 2 + matchState.stats.home.dangerousEntries;
+    const awayPower = matchState.stats.away.shots * 2 + matchState.stats.away.dangerousEntries;
+    const total = homePower + awayPower || 1;
+    const momentum = (homePower - awayPower) / total; // -1 to 1
+    matchState.analytics.momentum.push(momentum);
   }
 }
 
@@ -40,6 +56,7 @@ export function tick() {
       handleCPUSubs();
       collectAnalytics();
       recordFrame();
+      updateCamera();
     } catch (err) {
       console.error("Simulation Engine Crash:", err);
       matchState.status = 'PAUSED';
@@ -48,11 +65,37 @@ export function tick() {
   updateInputLogic();
 }
 
+function updateCamera() {
+  const b = matchState.ball;
+  const cam = matchState.camera;
+  
+  let targetX = 0.5;
+  let targetY = 0.5;
+  let targetZoom = 1.0;
+
+  if (cam.mode === 'BROADCAST') {
+    targetX = b.x;
+    targetY = 0.5;
+    targetZoom = 1.5;
+  } else if (cam.mode === 'ACTION') {
+    targetX = b.x;
+    targetY = b.y;
+    targetZoom = 2.2;
+  }
+
+  // Smooth lerp
+  const lerp = 0.05;
+  cam.x += (targetX - cam.x) * lerp;
+  cam.y += (targetY - cam.y) * lerp;
+  cam.zoom += (targetZoom - cam.zoom) * lerp;
+}
+
 let lastSubCheckMinute = 0;
 
 export function resetEngineState() {
   lastSubCheckMinute = 0;
   analyticsCounter = 0;
+  lastMomentumMinute = -1;
 }
 
 function handleCPUSubs() {
