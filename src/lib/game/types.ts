@@ -70,6 +70,7 @@ export interface TeamStats {
   shots: number;
   passesAttempted: number;
   passesCompleted: number;
+  possessionTime: number;
 }
 
 export interface PassEvent {

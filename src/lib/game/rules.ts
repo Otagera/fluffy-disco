@@ -215,6 +215,8 @@ export function resetMatch(options: {
     matchState.events = [];
     matchState.homeSubsUsed = 0;
     matchState.awaySubsUsed = 0;
+    matchState.stats.home.possessionTime = 0;
+    matchState.stats.away.possessionTime = 0;
     resetEngineState();
   }
   

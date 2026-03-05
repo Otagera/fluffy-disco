@@ -73,6 +73,10 @@ export function updatePhysics() {
     b.vz = 0;
     b.spin *= 0.9;
     lastTouchTeam = possessor.team;
+    
+    // Increment true possession time
+    if (possessor.team === 'home') matchState.stats.home.possessionTime++;
+    else matchState.stats.away.possessionTime++;
   } else {
     // 2. REGULAR BALL PHYSICS
     b.vz -= 0.4; 
@@ -97,6 +101,10 @@ export function updatePhysics() {
       }
     }
     b.spin += (b.vx * 2.0);
+
+    // Track possession for loose balls
+    if (lastTouchTeam === 'home') matchState.stats.home.possessionTime++;
+    else if (lastTouchTeam === 'away') matchState.stats.away.possessionTime++;
   }
 
   // --- OUT OF BOUNDS ---

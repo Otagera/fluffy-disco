@@ -100,8 +100,8 @@ export const matchState = $state<MatchState>({
   lastKickType: null,
   lastKickPos: null,
   stats: {
-    home: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0 },
-    away: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0 }
+    home: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0 },
+    away: { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0 }
   },
   analytics: {
     passes: [],

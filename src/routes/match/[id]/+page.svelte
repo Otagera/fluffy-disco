@@ -435,7 +435,7 @@
     <input type="hidden" name="matchAnalytics" value={JSON.stringify(matchState.analytics)} />
   </form>
 
-  <div class="replay-status">
+  <div class="replay-status" class:hidden-live={matchState.status === 'PLAYING'}>
     {#if matchState.replay.isRecording}
       <div class="flex items-center gap-1">
         <div class="recording-dot"></div>
@@ -451,7 +451,7 @@
 
   <Pitch />
 
-  <div class="controls mt-1 flex justify-center gap-1">
+  <div class="controls mt-1 flex justify-center gap-1" class:hidden-live={matchState.status === 'PLAYING'}>
     <button class="save-btn" onclick={() => window.location.href = `/`}>
       ⚙️ DASHBOARD
     </button>
@@ -476,6 +476,17 @@
     position: relative;
     user-select: none;
     transition: transform 0.05s;
+  }
+  
+  .hidden-live {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .container:hover .hidden-live {
+    opacity: 1;
+    pointer-events: auto;
   }
   
   .replay-status {

@@ -25,9 +25,11 @@
     {player.number}
   </text>
   
-  <text y="3.5" font-size="1" text-anchor="middle" fill="rgba(255,255,255,0.6)" style="user-select: none;">
-    {player.role}
-  </text>
+  {#if matchState.status !== 'PLAYING'}
+    <text y="3.5" font-size="1" text-anchor="middle" fill="rgba(255,255,255,0.6)" style="user-select: none;">
+      {player.tacticalRole || player.role}
+    </text>
+  {/if}
 
   <!-- Stamina Bar -->
   {#if player.currentStamina < 100}

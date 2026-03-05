@@ -1,7 +1,5 @@
 <script lang="ts">
   import { matchState } from '../game/matchState.svelte';
-  import { formations } from '../game/formations';
-  import { onMount, onDestroy } from 'svelte';
   import { resetMatch } from '../game/rules';
   import type { TeamProfile } from '../data/types';
 
@@ -12,11 +10,16 @@
     awayTeam?: TeamProfile;
   }>();
 
-  let possessionHome = $state(50);
-  let possessionAway = $state(50);
-  let interval: any;
   let commentary = $state("");
   let showCommentary = $state(false);
+
+  // Derive possession based on actual match ticks
+  let possessionHome = $derived.by(() => {
+    const total = matchState.stats.home.possessionTime + matchState.stats.away.possessionTime;
+    if (total === 0) return 50;
+    return Math.round((matchState.stats.home.possessionTime / total) * 100);
+  });
+  let possessionAway = $derived(100 - possessionHome);
 
   const comments = [
     "WHAT A STRIKE!", "UNBELIEVABLE GOAL!", "HE'S HIT THAT ONE WELL!",
@@ -29,10 +32,6 @@
     const mins = Math.floor(matchState.timer / 60);
     const secs = matchState.timer % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  });
-
-  onMount(() => {
-    interval = setInterval(calculatePossession, 5000);
   });
 
   $effect(() => {
@@ -48,15 +47,6 @@
     commentary = text;
     showCommentary = true;
     setTimeout(() => { showCommentary = false; }, 3000);
-  }
-
-  onDestroy(() => {
-    if (interval) clearInterval(interval);
-  });
-
-  function calculatePossession() {
-    possessionHome = 45 + Math.floor(Math.random() * 11);
-    possessionAway = 100 - possessionHome;
   }
   
   function resumeSecondHalf() {
