@@ -215,8 +215,11 @@ export function resetMatch(options: {
     matchState.events = [];
     matchState.homeSubsUsed = 0;
     matchState.awaySubsUsed = 0;
-    matchState.stats.home.possessionTime = 0;
-    matchState.stats.away.possessionTime = 0;
+
+    matchState.stats.home = { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0, dangerousEntries: 0 };
+    matchState.stats.away = { goals: 0, shots: 0, passesAttempted: 0, passesCompleted: 0, possessionTime: 0, dangerousEntries: 0 };
+    matchState.analytics = { passes: [], shots: [], heatmapSamples: [], momentum: [] };
+
     resetEngineState();
   }
   
