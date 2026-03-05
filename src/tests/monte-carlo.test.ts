@@ -41,7 +41,7 @@ describe('Monte Carlo Statistical Balancing', () => {
     let successes = 0;
     
     for (let i = 0; i < iterations; i++) {
-      const result = resolveActionRoll(actor, actionType); // opponent not used in current resolution logic
+      const result = resolveActionRoll(actor, actionType, 15); // Use distance 15 as a neutral baseline
       if (result.success) successes++;
     }
     

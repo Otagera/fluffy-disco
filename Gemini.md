@@ -27,16 +27,16 @@
 ### Phase 2: Cognitive AI Foundation & Tactical Baseline
 3. **Milestone 3: Utility AI Infrastructure**: Implement a scoring engine for high-level decisions (Pass, Shoot, Dribble, Press) using normalized utility curves (0.0–1.0).
 4. **Milestone 4: Behavior Tree Execution**: Bridge abstract decisions to physical movement via hierarchical sequences (e.g., `RotateToTarget -> MoveToTarget -> ExecuteAction`).
-5. **Milestone 5: Role-Based Tactical Injection**: Define FM-style roles (e.g., DLP, BWM, Mezzala) as data objects that inject weight multipliers into Utility AI curves.
+5. **Milestone 5: Role-Based Tactical Injection**: Refactor hardcoded behaviors into decoupled `TacticalRole` data objects that inject weight multipliers and positional offsets into Utility AI.
 
 ### Phase 3: Advanced Simulation Depth
-6. **Milestone 6: Spatial Pressure & Composure** ✅: Calculate real-time pressure using exponential decay; scale effective pressure against a player's "Composure" attribute to modify AI decision utility.
-7. **Milestone 7: Attribute-Driven Resolution (The "Roll")** ✅: Subordinate physics to statistical checks. Perform an RNG "roll" based on attributes (Vision, Technique, etc.) to inject "error" into ball vectors *before* physical execution.
+6. **Milestone 6: Spatial Pressure & Composure** ✅: Calculate real-time pressure using exponential decay; account for defender velocity vectors to penalize the carrier's space dynamically.
+7. **Milestone 7: Attribute-Driven Resolution (The "Roll")**: Complete the statistical "roll" for Passing and Shooting to inject predetermined physical error (vector offsets) before trajectory calculation.
 8. **Milestone 8: Topological Relationism** ✅: Implement spatial awareness for dynamic shape adjustments (e.g., Midfielders dropping, Offside Trap coordination) beyond static grid coordinates.
 
 ### Phase 4: Metagame Immersion & Analytics
 9. **Milestone 9: Stamina & Fatigue** ✅: Implement continuous stamina depletion affecting both physical limits (max velocity) and cognitive utility. Added persistent condition tracking across seasons and injury risks.
-10. **Milestone 10: xG & Analytics Engine**: Expand the replay system to record Utility AI scores and attribute roll results; generate FM-style post-match analytics (passing networks, heatmaps, xG).
+10. **Milestone 10: xG & Analytics Engine**: Standardize event emitting via a unified `emitMatchEvent` system; generate FM-style post-match analytics (passing networks, heatmaps, xG) from deterministic telemetry.
 
 ### Phase 5: The Football Manager Experience (Next Steps)
 11. **Milestone 11: The Transfer Market**: Implement a global economy. Allow the manager to buy/sell players, negotiate contracts, and manage a wage budget between seasons.

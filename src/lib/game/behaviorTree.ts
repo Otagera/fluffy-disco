@@ -4,6 +4,7 @@ import { PITCH_W, PITCH_H } from './constants';
 import type { Action } from './utilityAI';
 import { resolveActionRoll, applyRollToVector } from './resolution';
 import { calculateShotXG } from './recorder';
+import { emitShotEvent } from './events';
 
 export type BTStatus = 'SUCCESS' | 'FAILURE' | 'RUNNING';
 
@@ -138,7 +139,7 @@ export class ExecuteKick implements BTNode {
     const d = Math.sqrt(dx*dx + dy*dy) || 0.001;
 
     const rollType = action.type as 'PASS' | 'SHOOT' | 'CLEAR';
-    const roll = resolveActionRoll(player, rollType);
+    const roll = resolveActionRoll(player, rollType, d);
     
     const vector = applyRollToVector(
       (dx / d) * power, 
@@ -171,13 +172,12 @@ export class ExecuteKick implements BTNode {
       const angleToGoal = Math.atan2((0.5 - b.y) * PITCH_H, (targetGoalX - b.x) * PITCH_W);
       const xg = calculateShotXG(player, distToGoal, angleToGoal);
       
-      matchState.analytics.shots.push({
+      emitShotEvent({
         playerId: player.id,
         x: b.x,
         y: b.y,
         xg,
         result: 'MISS', // Default, will be updated by goal/save logic
-        minute,
         team: player.team
       });
     }

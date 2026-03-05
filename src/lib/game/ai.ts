@@ -3,6 +3,7 @@ import { PITCH_W, PITCH_H } from './constants';
 import type { Player } from './types';
 import { evaluatePlayerActions, type Action } from './utilityAI';
 import { MoveToTarget, ExecuteKick, DribbleBall, Sequence, type BTNode } from './behaviorTree';
+import { RoleRegistry } from './roles';
 
 const behaviors: Record<string, BTNode> = {
   'PASS': new Sequence('pass', [new MoveToTarget(), new ExecuteKick(3.4)]),
@@ -52,29 +53,6 @@ export function updateAI() {
 
     p.aiState = topAction.type as any;
   });
-
-  // Repulsion logic
-  for (let i = 0; i < allPlayers.length; i++) {
-    for (let j = i + 1; j < allPlayers.length; j++) {
-      let p1 = allPlayers[i];
-      let p2 = allPlayers[j];
-      let dx = (p2.x - p1.x);
-      let dy = (p2.y - p1.y);
-      let d = Math.hypot(dx * PITCH_W, dy * PITCH_H) || 0.001;
-      
-      const minSafeDist = 0.04; 
-      if (d < minSafeDist) {
-        const force = (minSafeDist - d) * 0.03; 
-        const nx = dx * PITCH_W / d;
-        const ny = dy * PITCH_H / d;
-        
-        allPlayers[i].vx -= (nx / PITCH_W) * force;
-        allPlayers[i].vy -= (ny / PITCH_H) * force;
-        allPlayers[j].vx += (nx / PITCH_W) * force;
-        allPlayers[j].vy += (ny / PITCH_H) * force;
-      }
-    }
-  }
 }
 
 export function calculateEffectivePressure(player: Player) {
@@ -86,7 +64,10 @@ export function calculateEffectivePressure(player: Player) {
     const dy = (opp.y - player.y) * PITCH_H;
     const d = Math.sqrt(dx*dx + dy*dy) || 0.001;
     
-    let press = Math.exp(-d * 0.35); 
+    const approachSpeed = -((opp.vx * dx) + (opp.vy * dy)) / d; 
+    const dynamicDecayFactor = 0.35 - (approachSpeed > 0 ? approachSpeed * 0.5 : 0);
+
+    let press = Math.exp(-d * dynamicDecayFactor); 
 
     const forwardDir = player.team === 'home' ? 1 : -1;
     const isOpponentInFront = Math.sign(dx) === forwardDir;
@@ -166,29 +147,18 @@ export function updateTacticalAnchors() {
     let forwardDir = p.team === 'home' ? 1 : -1;
     if (matchState.sidesSwitched) forwardDir *= -1;
 
-    let mentalityShift = 0;
-    if (mentality === 'ULTRA_ATTACKING') mentalityShift = 0.15;
-    else if (mentality === 'ATTACKING') mentalityShift = 0.08;
-    else if (mentality === 'DEFENSIVE') mentalityShift = -0.08;
-    else if (mentality === 'ULTRA_DEFENSIVE') mentalityShift = -0.15;
-    
+    const roleDef = RoleRegistry.get(p.tacticalRole) || RoleRegistry.get('GK')!;
+    const offsets = roleDef.getPositionalAnchorOffset(b.x, b.y, mentality, forwardDir, isTeamInPossession ?? false);
+
     // Don't shift GK based on mentality to prevent them walking out of the box
     if (p.role !== 'GK') {
-      targetAnchorX += mentalityShift * forwardDir;
+      targetAnchorX += offsets.dx;
       
       // Apply block shift (Offside trap delta) so whole team moves up/down together
       targetAnchorX += teamLineDeltas[p.team];
       
-      // Dynamic Team Width modifier
-      let widthModifier = 1.0;
-      if (!isTeamInPossession) {
-        widthModifier = 0.7; // Compact when defending to protect the center
-      } else if (mentality.includes('ATTACKING')) {
-        widthModifier = 1.2; // Expand to stretch the play
-      }
-      
       // Apply width modifier (pull towards or push away from center Y: 0.5)
-      targetAnchorY = 0.5 + (targetAnchorY - 0.5) * widthModifier;
+      targetAnchorY = 0.5 + (targetAnchorY - 0.5) * offsets.widthModifier;
     }
 
     // 2. COORDINATED DEFENSIVE LINE (Offside Trap & Confrontation - Milestone 8)

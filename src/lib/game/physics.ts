@@ -1,6 +1,7 @@
 import { matchState } from './matchState.svelte';
 import { PITCH_W, PITCH_H } from './constants';
 import { resetMatch } from './rules';
+import { emitMatchEvent, emitPassEvent } from './events';
 
 let dribbleTimer = 0;
 const DRIBBLE_INTERVAL = 24;
@@ -129,7 +130,7 @@ export function triggerSetPiece(type: string, x: number, y: number) {
   if (matchState.status !== 'PLAYING') return;
   
   const minute = matchState.timer;
-  matchState.events.push({ minute, type: 'foul', desc: type.toUpperCase() });
+  emitMatchEvent('foul', type.toUpperCase(), minute);
   
   matchState.ball.x = x;
   matchState.ball.y = y;
@@ -207,14 +208,13 @@ export function resolvePossession() {
             teamStats.passesCompleted++;
             
             // Record successful PassEvent for analytics
-            matchState.analytics.passes.push({
+            emitPassEvent({
               fromId: kicker.id,
               toId: closestPlayer.id,
               startX: matchState.lastKickPos?.x ?? kicker.x,
               startY: matchState.lastKickPos?.y ?? kicker.y,
               endX: closestPlayer.x,
               endY: closestPlayer.y,
-              minute: Math.floor(matchState.timer / 60),
               team: kicker.team
             });
           }
@@ -253,7 +253,7 @@ function scoreGoal(team: 'home' | 'away') {
   }
   
   const minute = matchState.timer;
-  matchState.events.push({ minute, type: 'goal', desc: `GOAL! ${team.toUpperCase()} scores!` });
+  emitMatchEvent('goal', `GOAL! ${team.toUpperCase()} scores!`, minute);
 
   const kickingTeam = team === 'home' ? 'away' : 'home';
   resetMatch({ status: 'PLAYING', kickingTeam });
@@ -314,4 +314,28 @@ export function updatePlayerPhysics() {
     p.x = Math.max(0, Math.min(1, p.x));
     p.y = Math.max(0, Math.min(1, p.y));
   });
+
+  // Repulsion logic
+  const allPlayers = matchState.players;
+  for (let i = 0; i < allPlayers.length; i++) {
+    for (let j = i + 1; j < allPlayers.length; j++) {
+      let p1 = allPlayers[i];
+      let p2 = allPlayers[j];
+      let dx = (p2.x - p1.x);
+      let dy = (p2.y - p1.y);
+      let d = Math.hypot(dx * PITCH_W, dy * PITCH_H) || 0.001;
+      
+      const minSafeDist = 0.04; 
+      if (d < minSafeDist) {
+        const force = (minSafeDist - d) * 0.03; 
+        const nx = dx * PITCH_W / d;
+        const ny = dy * PITCH_H / d;
+        
+        allPlayers[i].vx -= (nx / PITCH_W) * force;
+        allPlayers[i].vy -= (ny / PITCH_H) * force;
+        allPlayers[j].vx += (nx / PITCH_W) * force;
+        allPlayers[j].vy += (ny / PITCH_H) * force;
+      }
+    }
+  }
 }

@@ -3,6 +3,7 @@ import { updatePhysics, updatePlayerPhysics, resolvePossession } from './physics
 import { updateAI } from './ai';
 import { updateInputLogic } from './input';
 import { recordFrame } from './recorder';
+import { emitMatchEvent } from './events';
 
 let lastTime = 0;
 let accumulator = 0;
@@ -100,7 +101,7 @@ function handleCPUSubs() {
         matchState.awayBench.splice(subIndex, 1);
         matchState.awaySubsUsed++;
 
-        matchState.events.push({ minute, type: 'sub', desc: `SUB (Away): ${pIn.name} ON for ${tiredPlayer.name}` });
+        emitMatchEvent('sub', `SUB (Away): ${pIn.name} ON for ${tiredPlayer.name}`, minute);
       }
     }
   }
@@ -132,13 +133,13 @@ export function startClock() {
       // Half-time: 45:00 = 2700 game seconds
       if (matchState.timer < 2700 && matchState.timer + 10 >= 2700) {
         matchState.status = 'HALFTIME';
-        matchState.events.push({ minute: 45, type: 'whistle', desc: 'Half time!' });
+        emitMatchEvent('whistle', 'Half time!', 45);
       }
 
       // Full-time: 90:00 = 5400 game seconds
       if (matchState.timer >= 5400) {
         matchState.status = 'FINISHED';
-        matchState.events.push({ minute: 90, type: 'whistle', desc: 'Full time!' });
+        emitMatchEvent('whistle', 'Full time!', 90);
         clearInterval(clockInterval);
       }
     }

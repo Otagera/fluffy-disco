@@ -9,7 +9,7 @@ export interface RollResult {
   quality: number; 
 }
 
-export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEAR'): RollResult {
+export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEAR', distance: number = 20): RollResult {
   // MILESTONE 9: PHYSICAL FATIGUE IMPACT
   let fatigueMod = 0.7 + (player.currentStamina / 100) * 0.3;
   if (player.currentStamina < 30) {
@@ -24,10 +24,11 @@ export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEA
     // Technical check: Passing + Vision
     const baseAbility = ((player.attributes.passing * 0.7) + (player.attributes.vision * 0.3)) * fatigueMod;
     
-    const oppositionFactor = 1.5; 
+    const distanceFactor = Math.max(1, distance / 15);
+    const oppositionFactor = 1.5 * distanceFactor; 
     const pressurePenalty = effectivePressure * 12;
     
-    const threshold = baseAbility - pressurePenalty - oppositionFactor;
+    const threshold = (baseAbility / distanceFactor) - pressurePenalty - oppositionFactor;
     
     const roll = Math.random() * 20;
     const margin = threshold - roll;
@@ -49,12 +50,13 @@ export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEA
     // NEW: Use finishing instead of generic shooting
     const baseAbility = ((player.attributes.finishing * 0.8) + (player.attributes.composure * 0.2)) * fatigueMod;
     
+    const distanceFactor = Math.max(1, distance / 10);
     const gk = matchState.players.find(p => p.role === 'GK' && p.team !== player.team);
     // NEW: Factor in GK reflexes
     const gkFactor = gk ? (gk.attributes.positioning + gk.attributes.reflexes) / 6 : 4;
     
     const pressurePenalty = effectivePressure * 8;
-    const threshold = baseAbility - pressurePenalty - gkFactor;
+    const threshold = (baseAbility / distanceFactor) - pressurePenalty - gkFactor;
     
     const roll = Math.random() * 20;
     const margin = threshold - roll;
