@@ -18,6 +18,7 @@
   let showFinalOverlay = $state(false);
   let showTacticsOverlay = $state(false);
   let isSimulating = $state(false);
+  let cinematicUi = $state(true);
   let selectedSubOut = $state<number | null>(null);
   let selectedSubIn = $state<number | null>(null);
   let isHomeManager = $derived(data.managerTeamId === data.homeTeam.id);
@@ -99,7 +100,13 @@
     setTimeout(() => { shake = false; }, 400);
   }
 
-  function onKeyDown(e: KeyboardEvent) { handleInput(e, 'keydown'); }
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key.toLowerCase() === 'h') {
+      cinematicUi = !cinematicUi;
+      return;
+    }
+    handleInput(e, 'keydown');
+  }
   function onKeyUp(e: KeyboardEvent) { handleInput(e, 'keyup'); }
 
   function handleStart() {
@@ -316,17 +323,17 @@
         <div class="final-stats-grid">
           <div class="stat-item">
             <span>{matchState.stats.home.shots}</span>
-            <label>SHOTS</label>
+            <span class="stat-label">SHOTS</span>
             <span>{matchState.stats.away.shots}</span>
           </div>
           <div class="stat-item">
             <span>{matchState.stats.home.dangerousEntries}</span>
-            <label>DANGEROUS ENTRIES</label>
+            <span class="stat-label">DANGEROUS ENTRIES</span>
             <span>{matchState.stats.away.dangerousEntries}</span>
           </div>
           <div class="stat-item">
             <span>{matchState.stats.home.passesCompleted} / {matchState.stats.home.passesAttempted}</span>
-            <label>PASSES</label>
+            <span class="stat-label">PASSES</span>
             <span>{matchState.stats.away.passesCompleted} / {matchState.stats.away.passesAttempted}</span>
           </div>
         </div>
@@ -453,7 +460,7 @@
     <input type="hidden" name="matchAnalytics" value={JSON.stringify(matchState.analytics)} />
   </form>
 
-  <div class="replay-status" class:hidden-live={matchState.status === 'PLAYING'}>
+  <div class="replay-status" class:hidden-live={matchState.status === 'PLAYING' && cinematicUi}>
     {#if matchState.replay.isRecording}
       <div class="flex items-center gap-1">
         <div class="recording-dot"></div>
@@ -469,9 +476,12 @@
 
   <Pitch />
 
-  <div class="controls mt-1 flex justify-center gap-1" class:hidden-live={matchState.status === 'PLAYING'}>
+  <div class="controls mt-1 flex justify-center gap-1" class:hidden-live={matchState.status === 'PLAYING' && cinematicUi}>
     <button class="save-btn" onclick={() => window.location.href = `/`}>
       ⚙️ DASHBOARD
+    </button>
+    <button class="save-btn" onclick={() => cinematicUi = !cinematicUi}>
+      {cinematicUi ? '🎬 SHOW UI' : '🎬 HIDE UI'}
     </button>
     
     {#if matchState.status === 'FINISHED'}
@@ -602,7 +612,7 @@
     font-size: 1.2rem;
     font-weight: bold;
   }
-  .stat-item label {
+  .stat-label {
     font-size: 0.7rem;
     color: #888;
     letter-spacing: 1px;
@@ -645,3 +655,5 @@
   .mt-2 { margin-top: 2rem; }
   .w-100 { width: 100%; }
 </style>
+
+

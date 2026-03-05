@@ -101,4 +101,5 @@ export interface MatchAnalytics {
   passes: PassEvent[];
   shots: ShotEvent[];
   heatmapSamples: { team: 'home' | 'away', x: number, y: number, playerId: number }[];
+  momentum: number[];
 }
