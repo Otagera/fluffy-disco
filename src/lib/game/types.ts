@@ -1,4 +1,4 @@
-export type AIState = 'POSITION' | 'PRESS' | 'SUPPORT' | 'SHOOT' | 'DEFEND' | 'CELEBRATE';
+export type AIState = 'POSITION' | 'PRESS' | 'SUPPORT' | 'SHOOT' | 'DEFEND' | 'CELEBRATE' | 'OVERLAP';
 
 export type Mentality = 'ULTRA_DEFENSIVE' | 'DEFENSIVE' | 'BALANCED' | 'ATTACKING' | 'ULTRA_ATTACKING';
 
@@ -24,8 +24,9 @@ export interface Player {
   anchorY: number;
   currentStamina: number;
   possessionStrength: number;
-  currentAction: string | null;
+  currentAction: any; 
   actionTimer: number;
+  thinkCooldown: number;
   btState: Record<string, any>;
   attributes: {
     // Technical
@@ -92,7 +93,7 @@ export interface ShotEvent {
   x: number;
   y: number;
   xg: number;
-  result: 'GOAL' | 'SAVE' | 'MISS' | 'BLOCK';
+  result: 'GOAL' | 'SAVE' | 'MISS' | 'BLOCK' | 'POST';
   minute: number;
   team: 'home' | 'away';
 }
@@ -102,4 +103,72 @@ export interface MatchAnalytics {
   shots: ShotEvent[];
   heatmapSamples: { team: 'home' | 'away', x: number, y: number, playerId: number }[];
   momentum: number[];
+}
+
+export interface MatchState {
+  status: 'LOBBY' | 'PLAYING' | 'PAUSED' | 'HALFTIME' | 'FINISHED';
+  isSimulating: boolean;
+  timer: number;
+  homeScore: number;
+  awayScore: number;
+  events: { minute: number; type: string; desc: string }[];
+  ball: {
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    spin: number;
+  };
+  camera: {
+    mode: CameraMode;
+    zoom: number;
+    x: number;
+    y: number;
+  };
+  possessionPlayerId: number | null;
+  players: Player[];
+  homeBench: Player[];
+  awayBench: Player[];
+  homeSubsUsed: number;
+  awaySubsUsed: number;
+  homeFormation: string;
+  awayFormation: string;
+  homeTacticalStyle: string;
+  awayTacticalStyle: string;
+  homeMentality: Mentality;
+  awayMentality: Mentality;
+  homeControl: ControlType;
+  awayControl: ControlType;
+  sidesSwitched: boolean;
+  homeTeamId: string;
+  awayTeamId: string;
+  shotPower: number;
+  isCharging: boolean;
+  setPiece: {
+    type: 'throw-in' | 'corner' | 'goal-kick' | 'kick-off';
+    team: 'home' | 'away';
+    x: number;
+    y: number;
+    ticks: number;
+    takerId: number | null;
+  } | null;
+  lastKickerId: number | null;
+  lastKickType: 'PASS' | 'SHOOT' | 'CLEAR' | null;
+  lastKickPos: { x: number, y: number } | null;
+  stats: {
+    home: TeamStats;
+    away: TeamStats;
+  };
+  analytics: MatchAnalytics;
+  replay: {
+    frames: {
+      minute: number;
+      ball: { x: number; y: number; z: number };
+      players: { id: number; x: number; y: number; state: string }[];
+      score: { home: number; away: number };
+    }[];
+    isRecording: boolean;
+  };
 }

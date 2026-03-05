@@ -78,13 +78,13 @@
   {:else}
     <div class="hub-header">
       <div>
-        <h1 class="flex items-center gap-1">
+        <h1 class="flex items-center gap-1 font-black tracking-tighter">
           {data.manager.name}
           <span class="season-badge">Season {data.currentSeason}</span>
         </h1>
-        <p class="text-gray">{data.team.name} Manager</p>
+        <p class="text-gray uppercase tracking-widest font-bold" style="font-size: 0.7rem;">{data.team.name} Manager</p>
         <form method="POST" action="?/deleteCareer" class="mt-1" onsubmit={(e) => !confirm('Are you sure? All season progress will be lost.') && e.preventDefault()}>
-          <button type="submit" class="danger-link">DELETE CAREER & START OVER</button>
+          <button type="submit" class="danger-link">RESET CAREER & RESTART UNIVERSE</button>
         </form>
       </div>
       <div class="week-badge">
@@ -95,36 +95,36 @@
     <div class="grid grid-2 gap-2 mt-2">
       <!-- Next Match Panel -->
       <div class="card match-panel">
-        <h2 class="mb-2">Next Fixture</h2>
+        <h2 class="mb-2 uppercase tracking-widest text-gray" style="font-size: 0.8rem;">Next Fixture</h2>
         {#if data.nextFixture}
           <div class="fixture-display">
             <div class="team">
               <div class="team-shield home-shield"></div>
               <h3>{getTeamName(data.nextFixture.homeTeamId)}</h3>
             </div>
-            <div class="vs">VS</div>
+            <div class="vs-badge">VS</div>
             <div class="team">
               <div class="team-shield away-shield"></div>
               <h3>{getTeamName(data.nextFixture.awayTeamId)}</h3>
             </div>
           </div>
           
-          <div class="mt-4 text-center flex flex-direction-col gap-1">
-            <a href="/match/{data.nextFixture.id}/tactics" class="button primary w-100" style="display:inline-block; padding:1rem; font-size:1.2rem; font-weight:bold;">
+          <div class="mt-3 flex flex-col gap-1">
+            <a href="/match/{data.nextFixture.id}/tactics" class="btn primary btn-lg w-100">
               PLAY MATCH
             </a>
             
             {#if data.hasAnalytics}
-              <a href="/analytics" class="button secondary w-100" style="display:inline-block; padding:0.75rem; font-weight:bold; border: 1px solid #ddd;">
+              <a href="/analytics" class="btn secondary w-100 font-bold" style="padding: 0.75rem;">
                 📊 VIEW LAST MATCH ANALYTICS
               </a>
             {/if}
           </div>
         {:else}
           <div class="empty-state">
-            <p class="mb-2">Season {data.manager.currentSeason || 1} Complete!</p>
+            <p class="mb-2 text-lg font-black">Season {data.manager.currentSeason || 1} Complete!</p>
             <form method="POST" action="?/advanceSeason">
-              <button type="submit" class="button primary w-100" style="padding:1rem; font-weight:bold;">
+              <button type="submit" class="primary btn-lg w-100">
                 PROCEED TO SEASON {(data.manager.currentSeason || 1) + 1}
               </button>
             </form>
@@ -134,8 +134,8 @@
 
       <!-- League Table -->
       <div class="card league-panel">
-        <div class="flex justify-between items-center mb-1">
-          <h2 style="margin:0">Standings</h2>
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="uppercase tracking-widest text-gray" style="font-size: 0.8rem;">Standings</h2>
           <div class="flex gap-1 items-center">
             <label class="toggle-label">
               <input type="checkbox" bind:checked={expandedView} />
@@ -198,88 +198,107 @@
     margin: 4rem auto 0;
     padding: 3rem 2rem;
     text-align: center;
+    background: #111;
+    border: 1px solid #222;
   }
   
   .logo { display: flex; justify-content: center; margin-bottom: 1.5rem; }
-  .title { font-size: 2.5rem; color: var(--dark); margin-bottom: 0.5rem; }
+  .title { font-size: 2.5rem; color: white; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 0.5rem; }
   .subtitle { color: var(--gray); font-size: 1.1rem; margin-bottom: 2rem; }
   .form-group { text-align: left; margin-bottom: 2rem; }
-  .form-group label { font-size: 1.25rem; font-weight: bold; color: var(--dark); }
-  .w-100 { width: 100%; padding: 1rem; font-size: 1.1rem; }
+  .form-group label { font-size: 1.25rem; font-weight: bold; color: white; }
+  .w-100 { width: 100%; }
 
   .hub-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: white;
-    padding: 1.5rem 2rem;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    background: linear-gradient(to right, #111, #0a0a0a);
+    padding: 2rem 2.5rem;
+    border-radius: 12px;
+    border: 1px solid #222;
+    box-shadow: var(--shadow-lg);
     margin-top: 2rem;
   }
   
   .week-badge {
-    background: var(--primary);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-weight: bold;
+    background: #1a1a1a;
+    color: var(--accent);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    font-weight: 900;
+    border: 1px solid #333;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 0.8rem;
   }
 
   .season-badge {
-    font-size: 0.8rem;
-    background: #e3f2fd;
-    color: var(--primary);
+    font-size: 0.7rem;
+    background: var(--primary);
+    color: white;
     padding: 2px 8px;
     border-radius: 4px;
     vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 900;
   }
 
-  .match-panel { padding: 2rem; }
+  .match-panel { padding: 2.5rem; border: 1px solid #222; background: linear-gradient(180deg, #111 0%, #0a0a0a 100%); }
   .fixture-display {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #f8f9fa;
-    padding: 2rem;
-    border-radius: 8px;
+    background: #000;
+    padding: 2.5rem;
+    border-radius: 12px;
+    border: 1px solid #1a1a1a;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+    margin-bottom: 1.5rem;
   }
   
   .team { text-align: center; flex: 1; }
-  .team h3 { margin-top: 1rem; font-size: 1.2rem; }
+  .team h3 { margin-top: 1rem; font-size: 1.1rem; font-weight: 900; color: white; }
   
   .team-shield {
     width: 60px;
     height: 70px;
     margin: 0 auto;
     border-radius: 0 0 30px 30px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
   }
   .home-shield { background: var(--primary); }
   .away-shield { background: var(--danger); }
   
-  .vs {
-    font-size: 1.5rem;
+  .vs-badge {
+    font-size: 0.9rem;
     font-weight: 900;
-    color: #ccc;
-    padding: 0 1rem;
+    color: #444;
+    background: #111;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #222;
   }
 
-  .league-panel { padding: 1.5rem; max-height: 600px; display: flex; flex-direction: column; }
-  .table-container { overflow-y: auto; flex: 1; }
+  .league-panel { padding: 1.5rem; max-height: 600px; display: flex; flex-direction: column; border: 1px solid #222; }
+  .table-container { overflow-y: auto; flex: 1; margin-top: 0.5rem; }
   
   .league-select {
     padding: 0.4rem 0.8rem;
     border-radius: 4px;
-    border: 1px solid #ddd;
-    background: white;
+    border: 1px solid #333;
+    background: #111;
+    color: white;
     font-weight: bold;
     cursor: pointer;
+    font-size: 0.8rem;
   }
 
   .toggle-label {
     font-size: 0.75rem;
     font-weight: bold;
-    color: #888;
+    color: #666;
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -287,51 +306,57 @@
   }
 
   .league-table { width: 100%; border-collapse: collapse; text-align: left; }
-  .league-table th, .league-table td { padding: 0.75rem 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
-  .league-table th { color: #888; font-size: 0.75rem; text-transform: uppercase; position: sticky; top: 0; background: white; }
-  .league-table .team-name { font-weight: bold; }
-  .league-table .pts { font-weight: 900; color: var(--primary); }
-  .league-table tr.highlight { background: #e3f2fd; }
-  .league-table tr.highlight td { color: var(--primary); }
+  .league-table th, .league-table td { padding: 0.8rem 0.5rem; border-bottom: 1px solid #1a1a1a; font-size: 0.9rem; }
+  .league-table th { color: #555; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 0; background: #1a1a1a; z-index: 10; font-weight: 900; }
+  .league-table .team-name { font-weight: 800; color: #ccc; }
+  .league-table .pts { font-weight: 900; color: var(--accent); }
+  .league-table tr.highlight { background: rgba(255, 235, 59, 0.05); }
+  .league-table tr.highlight .team-name { color: var(--accent); }
 
-  .pos-cell { font-weight: bold; position: relative; }
+  .pos-cell { font-weight: 900; position: relative; color: #444; }
   
   /* Zone Highlighting */
-  tr.zone-champ .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #3b82f6; } /* Blue */
-  tr.zone-promo .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #10b981; } /* Green */
-  tr.zone-playoff .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #f59e0b; } /* Yellow */
-  tr.zone-relegation .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #ef4444; } /* Red */
+  tr.zone-champ .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #3b82f6; } 
+  tr.zone-promo .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #10b981; } 
+  tr.zone-playoff .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #f59e0b; } 
+  tr.zone-relegation .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #ef4444; } 
   
-  .button {
+  .btn {
     text-decoration: none;
     text-align: center;
     border: none;
     border-radius: 6px;
     cursor: pointer;
+    display: inline-block;
+    transition: all 0.2s;
   }
 
   .danger-link {
     background: none;
     border: none;
     color: var(--danger);
-    font-size: 0.7rem;
-    font-weight: bold;
+    font-size: 0.65rem;
+    font-weight: 900;
     cursor: pointer;
     padding: 0;
     text-decoration: underline;
-    opacity: 0.6;
+    opacity: 0.5;
+    letter-spacing: 1px;
   }
   .danger-link:hover { opacity: 1; }
 
-  .empty-state { text-align: center; color: #999; font-style: italic; padding: 2rem; }
+  .empty-state { text-align: center; color: #666; font-style: italic; padding: 2rem; background: #050505; border-radius: 8px; }
   .flex { display: flex; }
-  .flex-direction-col { flex-direction: column; }
+  .flex-col { flex-direction: column; }
   .justify-between { justify-content: space-between; }
   .items-center { align-items: center; }
   .mb-1 { margin-bottom: 1rem; }
   .mb-2 { margin-bottom: 2rem; }
   .mt-1 { margin-top: 1rem; }
   .mt-2 { margin-top: 2rem; }
-  .mt-4 { margin-top: 4rem; }
+  .mt-3 { margin-top: 3rem; }
   .gap-1 { gap: 1rem; }
+  .font-black { font-weight: 900; }
+  .tracking-tighter { letter-spacing: -0.05em; }
 </style>
+

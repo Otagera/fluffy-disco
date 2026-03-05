@@ -1,74 +1,8 @@
-import { type AIState, type Player, type Mentality, type ControlType, type TeamStats, type MatchAnalytics, type CameraMode } from './types';
-
-export interface MatchState {
-  status: 'LOBBY' | 'PLAYING' | 'PAUSED' | 'HALFTIME' | 'FINISHED';
-  timer: number;
-  homeScore: number;
-  awayScore: number;
-  events: { minute: number; type: string; desc: string }[];
-  ball: {
-    x: number;
-    y: number;
-    z: number;
-    vx: number;
-    vy: number;
-    vz: number;
-    spin: number;
-  };
-  camera: {
-    mode: CameraMode;
-    zoom: number;
-    x: number;
-    y: number;
-  };
-  possessionPlayerId: number | null;
-  players: Player[];
-  homeBench: Player[];
-  awayBench: Player[];
-  homeSubsUsed: number;
-  awaySubsUsed: number;
-  homeFormation: string;
-  awayFormation: string;
-  homeTacticalStyle: string;
-  awayTacticalStyle: string;
-  homeMentality: Mentality;
-  awayMentality: Mentality;
-  homeControl: ControlType;
-  awayControl: ControlType;
-  sidesSwitched: boolean;
-  homeTeamId: string;
-  awayTeamId: string;
-  shotPower: number;
-  isCharging: boolean;
-  setPiece: {
-    type: 'throw-in' | 'corner' | 'goal-kick' | 'kick-off';
-    team: 'home' | 'away';
-    x: number;
-    y: number;
-    ticks: number;
-    takerId: number | null;
-  } | null;
-  lastKickerId: number | null;
-  lastKickType: 'PASS' | 'SHOOT' | 'CLEAR' | null;
-  lastKickPos: { x: number, y: number } | null;
-  stats: {
-    home: TeamStats;
-    away: TeamStats;
-  };
-  analytics: MatchAnalytics;
-  replay: {
-    frames: {
-      minute: number;
-      ball: { x: number; y: number; z: number };
-      players: { id: number; x: number; y: number; state: string }[];
-      score: { home: number; away: number };
-    }[];
-    isRecording: boolean;
-  };
-}
+import { type MatchState } from './types';
 
 export const matchState = $state<MatchState>({
   status: 'LOBBY',
+  isSimulating: false,
   timer: 0,
   homeScore: 0,
   awayScore: 0,

@@ -4,6 +4,7 @@ import { formations } from './formations';
 import type { Player } from './types';
 import { resetPhysics } from './physics';
 import { resetEngineState } from './engine.svelte';
+import { emitMatchEvent } from './events';
 
 import type { PlayerProfile, TeamProfile } from '../data/types';
 
@@ -119,8 +120,9 @@ export function resetMatch(options: {
       anchorY: y,
       currentStamina: existing ? existing.currentStamina : (profile?.condition ?? 100),
       possessionStrength: existing ? existing.possessionStrength : 1.0,
-      currentAction: null,
+      currentAction: { type: 'POSITION', score: 1.0 },
       actionTimer: 0,
+      thinkCooldown: 0,
       btState: {},
       attributes
     });
@@ -137,7 +139,7 @@ export function resetMatch(options: {
         x: 0, y: 0, homeX: 0, homeY: 0, number: i + 1, role: p.role,
         tacticalRole: p.role, vx: 0, vy: 0, aiState: 'POSITION', pressure: 0,
         anchorX: 0, anchorY: 0, currentStamina: p.condition ?? 100, possessionStrength: 1.0,
-        currentAction: null, actionTimer: 0, btState: {}, 
+        currentAction: { type: 'POSITION', score: 1.0 }, actionTimer: 0, thinkCooldown: 0, btState: {}, 
         attributes: normalizeAttributes(p.attributes, p.role)
       });
     }
@@ -147,7 +149,6 @@ export function resetMatch(options: {
 
   awayPos.forEach((pos, i) => {
     const custom = awayCustomPositions[i];
-    // For away team, if custom is 0.1 (distance from own goal), absolute X is 0.9
     let x = custom ? (1 - custom.x) : (1 - pos.x);
     let y = custom?.y ?? pos.y;
     if (matchState.sidesSwitched) { x = 1 - x; y = 1 - y; } 
@@ -177,8 +178,9 @@ export function resetMatch(options: {
       anchorY: y,
       currentStamina: existing ? existing.currentStamina : (profile?.condition ?? 100),
       possessionStrength: existing ? existing.possessionStrength : 1.0,
-      currentAction: null,
+      currentAction: { type: 'POSITION', score: 1.0 },
       actionTimer: 0,
+      thinkCooldown: 0,
       btState: {},
       attributes
     });
@@ -195,7 +197,7 @@ export function resetMatch(options: {
         x: 0, y: 0, homeX: 0, homeY: 0, number: i + 1, role: p.role,
         tacticalRole: p.role, vx: 0, vy: 0, aiState: 'POSITION', pressure: 0,
         anchorX: 0, anchorY: 0, currentStamina: p.condition ?? 100, possessionStrength: 1.0,
-        currentAction: null, actionTimer: 0, btState: {}, 
+        currentAction: { type: 'POSITION', score: 1.0 }, actionTimer: 0, thinkCooldown: 0, btState: {}, 
         attributes: normalizeAttributes(p.attributes, p.role)
       });
     }
@@ -206,7 +208,14 @@ export function resetMatch(options: {
   matchState.players = newPlayers;
   matchState.homeBench = homeBench;
   matchState.awayBench = awayBench;
-  matchState.ball = { x: 0.5, y: 0.5, z: 0, vx: 0, vy: 0, vz: 0, spin: 0 };
+  
+  matchState.ball.x = 0.5;
+  matchState.ball.y = 0.5;
+  matchState.ball.z = 0;
+  matchState.ball.vx = 0;
+  matchState.ball.vy = 0;
+  matchState.ball.vz = 0;
+  matchState.ball.spin = 0;
   
   if (resetStats) {
     matchState.timer = 0;
@@ -225,6 +234,9 @@ export function resetMatch(options: {
   
   if (status === 'PLAYING') {
     matchState.camera.mode = 'BROADCAST';
+    matchState.camera.zoom = 1.0;
+    matchState.camera.x = 0.5;
+    matchState.camera.y = 0.5;
     matchState.possessionPlayerId = null;
     matchState.setPiece = {
       type: 'kick-off',
@@ -265,6 +277,8 @@ export function loadMatchState(data: any) {
       p.vx = 0;
       p.vy = 0;
       p.aiState = saved.state;
+      p.currentAction = { type: saved.state, score: 1.0 };
+      p.thinkCooldown = 0;
     }
   });
 
@@ -342,7 +356,7 @@ export function checkOffside() {
 
 export function triggerOffside() {
   const minute = Math.floor(matchState.timer / 60);
-  matchState.events.push({ minute, type: 'foul', desc: 'OFFSIDE!' });
+  emitMatchEvent('foul', 'OFFSIDE!', minute);
   
   matchState.ball.vx = 0;
   matchState.ball.vy = 0;
@@ -389,6 +403,7 @@ export function updateTeamTactics(team: 'home' | 'away', formation: string, styl
     p.homeY = y * PITCH_H;
     p.role = pos.role;
     p.tacticalRole = getTacticalRole(pos.role, i, isWide, formation, isAdvanced);
+    p.thinkCooldown = 0;
+    p.btState = {};
   }
 }
-

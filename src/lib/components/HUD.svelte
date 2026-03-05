@@ -30,7 +30,7 @@
   // Clock display: MM:SS
   let clockDisplay = $derived.by(() => {
     const mins = Math.floor(matchState.timer / 60);
-    const secs = matchState.timer % 60;
+    const secs = Math.floor(matchState.timer % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   });
 
@@ -128,7 +128,7 @@
   {#if matchState.events.length > 0}
     {@const lastEvent = matchState.events[matchState.events.length - 1]}
     <div class="event-ticker" class:goal-event={lastEvent.type === 'goal'}>
-      <span class="ticker-min">{lastEvent.minute}'</span> {lastEvent.desc}
+      <span class="ticker-min">{Math.floor(lastEvent.minute)}'</span> {lastEvent.desc}
     </div>
   {/if}
 
@@ -327,49 +327,60 @@
     transform: translateX(-50%);
     display: flex;
     align-items: stretch;
-    background: rgba(0,0,0,0.9);
+    background: rgba(0,0,0,0.95);
     border-radius: 4px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
     overflow: hidden;
     border: 1px solid #333;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .scoreboard:hover {
+    border-color: #555;
+    background: #000;
   }
 
   .score-box {
     display: flex;
     flex-direction: column;
-    padding: 5px 20px;
-    min-width: 120px;
+    padding: 8px 30px;
+    min-width: 160px;
+    background: linear-gradient(to bottom, #111, #000);
   }
   
   .team-names {
     display: flex;
     justify-content: space-between;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 900;
-    color: #888;
-    letter-spacing: 1px;
+    color: #aaa;
+    letter-spacing: 2px;
+    margin-bottom: 2px;
   }
 
   .score-digits {
     display: flex;
     justify-content: space-between;
-    font-size: 28px;
+    font-size: 32px;
     font-weight: 900;
     line-height: 1;
-    margin: 4px 0;
+    margin: 6px 0;
+    font-family: 'JetBrains Mono', monospace;
   }
 
   .clock { 
-    font-size: 12px; 
-    font-family: monospace; 
+    font-size: 13px; 
+    font-family: 'JetBrains Mono', monospace; 
     color: #ffeb3b; 
     text-align: center;
     border-top: 1px solid #222;
-    padding-top: 4px;
+    padding-top: 6px;
+    font-weight: bold;
   }
 
   .team-crest { 
-    width: 6px;
+    width: 8px;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
   }
 
   .primary {

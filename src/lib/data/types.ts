@@ -1,3 +1,5 @@
+import type { MatchAnalytics } from '../game/types';
+
 export interface PlayerProfile {
   id: string;
   name: string;

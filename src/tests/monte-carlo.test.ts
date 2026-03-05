@@ -20,6 +20,7 @@ describe('Monte Carlo Statistical Balancing', () => {
       possessionStrength: 1.0,
       currentAction: null,
       actionTimer: 0,
+      thinkCooldown: 0,
       btState: {},
       attributes: {
         passing: 10, finishing: 10, tackling: 10, vision: 10, 

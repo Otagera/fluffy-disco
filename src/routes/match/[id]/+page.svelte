@@ -4,7 +4,7 @@
   import { matchState } from '$lib/game/matchState.svelte';
   import { resetMatch, loadMatchState, updateTeamTactics } from '$lib/game/rules';
   import { formations } from '$lib/game/formations';
-  import { startEngine, startClock, stopClock, tick as engineTick } from '$lib/game/engine.svelte';
+  import { tick as engineTick } from '$lib/game/engine.svelte';
   import { handleInput } from '$lib/game/input';
   import { downloadReplay, clearReplay } from '$lib/game/recorder';
   import Pitch from '$lib/components/Pitch.svelte';
@@ -30,7 +30,23 @@
   let fileInput: HTMLInputElement;
   let resultForm: HTMLFormElement;
 
+  // Directive 1: UI-driven render loop for headless engine
+  let lastFrameTime = 0;
+  function gameLoop(time: number) {
+    const dt = lastFrameTime ? time - lastFrameTime : 16.67;
+    lastFrameTime = time;
+
+    // Pulse the engine
+    engineTick(dt);
+
+    if (matchState.status !== 'FINISHED') {
+      requestAnimationFrame(gameLoop);
+    }
+  }
+
   onMount(() => {
+    requestAnimationFrame(gameLoop);
+    
     isHomeManager ? currentFormation = data.homeTeam.formation : currentFormation = data.awayTeam.formation;
     isHomeManager ? currentStyle = data.homeTeam.tacticalStyle : currentStyle = data.awayTeam.tacticalStyle;
     isHomeManager ? currentMentality = data.homeTeam.mentality : currentMentality = data.awayTeam.mentality;
@@ -74,13 +90,10 @@
       awayCustomPositions
     });
     
-    startEngine();
-    startClock();
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
     return () => {
-      stopClock();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
@@ -161,41 +174,33 @@
   function handleSkip() {
     if (isSimulating) return;
     isSimulating = true;
+    matchState.isSimulating = true;
     
     const wasRecording = matchState.replay.isRecording;
     matchState.replay.isRecording = false;
 
-    // Use a recursive batch function to yield to the browser periodically
-    const runBatch = () => {
-      // Simulate 5 minutes of game time per batch
-      const batchEndTime = Math.min(5400, matchState.timer + 300); 
-      
-      while (matchState.timer < batchEndTime) {
-        matchState.timer += 10;
-        for (let i = 0; i < 600; i++) {
-          engineTick();
-        }
+    const FIXED_DT = 16.67; // 60fps equivalent
 
-        if (matchState.timer === 2700) {
-          matchState.status = 'HALFTIME';
-          matchState.events.push({ minute: 45, type: 'whistle', desc: 'Half time!' });
-          matchState.status = 'PLAYING';
-        }
+    const runBatch = () => {
+      // Simulate 2 minutes of game time per UI frame to keep it responsive but fast
+      const ticksPerBatch = (120 * 1000) / FIXED_DT;
+      
+      for (let i = 0; i < ticksPerBatch; i++) {
+        engineTick(FIXED_DT);
+        if (matchState.status === 'FINISHED') break;
       }
 
-      if (matchState.timer < 5400) {
-        // Yield to browser, then run next batch
+      if (matchState.status !== 'FINISHED' && matchState.timer < 5400) {
         requestAnimationFrame(runBatch);
       } else {
-        // Simulation finished
         matchState.status = 'FINISHED';
         matchState.replay.isRecording = wasRecording;
         isSimulating = false;
+        matchState.isSimulating = false;
         showFinalOverlay = true;
       }
     };
 
-    // Kick off the first batch
     requestAnimationFrame(runBatch);
   }
 
@@ -471,7 +476,7 @@
       <button class="save-btn" onclick={handleDownload}>💾 SAVE JSON</button>
     {/if}
     <input type="file" accept=".json" bind:this={fileInput} onchange={handleFileChange} style="display: none;" />
-    <button class="save-btn" onclick={() => fileInput.click()}>📂 RESUME MATCH</button>
+    <button class="save-btn" onclick={() => fileInput.click()}>📂 LOAD REPLAY</button>
   </div>
 
   <Pitch />
@@ -512,7 +517,9 @@
     transition: opacity 0.3s ease;
   }
 
-  .container:hover .hidden-live {
+  /* Only reveal when mouse is at the top/bottom 15% of screen */
+  .container:hover .replay-status.hidden-live,
+  .container:hover .controls.hidden-live {
     opacity: 1;
     pointer-events: auto;
   }
