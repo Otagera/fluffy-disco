@@ -4,7 +4,7 @@
   import { enhance } from '$app/forms';
   import { Match, MatchStatus } from '$lib/engine/Match.svelte.ts';
   import { formations } from '$lib/game/formations';
-  import { PLAYER_STRIDE, PLAYER_OFFSET_STAMINA, BALL_OFFSET_X, BALL_OFFSET_Y } from '$lib/engine/core/constants';
+  import { PLAYER_STRIDE, PLAYER_OFFSET_STAMINA, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, BALL_OFFSET_X, BALL_OFFSET_Y } from '$lib/engine/core/constants';
   import PixiPitch from '$lib/components/PixiPitch.svelte';
   import HUD from '$lib/components/HUD.svelte';
   import FormationBoard from '$lib/components/FormationBoard.svelte';
@@ -42,6 +42,7 @@
   let homeStartPositions: {x:number, y:number}[] = [];
   let awayStartPositions: {x:number, y:number}[] = [];
   let playerStats: any[] = [];
+  let starterRoles: string[] = [];
 
   // New Game Loop using the Match Orchestrator
   let lastFrameTime = 0;
@@ -116,7 +117,7 @@
     const allStats = squad.map((p: any) => p.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
     const allRoles = squad.map((p: any, idx: number) => overrides?.customRoles?.[idx] || p.role);
     const starterStats = allStats.slice(0, 11);
-    const starterRoles = allRoles.slice(0, 11);
+    starterRoles = allRoles.slice(0, 11);
     const benchStatsArr = allStats.slice(11);
     const benchRolesArr = allRoles.slice(11);
     benchPlayers = squad.slice(11);
