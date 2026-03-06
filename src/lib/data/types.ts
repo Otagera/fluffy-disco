@@ -6,6 +6,7 @@ export interface PlayerProfile {
   age: number;
   role: 'GK' | 'DEF' | 'MID' | 'FWD';
   potential: number;
+  overall?: number;
   condition: number; // 0-100
   injury: { type: string; weeksRemaining: number } | null;
   attributes: {
@@ -40,6 +41,7 @@ export interface TeamProfile {
   id: string;
   name: string;
   reputation: number; // 1-100
+  overall?: number;
   tacticalStyle: string;
   mentality: string; // ULTRA_DEFENSIVE, DEFENSIVE, BALANCED, ATTACKING, ULTRA_ATTACKING
   formation: string;

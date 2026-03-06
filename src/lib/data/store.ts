@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { SaveGame, Standing, Fixture } from './types';
 import { generateFixtures } from './generator';
+import { calculatePlayerOverall, calculateTeamOverall } from './ratings';
 
 const SAVE_FILE_PATH = path.join(process.cwd(), 'data', 'savegame.json');
 
@@ -9,7 +10,9 @@ export function loadSaveGame(): SaveGame | null {
   try {
     if (fs.existsSync(SAVE_FILE_PATH)) {
       const data = fs.readFileSync(SAVE_FILE_PATH, 'utf-8');
-      return JSON.parse(data) as SaveGame;
+      const save = JSON.parse(data) as SaveGame;
+      recalculateOverallRatings(save);
+      return save;
     }
   } catch (error) {
     console.error("Error loading save game:", error);
@@ -29,6 +32,17 @@ export function writeSaveGame(saveData: SaveGame): boolean {
   } catch (error) {
     console.error("Error writing save game:", error);
     return false;
+  }
+}
+
+
+function recalculateOverallRatings(save: SaveGame) {
+  for (const player of Object.values(save.players)) {
+    player.overall = calculatePlayerOverall(player);
+  }
+
+  for (const team of Object.values(save.teams)) {
+    team.overall = calculateTeamOverall(team, save.players);
   }
 }
 
@@ -107,6 +121,9 @@ export function processWeekResults(save: SaveGame, playerMatchResult?: { fixture
     // 3. Update Standings
     updateAllStandings(save);
 
+    // 3.5 Refresh dynamic quality ratings
+    recalculateOverallRatings(save);
+
     // 4. Check for season end
     const allPlayed = save.fixtures.every(f => f.played);
     if (allPlayed && save.fixtures.length > 0) {
@@ -117,6 +134,28 @@ export function processWeekResults(save: SaveGame, playerMatchResult?: { fixture
   }
   
   return save;
+}
+
+
+function getStyleAttackModifier(style: string | undefined) {
+  switch (style) {
+    case 'Tiki-Taka': return 0.08;
+    case 'Gegenpress': return 0.12;
+    case 'Fluid Counter': return 0.1;
+    case 'Route One': return 0.05;
+    case 'Park the Bus': return -0.08;
+    default: return 0;
+  }
+}
+
+function getMentalityModifier(mentality: string | undefined) {
+  switch (mentality) {
+    case 'ULTRA_ATTACKING': return 0.22;
+    case 'ATTACKING': return 0.12;
+    case 'DEFENSIVE': return -0.08;
+    case 'ULTRA_DEFENSIVE': return -0.16;
+    default: return 0;
+  }
 }
 
 function simFixtures(save: SaveGame, filter: (f: Fixture) => boolean, teamsPlayed: Set<string>) {
@@ -131,10 +170,17 @@ function simFixtures(save: SaveGame, filter: (f: Fixture) => boolean, teamsPlaye
       continue;
     }
 
-    const homeAdv = 0.3;
-    const diff = (homeTeam.reputation - awayTeam.reputation) / 20;
-    const lambdaHome = Math.max(0.2, 1.4 + diff + homeAdv);
-    const lambdaAway = Math.max(0.2, 1.4 - diff);
+    const homeAdv = 0.24;
+    const reputationDiff = (homeTeam.reputation - awayTeam.reputation) / 28;
+    const overallDiff = ((homeTeam.overall ?? 1) - (awayTeam.overall ?? 1)) / 5;
+
+    const homeStyle = getStyleAttackModifier(homeTeam.tacticalStyle);
+    const awayStyle = getStyleAttackModifier(awayTeam.tacticalStyle);
+    const homeMentality = getMentalityModifier(homeTeam.mentality);
+    const awayMentality = getMentalityModifier(awayTeam.mentality);
+
+    const lambdaHome = Math.max(0.2, 1.2 + homeAdv + reputationDiff + overallDiff + homeStyle + homeMentality - awayMentality * 0.4);
+    const lambdaAway = Math.max(0.2, 1.1 - reputationDiff - overallDiff + awayStyle + awayMentality - homeMentality * 0.4);
     
     f.homeScore = poisson(lambdaHome);
     f.awayScore = poisson(lambdaAway);

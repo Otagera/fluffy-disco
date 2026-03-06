@@ -1,301 +1,133 @@
 <script lang="ts">
-  let teams = $state([
-    { 
-      id: 1, 
-      name: 'FC Thunder', 
-      primary: '#1a5f2a', 
-      secondary: '#ffd700',
-      players: [
-        { id: 1, name: 'John Smith', position: 'GK', number: 1, stats: { speed: 45, skill: 55, passing: 60, shooting: 40, defending: 50, stamina: 70 } },
-        { id: 2, name: 'Carlos Rodriguez', position: 'CB', number: 4, stats: { speed: 55, skill: 60, passing: 65, shooting: 45, defending: 80, stamina: 75 } },
-        { id: 3, name: 'Marcus Johnson', position: 'CB', number: 5, stats: { speed: 50, skill: 55, passing: 60, shooting: 40, defending: 85, stamina: 70 } },
-        { id: 4, name: 'David Williams', position: 'LB', number: 3, stats: { speed: 70, skill: 65, passing: 70, shooting: 50, defending: 72, stamina: 80 } },
-        { id: 5, name: 'James Brown', position: 'RB', number: 2, stats: { speed: 72, skill: 63, passing: 68, shooting: 48, defending: 70, stamina: 78 } },
-        { id: 6, name: 'Michael Davis', position: 'CDM', number: 6, stats: { speed: 58, skill: 70, passing: 82, shooting: 55, defending: 75, stamina: 85 } },
-        { id: 7, name: 'Robert Miller', position: 'CM', number: 8, stats: { speed: 62, skill: 78, passing: 80, shooting: 65, defending: 60, stamina: 82 } },
-        { id: 8, name: 'Antonio Garcia', position: 'CAM', number: 10, stats: { speed: 68, skill: 88, passing: 85, shooting: 78, defending: 45, stamina: 75 } },
-        { id: 9, name: 'Kevin Wilson', position: 'LW', number: 7, stats: { speed: 85, skill: 80, passing: 72, shooting: 70, defending: 40, stamina: 72 } },
-        { id: 10, name: 'Daniel Taylor', position: 'RW', number: 11, stats: { speed: 83, skill: 78, passing: 70, shooting: 72, defending: 42, stamina: 70 } },
-        { id: 11, name: 'Chris Anderson', position: 'ST', number: 9, stats: { speed: 75, skill: 82, passing: 60, shooting: 88, defending: 35, stamina: 68 } },
-      ]
-    },
-  ]);
-  
-  let selectedTeam = $state(teams[0]);
-  let selectedPlayer = $state<number | null>(null);
-  
-  function getStatColor(value: number): string {
-    if (value >= 80) return '#28a745';
-    if (value >= 60) return '#ffc107';
-    return '#dc3545';
+  import type { PageData } from './$types';
+
+  let { data }: { data: PageData } = $props();
+
+  const roleOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as const;
+  const sortedTeams = $derived([...(data.teams ?? [])].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)));
+
+  let selectedTeamId = $state<string | null>(null);
+  let selectedPlayerId = $state<string | null>(null);
+
+  $effect(() => {
+    if (!selectedTeamId && sortedTeams.length > 0) selectedTeamId = sortedTeams[0].id;
+  });
+
+  const selectedTeam = $derived(sortedTeams.find((team) => team.id === selectedTeamId) ?? null);
+  const selectedTeamPlayers = $derived(
+    selectedTeam
+      ? selectedTeam.players
+          .map((id) => data.players[id])
+          .filter(Boolean)
+          .sort((a, b) => {
+            const roleDelta = roleOrder[a.role] - roleOrder[b.role];
+            if (roleDelta !== 0) return roleDelta;
+            return (b.overall ?? 0) - (a.overall ?? 0);
+          })
+      : []
+  );
+
+  const probableXI = $derived(selectedTeamPlayers.slice(0, 11));
+  const bench = $derived(selectedTeamPlayers.slice(11, 20));
+  const selectedPlayer = $derived(selectedTeamPlayers.find((player) => player.id === selectedPlayerId) ?? null);
+
+  function getOverallColor(overall: number) {
+    if (overall >= 16) return 'elite';
+    if (overall >= 13) return 'strong';
+    if (overall >= 10) return 'average';
+    return 'raw';
   }
 </script>
 
 <div class="container">
   <div class="header mb-2">
-    <h1>Team Management</h1>
-    <button class="primary">+ Create New Team</button>
-  </div>
-  
-  <div class="grid grid-2 gap-2">
     <div>
-      <div class="card">
-        <h2>Your Teams</h2>
+      <h1>Squad Hub</h1>
+      <p class="subtle">League-stratified squads with matchday XI and realistic bench depth.</p>
+    </div>
+  </div>
+
+  {#if !data.hasSave}
+    <div class="card"><h2>No Career Found</h2><p class="subtle">Start a new career from Home first.</p></div>
+  {:else}
+    <div class="grid grid-2 gap-2">
+      <div class="card light">
+        <h2>Clubs by Overall</h2>
         <div class="team-list">
-          {#each teams as team}
-            <button 
-              class="team-card"
-              class:selected={selectedTeam?.id === team.id}
-              onclick={() => selectedTeam = team}
-            >
-              <span class="team-color" style="background: {team.primary}"></span>
-              <span class="team-name">{team.name}</span>
-              <span class="player-count">{team.players.length} players</span>
+          {#each sortedTeams as team}
+            <button class="team-card" class:selected={team.id === selectedTeamId} onclick={() => { selectedTeamId = team.id; selectedPlayerId = null; }}>
+              <div>
+                <div class="team-name">{team.name}</div>
+                <div class="subtle">Rep {team.reputation}</div>
+              </div>
+              <span class="pill {getOverallColor(team.overall ?? 1)}">OVR {team.overall ?? 1}</span>
             </button>
           {/each}
         </div>
       </div>
-      
-      <div class="card mt-2">
-        <h2>Generate Players</h2>
-        <p class="text-sm text-gray mb-1">Auto-generate 11 players with random names and stats</p>
-        <button class="primary" style="width: 100%">🎲 Generate Players</button>
-      </div>
-    </div>
-    
-    <div>
-      {#if selectedTeam}
-        <div class="card">
-          <div class="team-header flex items-center gap-2 mb-2">
-            <span class="team-badge" style="background: {selectedTeam.primary}; color: {selectedTeam.secondary};">
-              {selectedTeam.name}
-            </span>
+
+      <div class="card light">
+        {#if selectedTeam}
+          <div class="flex justify-between items-center mb-1">
+            <h2>{selectedTeam.name}</h2>
+            <span class="pill {getOverallColor(selectedTeam.overall ?? 1)}">Team OVR {selectedTeam.overall ?? 1}</span>
           </div>
-          
-          <h3>Squad</h3>
+
+          <h3 class="section-title">Probable XI</h3>
           <div class="player-list">
-            {#each selectedTeam.players as player}
-              <button 
-                class="player-row"
-                class:selected={selectedPlayer === player.id}
-                onclick={() => selectedPlayer = selectedPlayer === player.id ? null : player.id}
-              >
-                <span class="player-number" style="background: {selectedTeam.primary}">{player.number}</span>
-                <span class="player-info">
-                  <span class="player-name">{player.name}</span>
-                  <span class="player-position">{player.position}</span>
-                </span>
+            {#each probableXI as player}
+              <button class="player-row" class:selected={player.id === selectedPlayerId} onclick={() => selectedPlayerId = player.id === selectedPlayerId ? null : player.id}>
+                <span class="player-name">{player.name}</span>
+                <span class="player-meta">{player.role} · Age {player.age}</span>
+                <span class="pill {getOverallColor(player.overall ?? 1)}">{player.overall ?? 1}</span>
               </button>
             {/each}
           </div>
-        </div>
-      {/if}
+
+          <h3 class="section-title mt-2">Bench ({bench.length})</h3>
+          <div class="player-list small">
+            {#each bench as player}
+              <button class="player-row" onclick={() => selectedPlayerId = player.id}>
+                <span class="player-name">{player.name}</span>
+                <span class="player-meta">{player.role}</span>
+                <span class="pill {getOverallColor(player.overall ?? 1)}">{player.overall ?? 1}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
-  </div>
-  
-  {#if selectedPlayer}
-    {@const player = selectedTeam.players.find(p => p.id === selectedPlayer)}
-    {#if player}
-      <div class="card mt-2">
-        <h3>{player.name} - #{player.number} ({player.position})</h3>
-        
-        <div class="stats-grid">
-          <div class="stat">
-            <span class="stat-label">Speed</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.speed}%; background: {getStatColor(player.stats.speed)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.speed}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Skill</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.skill}%; background: {getStatColor(player.stats.skill)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.skill}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Passing</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.passing}%; background: {getStatColor(player.stats.passing)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.passing}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Shooting</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.shooting}%; background: {getStatColor(player.stats.shooting)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.shooting}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Defending</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.defending}%; background: {getStatColor(player.stats.defending)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.defending}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Stamina</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: {player.stats.stamina}%; background: {getStatColor(player.stats.stamina)}"></div>
-            </div>
-            <span class="stat-value">{player.stats.stamina}</span>
-          </div>
+
+    {#if selectedPlayer}
+      <div class="card light mt-2">
+        <div class="flex justify-between items-center mb-1">
+          <h3>{selectedPlayer.name}</h3>
+          <span class="pill {getOverallColor(selectedPlayer.overall ?? 1)}">Overall {selectedPlayer.overall ?? 1}</span>
         </div>
+        <p class="subtle">{selectedPlayer.role} · Condition {Math.round(selectedPlayer.condition)}% · Potential {selectedPlayer.potential}</p>
       </div>
     {/if}
   {/if}
 </div>
 
 <style>
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  .subtle { color: #5e6878; }
+  .light { background: #f7f9fc; border-color: #dce3ee; color: #1e2430; }
+  .team-list, .player-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 40vh; overflow: auto; }
+  .player-list.small { max-height: 24vh; }
+  .team-card, .player-row {
+    width: 100%; display: grid; gap: 0.5rem; align-items: center; text-align: left;
+    background: white; border: 1px solid #dce3ee; color: #1e2430;
   }
-  
-  .team-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  
-  .team-card {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border: 2px solid transparent;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: left;
-  }
-  
-  .team-card.selected {
-    border-color: var(--primary);
-    background: #e8f5e9;
-  }
-  
-  .team-color {
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-  }
-  
-  .team-name {
-    flex: 1;
-    font-weight: 500;
-  }
-  
-  .player-count {
-    color: var(--gray);
-    font-size: 0.875rem;
-  }
-  
-  .team-badge {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: bold;
-  }
-  
-  .player-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    max-height: 400px;
-    overflow-y: auto;
-  }
-  
-  .player-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
-  }
-  
-  .player-row:hover {
-    background: #e9ecef;
-  }
-  
-  .player-row.selected {
-    border-color: var(--primary);
-    background: #e8f5e9;
-  }
-  
-  .player-number {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 0.8rem;
-  }
-  
-  .player-info {
-    flex: 1;
-    display: flex;
-    justify-content: space-between;
-  }
-  
-  .player-name {
-    font-weight: 500;
-  }
-  
-  .player-position {
-    color: var(--gray);
-    font-size: 0.875rem;
-  }
-  
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-  }
-  
-  .stat {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .stat-label {
-    width: 80px;
-    font-size: 0.875rem;
-  }
-  
-  .stat-bar {
-    flex: 1;
-    height: 8px;
-    background: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  
-  .stat-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.3s;
-  }
-  
-  .stat-value {
-    width: 30px;
-    text-align: right;
-    font-weight: bold;
-    font-size: 0.875rem;
-  }
-  
-  .text-gray {
-    color: var(--gray);
-  }
+  .team-card { grid-template-columns: 1fr auto; }
+  .player-row { grid-template-columns: 1fr auto auto; }
+  .team-card.selected, .player-row.selected { border-color: #2d8a4a; background: #eef9f1; }
+  .team-name, .player-name { font-weight: 700; color: #161c27; }
+  .player-meta { color: #5e6878; font-size: 0.85rem; }
+  .section-title { font-size: 1rem; margin: 0.4rem 0; color: #2c3442; }
+  .pill { border-radius: 999px; font-size: 0.75rem; font-weight: 800; padding: 0.25rem 0.55rem; border: 1px solid transparent; }
+  .pill.elite { background: rgba(31, 132, 78, 0.13); color: #1f844e; border-color: rgba(31, 132, 78, 0.25); }
+  .pill.strong { background: rgba(0, 95, 184, 0.12); color: #005fb8; border-color: rgba(0, 95, 184, 0.25); }
+  .pill.average { background: rgba(179, 114, 0, 0.12); color: #9a5f00; border-color: rgba(179, 114, 0, 0.25); }
+  .pill.raw { background: rgba(188, 30, 30, 0.12); color: #a61919; border-color: rgba(188, 30, 30, 0.22); }
 </style>
