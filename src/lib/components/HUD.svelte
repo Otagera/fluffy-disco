@@ -2,41 +2,55 @@
   import type { TeamProfile } from '../data/types';
   import type { Match } from '../engine/Match';
 
-  let { match, currentTime, homeTeam, awayTeam } = $props<{
+  let { currentTime, homeTeam, awayTeam } = $props<{
     match: Match;
     currentTime: number;
     homeTeam?: TeamProfile;
     awayTeam?: TeamProfile;
   }>();
 
-  // Reactive formatted time using the passed prop
   let clockDisplay = $derived.by(() => {
     const mins = Math.floor(currentTime / 60);
     const secs = Math.floor(currentTime % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   });
   
-  // Scores (Assuming they will be added to match state eventually, using 0 for now)
+  // These should eventually come from the match engine
   let homeScore = $state(0);
   let awayScore = $state(0);
-
 </script>
 
-<div class="hud-container">
-  <div class="scoreboard">
-    <div class="team-crest home" style="background: {homeTeam?.colors?.primary || 'var(--primary)'}"></div>
-    <div class="score-box">
-      <div class="team-names">
-        <span class="team-name">{homeTeam?.shortName || homeTeam?.name?.substring(0,3).toUpperCase() || 'HOM'}</span>
-        <span class="team-name">{awayTeam?.shortName || awayTeam?.name?.substring(0,3).toUpperCase() || 'AWY'}</span>
+<div class="hud-container p-4 sm:p-8">
+  <div class="flex justify-center">
+    <div class="bg-white border border-light-border rounded-xl shadow-xl overflow-hidden flex items-stretch divide-x divide-light-border h-16 sm:h-20">
+      <!-- Home Team -->
+      <div class="flex items-center gap-4 px-6 sm:px-8 bg-light-bg/30">
+        <div class="w-8 h-10 sm:w-10 sm:h-12 bg-primary rounded-b-2xl shadow-sm border-2 border-white"></div>
+        <div class="flex flex-col">
+          <span class="text-[0.6rem] font-black subtle uppercase tracking-widest leading-none mb-1">HOME</span>
+          <span class="text-lg sm:text-xl font-black tracking-tighter leading-none">{homeTeam?.shortName || homeTeam?.name?.substring(0,3).toUpperCase() || 'HOM'}</span>
+        </div>
       </div>
-      <div class="score-digits">
-        <span class="score">{homeScore}</span>
-        <span class="score">{awayScore}</span>
+
+      <!-- Score & Clock -->
+      <div class="flex flex-col items-center justify-center px-8 sm:px-12 bg-white min-w-[140px] sm:min-w-[180px]">
+        <div class="flex items-center gap-4 sm:gap-6 mb-1">
+          <span class="text-3xl sm:text-4xl font-black text-primary tracking-tighter">{homeScore}</span>
+          <span class="text-lg font-black text-light-subtle opacity-30">VS</span>
+          <span class="text-3xl sm:text-4xl font-black text-danger tracking-tighter">{awayScore}</span>
+        </div>
+        <div class="text-[0.7rem] sm:text-xs font-black text-primary bg-primary/5 px-3 py-0.5 rounded-full tracking-[0.2em]">{clockDisplay}</div>
       </div>
-      <span class="clock">{clockDisplay}</span>
+
+      <!-- Away Team -->
+      <div class="flex items-center gap-4 px-6 sm:px-8 bg-light-bg/30">
+        <div class="flex flex-col text-right">
+          <span class="text-[0.6rem] font-black subtle uppercase tracking-widest leading-none mb-1">AWAY</span>
+          <span class="text-lg sm:text-xl font-black tracking-tighter leading-none">{awayTeam?.shortName || awayTeam?.name?.substring(0,3).toUpperCase() || 'AWY'}</span>
+        </div>
+        <div class="w-8 h-10 sm:w-10 sm:h-12 bg-danger rounded-b-2xl shadow-sm border-2 border-white"></div>
+      </div>
     </div>
-    <div class="team-crest away" style="background: {awayTeam?.colors?.primary || 'var(--danger)'}"></div>
   </div>
 </div>
 
@@ -46,68 +60,7 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
     pointer-events: none;
     z-index: 100;
-    font-family: 'Inter', sans-serif;
-    color: white;
-  }
-
-  .scoreboard {
-    position: absolute;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: stretch;
-    background: rgba(0,0,0,0.95);
-    border-radius: 4px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-    overflow: hidden;
-    border: 1px solid #333;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .score-box {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 30px;
-    min-width: 160px;
-    background: linear-gradient(to bottom, #111, #000);
-  }
-  
-  .team-names {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    font-weight: 900;
-    color: #aaa;
-    letter-spacing: 2px;
-    margin-bottom: 2px;
-  }
-
-  .score-digits {
-    display: flex;
-    justify-content: space-between;
-    font-size: 32px;
-    font-weight: 900;
-    line-height: 1;
-    margin: 6px 0;
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .clock { 
-    font-size: 13px; 
-    font-family: 'JetBrains Mono', monospace; 
-    color: #ffeb3b; 
-    text-align: center;
-    border-top: 1px solid #222;
-    padding-top: 6px;
-    font-weight: bold;
-  }
-
-  .team-crest { 
-    width: 8px;
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
   }
 </style>

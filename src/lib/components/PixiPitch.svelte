@@ -21,20 +21,22 @@
     });
 </script>
 
-<div class="pitch-container">
-    <canvas bind:this={canvas}></canvas>
+<div class="pitch-outer flex items-center justify-center p-4">
+    <div class="pitch-container shadow-2xl border-4 border-white/20 rounded-2xl overflow-hidden">
+        <canvas bind:this={canvas}></canvas>
+    </div>
 </div>
 
 <style>
+    .pitch-outer {
+        width: 100%;
+        min-height: calc(100vh - 160px);
+    }
+
     .pitch-container {
         width: 1150px;
         height: 780px;
-        margin: 0 auto;
-        background: #1a3c1a;
-        border: 4px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-        border-radius: 8px;
-        overflow: hidden;
+        background: #2d8a4a;
     }
 
     canvas {

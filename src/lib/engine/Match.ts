@@ -4,6 +4,7 @@ import { SpatialMap } from './ai/SpatialMap';
 import { TacticalManager } from './ai/Tactics';
 import { 
     PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y,
+    PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
     BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_VX, BALL_OFFSET_VY
 } from './core/constants';
 
@@ -50,6 +51,9 @@ export class Match {
         this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
         this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
         this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
+        
+        // Match starts in KICKOFF, but we want it to transition to PLAYING 
+        // as soon as the clock starts if we want immediate movement.
     }
 
     /**
@@ -57,26 +61,29 @@ export class Match {
      * @param dt Timestep in seconds.
      */
     public tick(dt: number) {
+        if (this.status === MatchStatus.PAUSED) return;
+
         // 1. Update AI Spatial Awareness (Influence Map)
         this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
 
         // 2. Identify Possession
         const possessionIdx = this.resolvePossession();
 
-        // Auto-start play if ball moves or someone grabs it
-        if (this.status === MatchStatus.KICKOFF && possessionIdx !== null) {
+        // Auto-start play if ball moves or someone grabs it, 
+        // or just start after a tiny delay to get players moving
+        if (this.status === MatchStatus.KICKOFF && (possessionIdx !== null || this.currentTime > 0.1)) {
             this.status = MatchStatus.PLAYING;
         }
 
         this.tactics.updatePhase(this.memory.ballBuffer, possessionIdx);
 
         // 3. Calculate Tactical Anchors
+        // Deadlock Fix: Always use tactical anchors unless match is explicitly paused/waiting
         const targets = this.status === MatchStatus.KICKOFF 
             ? this.initialAnchors 
             : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors);
 
         // 4. Basic Ball Interaction (Dribbling)
-
         if (possessionIdx !== null) {
             const offset = possessionIdx * PLAYER_STRIDE;
             const px = this.memory.playerBuffer[offset + PLAYER_OFFSET_X];
@@ -84,13 +91,16 @@ export class Match {
             const vx = this.memory.playerBuffer[offset + PLAYER_OFFSET_VX];
             const vy = this.memory.playerBuffer[offset + PLAYER_OFFSET_VY];
 
-            // Ball follows player with a slight lead in velocity direction
             const speed = Math.sqrt(vx * vx + vy * vy);
-            const lead = 0.8; 
+            const lead = 0.6; // Slightly tighter ball control
             
             // Apply a "stick" force to the ball to keep it near the player
-            this.memory.ballBuffer[BALL_OFFSET_X] = px + (speed > 0.1 ? (vx / speed) * lead : lead);
-            this.memory.ballBuffer[BALL_OFFSET_Y] = py + (speed > 0.1 ? (vy / speed) * lead : 0);
+            // Use velocity-based lead if moving, otherwise default forward lead
+            const dirX = speed > 0.1 ? vx / speed : 1.0;
+            const dirY = speed > 0.1 ? vy / speed : 0.0;
+
+            this.memory.ballBuffer[BALL_OFFSET_X] = px + dirX * lead;
+            this.memory.ballBuffer[BALL_OFFSET_Y] = py + dirY * lead;
             
             // Match velocity
             this.memory.ballBuffer[BALL_OFFSET_VX] = vx;
@@ -106,15 +116,13 @@ export class Match {
 
     /**
      * Runs a full match simulation at maximum CPU speed.
-     * Headless mode: No UI, no Svelte proxies, no PixiJS.
      */
     public simulateMatch(): { homeScore: number, awayScore: number, duration: number } {
-        const step = 0.1; // 100ms ticks for batch sim speed/accuracy balance
+        const step = 0.1; 
         const totalSteps = this.maxDuration / step;
 
         for (let i = 0; i < totalSteps; i++) {
             this.tick(step);
-            // Add goal detection logic here...
         }
 
         return { homeScore: 0, awayScore: 0, duration: this.currentTime };
@@ -126,7 +134,10 @@ export class Match {
     private resolvePossession(): number | null {
         const bx = this.memory.ballBuffer[BALL_OFFSET_X];
         const by = this.memory.ballBuffer[BALL_OFFSET_Y];
-        const reach = 2.5; // Increased reach for easier interaction
+        const reach = 2.0; // Reach in meters
+
+        let closestIdx = -1;
+        let minDistSq = reach * reach;
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
             const offset = i * PLAYER_STRIDE;
@@ -135,10 +146,12 @@ export class Match {
 
             const dx = px - bx;
             const dy = py - by;
-            if (dx * dx + dy * dy < reach * reach) {
-                return i;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                closestIdx = i;
             }
         }
-        return null;
+        return closestIdx === -1 ? null : closestIdx;
     }
 }

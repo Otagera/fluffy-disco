@@ -3,6 +3,7 @@ import type { MatchAnalytics } from '../game/types';
 export interface PlayerProfile {
   id: string;
   name: string;
+  number?: number;
   age: number;
   role: 'GK' | 'DEF' | 'MID' | 'FWD';
   potential: number;
@@ -46,6 +47,8 @@ export interface TeamProfile {
   mentality: string; // ULTRA_DEFENSIVE, DEFENSIVE, BALANCED, ATTACKING, ULTRA_ATTACKING
   formation: string;
   players: string[]; // Array of PlayerProfile IDs
+  customPositions?: Record<number, {x: number, y: number}>;
+  customRoles?: Record<number, string>;
 }
 
 export interface Standing {

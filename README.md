@@ -1,31 +1,47 @@
 # Football Simulation Engine (v2)
 
-A high-performance, statistically driven 2D football match engine overhaul. This version transitions from an "arcade" DOM-based approach to a Data-Oriented Design (DOD) architecture, decoupling simulation logic from the UI framework.
+A high-performance, statistically driven 2D football management and match simulation overhaul. This version implements a modern, light-themed UI system built with Svelte 5 and Tailwind CSS, backed by a Data-Oriented Design (DOD) match engine.
 
 ## Core Pillars
 
-1.  **Decoupled Simulation:** The core engine is pure TypeScript, utilizing `Float32Array` for state to maximize V8 optimization and support headless batch simulations.
-2.  **Biomechanical Steering:** Movement is governed by Craig Reynolds' steering behaviors (Seek, Arrive, Separation) rather than linear point-to-point translation.
-3.  **Statistical Realism:** Action resolution uses Gaussian (Normal) distributions (Box-Muller transform) instead of uniform RNG, incorporating "Consistency" as a hidden attribute.
-4.  **Kinetic Ball Physics:** The ball is an independent physical entity with mass, friction, and impulse-based interaction.
-5.  **WebGL Rendering:** A "dumb" PixiJS pipeline reads raw memory buffers to render 22+ players at 60FPS without framework overhead.
+1.  **High-Fidelity UI/UX:** A comprehensive UI overhaul using Tailwind CSS, featuring a clean light theme, shared tactical components, and interactive drag-and-drop management.
+2.  **Unified Tactical System:** A shared `FormationBoard` component used for global strategy, pre-match fine-tuning, and in-match substitutions with full drag-and-drop support.
+3.  **Realism-Driven Data:** League-stratified player generation with realistic squad numbers, role-specific weighted attributes, and age-based development curves.
+4.  **Decoupled Simulation Engine:** Pure TypeScript simulation utilizing `Float32Array` for state, supporting headless batch simulations and high-speed outcomes.
+5.  **Biomechanical Steering:** Movement governed by Craig Reynolds' steering behaviors (Seek, Arrive, Separation) for fluid, lifelike player motion.
+6.  **WebGL Rendering:** A PixiJS pipeline renders 22+ players at a consistent 60FPS using raw memory buffers.
+
+## UI & Management Features
+
+-   **Dashboard Hub:** Interactive standings with expanded modal views, fixture management, and career lifecycle control.
+-   **Tactical Sandbox:** Free-form position dragging and role assignments saved as permanent club defaults or match-specific overrides.
+-   **Squad Hub:** Deep-dive into every club's roster with color-coded ratings, starting XI projections, and detailed player attribute radars.
+-   **Career Control:** High-fidelity managerial actions including a professional "Terminate Career" confirmation system.
 
 ## Architecture
 
 ```text
-src/lib/
-├── engine/               # Pure TS Simulation (No Svelte Runes)
-│   ├── core/             # RNG, Memory Buffers, Constants
-│   ├── physics/          # Steering, Kinematics, Collisions
-│   ├── ai/               # Spatial Maps, Tactics, Decision Making
-│   └── Match.ts          # Orchestrator
-├── renderer/             # PixiJS View Layer
-│   ├── PixiApp.ts        # WebGL Initialization
-│   └── SpriteManager.ts  # Sprite Handoff
-└── ui/                   # Svelte 5 Components (HUD, Menus)
+src/
+├── lib/
+│   ├── components/       # Shared UI (FormationBoard, PlayerModal, HUD)
+│   ├── engine/           # Pure TS Simulation (No Svelte Runes)
+│   │   ├── ai/           # Spatial Maps, Tactics, Decision Making
+│   │   ├── core/         # RNG, Memory Buffers, Constants
+│   │   └── physics/      # Steering, Kinematics, Collisions
+│   ├── data/             # Save Game Store, Realism Generator, Rating Models
+│   └── renderer/         # PixiJS WebGL View Layer
+└── routes/               # SvelteKit App Pages (Home, Teams, Tactics, Formation)
 ```
 
+## Tech Stack
+
+-   **Framework:** Svelte 5 (Runes) & SvelteKit
+-   **Styling:** Tailwind CSS (v3)
+-   **Rendering:** PixiJS (WebGL)
+-   **Logic:** TypeScript
+-   **Mocking:** Faker.js (Localization-aware generation)
+
 ## Performance Targets
-- **Headless:** 100+ match simulations in under 5 seconds.
-- **Watched:** 60FPS WebGL rendering with zero layout thrashing.
-- **Memory:** Zero GC pressure during the match loop via pre-allocated TypedArrays.
+-   **Simulation:** 100+ match simulations in under 5 seconds.
+-   **Visuals:** 60FPS WebGL rendering with zero framework overhead in the match loop.
+-   **Efficiency:** Zero GC pressure via pre-allocated TypedArrays.

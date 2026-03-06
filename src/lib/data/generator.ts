@@ -198,7 +198,10 @@ function generateTeam(level: number, usedNames: Set<string>): { team: TeamProfil
   });
 
   const orderedPlayers = orderSquadForMatchday(rawPlayers);
-  orderedPlayers.forEach((p) => team.players.push(p.id));
+  orderedPlayers.forEach((p, index) => {
+    p.number = index + 1;
+    team.players.push(p.id);
+  });
   team.overall = calculateTeamOverall(team, Object.fromEntries(orderedPlayers.map((p) => [p.id, p])));
 
   return { team, players: orderedPlayers };

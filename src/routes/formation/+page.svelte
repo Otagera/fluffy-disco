@@ -1,385 +1,103 @@
 <script lang="ts">
-  let team = $state({
-    id: 1,
-    name: 'FC Thunder',
-    primary: '#1a5f2a',
-    secondary: '#ffd700'
-  });
-  
-  let players = $state([
-    { id: 1, name: 'John Smith', position: 'GK', number: 1, zone: 0 },
-    { id: 2, name: 'Carlos Rodriguez', position: 'CB', number: 4, zone: 1 },
-    { id: 3, name: 'Marcus Johnson', position: 'CB', number: 5, zone: 2 },
-    { id: 4, name: 'David Williams', position: 'LB', number: 3, zone: 3 },
-    { id: 5, name: 'James Brown', position: 'RB', number: 2, zone: 4 },
-    { id: 6, name: 'Michael Davis', position: 'CDM', number: 6, zone: 5 },
-    { id: 7, name: 'Robert Miller', position: 'CM', number: 8, zone: 6 },
-    { id: 8, name: 'Antonio Garcia', position: 'CAM', number: 10, zone: 7 },
-    { id: 9, name: 'Kevin Wilson', position: 'LW', number: 7, zone: 8 },
-    { id: 10, name: 'Daniel Taylor', position: 'RW', number: 11, zone: 9 },
-    { id: 11, name: 'Chris Anderson', position: 'ST', number: 9, zone: 10 },
-  ]);
-  
-  let formations = $state([
-    { name: '4-3-3', zones: [0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8] },
-    { name: '4-4-2', zones: [0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 6] },
-    { name: '3-5-2', zones: [0, 1, 1, 1, 2, 2, 3, 4, 5, 6, 6] },
-    { name: '4-2-3-1', zones: [0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7] },
-    { name: '5-3-2', zones: [0, 1, 1, 1, 2, 2, 3, 4, 5, 6, 6] },
-  ]);
-  
-  let selectedFormation = $state(0);
-  let draggedPlayer = $state<number | null>(null);
-  let hoveredZone = $state<number | null>(null);
-  
-  const zonePositions: { x: number; y: number; label: string }[] = [
-    { x: 10, y: 50, label: 'GK' },
-    { x: 25, y: 25, label: 'CB' },
-    { x: 25, y: 75, label: 'CB' },
-    { x: 30, y: 15, label: 'LB' },
-    { x: 30, y: 85, label: 'RB' },
-    { x: 50, y: 30, label: 'CDM' },
-    { x: 55, y: 50, label: 'CM' },
-    { x: 60, y: 70, label: 'CAM' },
-    { x: 75, y: 20, label: 'LW' },
-    { x: 75, y: 80, label: 'RW' },
-    { x: 85, y: 50, label: 'ST' },
-  ];
-  
-  function getPlayerInZone(zoneIndex: number) {
-    return players.find(p => p.zone === zoneIndex);
-  }
-  
-  function handleDragStart(e: DragEvent, playerId: number) {
-    draggedPlayer = playerId;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
+  import type { PageData } from './$types';
+  import FormationBoard from '$lib/components/FormationBoard.svelte';
+  import { enhance } from '$app/forms';
+
+  let { data }: { data: PageData } = $props();
+
+  let currentTeam = $state({ ...data.team });
+  let currentPlayers = $state([...data.players]);
+  let currentPositions = $state(data.team.customPositions || {});
+  let currentRoles = $state(data.team.customRoles || {});
+
+  function handleSwap(id1: string, id2: string) {
+    const idx1 = currentPlayers.findIndex(p => p.id === id1);
+    const idx2 = currentPlayers.findIndex(p => p.id === id2);
+    
+    if (idx1 !== -1 && idx2 !== -1) {
+      const newPlayers = [...currentPlayers];
+      const temp = newPlayers[idx1];
+      newPlayers[idx1] = newPlayers[idx2];
+      newPlayers[idx2] = temp;
+      currentPlayers = newPlayers;
     }
   }
-  
-  function handleDragOver(e: DragEvent, zoneIndex: number) {
-    e.preventDefault();
-    hoveredZone = zoneIndex;
+
+  function handleFormationChange(name: string) {
+    currentTeam.formation = name;
+    // Clearing overrides when base formation changes is handled by the board component
+    // but we should sync it here if we want to save the cleared state.
   }
-  
-  function handleDragLeave() {
-    hoveredZone = null;
+
+  function handleOverridesChange(positions: Record<number, {x: number, y: number}>, roles: Record<number, string>) {
+    currentPositions = positions;
+    currentRoles = roles;
   }
-  
-  function handleDrop(e: DragEvent, zoneIndex: number) {
-    e.preventDefault();
-    if (draggedPlayer === null) return;
-    
-    const currentPlayer = players.find(p => p.id === draggedPlayer);
-    const targetPlayer = players.find(p => p.zone === zoneIndex);
-    
-    if (currentPlayer) {
-      if (targetPlayer) {
-        targetPlayer.zone = currentPlayer.zone;
-      }
-      currentPlayer.zone = zoneIndex;
-    }
-    
-    draggedPlayer = null;
-    hoveredZone = null;
-  }
-  
-  function applyFormation(formation: typeof formations[0], index: number) {
-    selectedFormation = index;
-    players.forEach((player, i) => {
-      player.zone = formation.zones[i] || 0;
-    });
-  }
-  
+
   function resetPositions() {
-    players.forEach((player, i) => {
-      player.zone = i;
-    });
+    currentTeam.formation = data.team.formation;
+    currentPlayers = [...data.players];
+    currentPositions = data.team.customPositions || {};
+    currentRoles = data.team.customRoles || {};
   }
 </script>
 
-<div class="container">
-  <div class="header mb-2">
-    <h1>Formation Editor</h1>
-    <div class="flex gap-2">
-      <button class="secondary" onclick={resetPositions}>Reset</button>
-      <button class="primary">Save Formation</button>
-    </div>
-  </div>
-  
-  <div class="grid grid-2 gap-2">
+<div class="max-w-6xl mx-auto p-4 sm:p-8">
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
     <div>
-      <div class="card">
-        <h2>Pitch</h2>
-        <div class="formation-pitch" style="height: 500px;">
-          <svg class="pitch-lines" viewBox="0 0 100 70" preserveAspectRatio="none">
-            <rect x="0" y="0" width="100" height="70" fill="none" stroke="white" stroke-width="0.5"/>
-            <line x1="50" y1="0" x2="50" y2="70" stroke="white" stroke-width="0.5"/>
-            <circle cx="50" cy="35" r="8" fill="none" stroke="white" stroke-width="0.5"/>
-            <rect x="0" y="18" width="15" height="34" fill="none" stroke="white" stroke-width="0.5"/>
-            <rect x="85" y="18" width="15" height="34" fill="none" stroke="white" stroke-width="0.5"/>
-          </svg>
-          
-          {#each zonePositions as zone, index}
-            <div 
-              class="zone"
-              class:hovered={hoveredZone === index}
-              style="left: {zone.x}%; top: {zone.y}%;"
-              ondragover={(e) => handleDragOver(e, index)}
-              ondragleave={handleDragLeave}
-              ondrop={(e) => handleDrop(e, index)}
-            >
-              <span class="zone-label">{zone.label}</span>
-              {#if getPlayerInZone(index)}
-                {@const player = getPlayerInZone(index)}
-                <div 
-                  class="player-marker"
-                  style="background: {team.primary};"
-                  draggable="true"
-                  ondragstart={(e) => handleDragStart(e, player!.id)}
-                >
-                  {player?.number}
-                </div>
-              {:else}
-                <div class="empty-zone"></div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
+      <a href="/" class="text-[0.6rem] font-black text-primary hover:underline mb-2 flex items-center gap-1 uppercase tracking-tighter">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back to Hub
+      </a>
+      <h1 class="mb-1 text-4xl font-black tracking-tighter">Club Tactics</h1>
+      <p class="subtle font-bold text-sm">Define your default tactical shape and starting XI for {data.team.name}.</p>
     </div>
     
-    <div>
-      <div class="card mb-2">
-        <h2>Formations</h2>
-        <div class="formation-grid">
-          {#each formations as formation, index}
-            <button 
-              class="formation-btn"
-              class:active={selectedFormation === index}
-              onclick={() => applyFormation(formation, index)}
-            >
-              {formation.name}
-            </button>
-          {/each}
-        </div>
-        
-        <button class="primary mt-1" style="width: 100%">
-          🤖 Assistant Manager
-        </button>
-        <p class="text-sm text-gray mt-1">Auto-optimize formation based on player stats</p>
+    <div class="flex gap-3">
+      <button class="btn-secondary px-6" onclick={resetPositions}>Discard Changes</button>
+      <form method="POST" action="?/saveTactics" use:enhance>
+        <input type="hidden" name="formation" value={currentTeam.formation} />
+        <input type="hidden" name="playerIds" value={JSON.stringify(currentPlayers.map(p => p.id))} />
+        <input type="hidden" name="customPositions" value={JSON.stringify(currentPositions)} />
+        <input type="hidden" name="customRoles" value={JSON.stringify(currentRoles)} />
+        <button type="submit" class="btn-primary px-8 shadow-lg ring-4 ring-primary/10 font-black">SAVE TACTICS</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card bg-white border-t-4 border-t-primary shadow-xl">
+    <div class="mb-6 border-b border-light-border pb-4 flex justify-between items-center">
+      <h2 class="text-xl font-black mb-0">Master Team Strategy</h2>
+      <div class="flex items-center gap-2">
+        <span class="text-[0.6rem] font-black subtle uppercase tracking-widest">Active System:</span>
+        <span class="bg-primary text-white text-[0.7rem] px-2 py-0.5 rounded font-black">{currentTeam.formation}</span>
       </div>
-      
-      <div class="card">
-        <h2>Squad</h2>
-        <p class="text-sm text-gray mb-1">Drag players to positions on the pitch</p>
-        
-        <div class="bench">
-          {#each players.filter(p => p.zone === -1) as player}
-            <div 
-              class="bench-player"
-              draggable="true"
-              ondragstart={(e) => handleDragStart(e, player.id)}
-            >
-              <span class="number">{player.number}</span>
-              <span class="name">{player.name}</span>
-              <span class="pos">{player.position}</span>
-            </div>
-          {/each}
-          
-          {#if players.filter(p => p.zone === -1).length === 0}
-            <p class="text-gray text-sm">All players on pitch</p>
-          {/if}
-        </div>
-        
-        <div class="player-list mt-1">
-          <h3>All Players</h3>
-          {#each players as player}
-            <div 
-              class="player-item"
-              draggable="true"
-              ondragstart={(e) => handleDragStart(e, player.id)}
-            >
-              <span class="player-number" style="background: {team.primary}">{player.number}</span>
-              <span class="player-name">{player.name}</span>
-              <span class="player-pos">{player.position}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
+    </div>
+
+    <FormationBoard 
+      team={currentTeam} 
+      players={currentPlayers} 
+      editable={true} 
+      allowPositionOverrides={true}
+      allowRoleOverrides={true}
+      onSwap={handleSwap}
+      onFormationChange={handleFormationChange}
+      onOverridesChange={handleOverridesChange}
+    />
+  </div>
+
+  <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="card p-6 bg-light-bg/50 border-dashed">
+      <h3 class="text-xs font-black uppercase tracking-widest mb-3">Dragging Tip</h3>
+      <p class="text-xs subtle leading-relaxed">Drag player icons on the pitch to swap or fine-tune positions. The top 11 in the squad list are your matchday starters.</p>
+    </div>
+    <div class="card p-6 bg-light-bg/50 border-dashed">
+      <h3 class="text-xs font-black uppercase tracking-widest mb-3">System Overrides</h3>
+      <p class="text-xs subtle leading-relaxed">Custom positions and roles saved here will become your team's new default for every match.</p>
+    </div>
+    <div class="card p-6 bg-light-bg/50 border-dashed">
+      <h3 class="text-xs font-black uppercase tracking-widest mb-3">Squad Numbers</h3>
+      <p class="text-xs subtle leading-relaxed">Players now have fixed squad numbers. Swapping positions on the pitch or in the list will correctly move the player and their number.</p>
     </div>
   </div>
 </div>
-
-<style>
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  
-  .formation-pitch {
-    position: relative;
-    background: linear-gradient(to bottom, #2d8a4a 0%, #238b41 50%, #2d8a4a 100%);
-    border-radius: 8px;
-  }
-  
-  .pitch-lines {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0.7;
-  }
-  
-  .zone {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    z-index: 2;
-  }
-  
-  .zone.hovered .zone-label {
-    color: var(--accent);
-  }
-  
-  .zone-label {
-    font-size: 0.6rem;
-    color: rgba(255,255,255,0.7);
-    font-weight: bold;
-    text-transform: uppercase;
-  }
-  
-  .player-marker {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 0.8rem;
-    border: 2px solid white;
-    cursor: grab;
-    transition: transform 0.2s;
-  }
-  
-  .player-marker:hover {
-    transform: scale(1.1);
-  }
-  
-  .player-marker:active {
-    cursor: grabbing;
-  }
-  
-  .empty-zone {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: 2px dashed rgba(255,255,255,0.4);
-    background: rgba(255,255,255,0.1);
-  }
-  
-  .formation-grid {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-  }
-  
-  .formation-btn {
-    padding: 0.5rem 1rem;
-    background: #f8f9fa;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  
-  .formation-btn.active {
-    background: var(--primary);
-    color: white;
-  }
-  
-  .bench {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 6px;
-    min-height: 60px;
-  }
-  
-  .bench-player {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    background: white;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    cursor: grab;
-  }
-  
-  .bench-player .number {
-    width: 20px;
-    height: 20px;
-    background: var(--primary);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 0.7rem;
-  }
-  
-  .player-list {
-    max-height: 250px;
-    overflow-y: auto;
-  }
-  
-  .player-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    border-bottom: 1px solid #eee;
-    cursor: grab;
-  }
-  
-  .player-item:hover {
-    background: #f8f9fa;
-  }
-  
-  .player-number {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 0.75rem;
-  }
-  
-  .player-name {
-    flex: 1;
-    font-size: 0.875rem;
-  }
-  
-  .player-pos {
-    color: var(--gray);
-    font-size: 0.75rem;
-  }
-  
-  .text-gray {
-    color: var(--gray);
-  }
-</style>

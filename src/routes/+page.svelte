@@ -3,17 +3,15 @@
   
   let { data }: { data: PageData } = $props();
   
-  // Initialize with the manager's current league
   let selectedLeagueId = $state(data.activeLeagueId);
-  let expandedView = $state(false);
+  let showExpandedTable = $state(false);
+  let showTerminateModal = $state(false);
   
-  // Reactive derivation for the currently viewing league
-  let selectedLeague = $derived(data.leagues?.find(l => l.id === selectedLeagueId));
+  let selectedLeague = $derived(data.leagues?.find((l: any) => l.id === selectedLeagueId));
 
-  // Sort standings by points descending, then GD descending
   let sortedStandings = $derived.by(() => {
     if (!selectedLeague) return [];
-    return [...selectedLeague.standings].sort((a, b) => {
+    return [...selectedLeague.standings].sort((a: any, b: any) => {
       if (b.points !== a.points) return b.points - a.points;
       const gdA = a.goalsFor - a.goalsAgainst;
       const gdB = b.goalsFor - b.goalsAgainst;
@@ -27,121 +25,144 @@
 
   function getZoneClass(level: number, pos: number) {
     if (!level) return '';
-    if (level === 1) { // Premier League
-      if (pos < 4) return 'zone-champ'; // UCL
-      if (pos >= 17) return 'zone-relegation'; // Relegation
-    } else if (level === 2) { // Championship
-      if (pos < 2) return 'zone-promo'; // Auto Promo
-      if (pos >= 2 && pos < 6) return 'zone-playoff'; // Playoff
-      if (pos >= 21) return 'zone-relegation'; // Relegation
-    } else if (level === 3) { // League One
-      if (pos < 2) return 'zone-promo'; // Auto Promo
-      if (pos >= 2 && pos < 6) return 'zone-playoff'; // Playoff
-      if (pos >= 20) return 'zone-relegation'; // Relegation
-    } else if (level === 4) { // League Two
-      if (pos < 3) return 'zone-promo'; // Auto Promo
-      if (pos >= 3 && pos < 7) return 'zone-playoff'; // Playoff
+    if (level === 1) {
+      if (pos < 4) return 'border-l-4 border-blue-500 bg-blue-50/50';
+      if (pos >= 17) return 'border-l-4 border-red-500 bg-red-50/50';
+    } else if (level === 2) {
+      if (pos < 2) return 'border-l-4 border-green-500 bg-green-50/50';
+      if (pos >= 2 && pos < 6) return 'border-l-4 border-amber-500 bg-amber-50/50';
+      if (pos >= 21) return 'border-l-4 border-red-500 bg-red-50/50';
     }
     return '';
   }
 </script>
 
-<div class="container">
+<div class="max-w-6xl mx-auto p-4 sm:p-8">
   {#if !data.hasSave}
-    <div class="card login-card">
-      <div class="logo">
-        <svg viewBox="0 0 100 100" width="80" height="80">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--primary)" stroke-width="8"/>
-          <path d="M50 5 L75 25 L85 55 L65 80 L35 80 L15 55 L25 25 Z" fill="none" stroke="var(--primary)" stroke-width="4"/>
-          <line x1="50" y1="5" x2="50" y2="40" stroke="var(--primary)" stroke-width="4"/>
-          <line x1="75" y1="25" x2="50" y2="40" stroke="var(--primary)" stroke-width="4"/>
-          <line x1="25" y1="25" x2="50" y2="40" stroke="var(--primary)" stroke-width="4"/>
+    <!-- Save Game Creation Form -->
+    <div class="max-w-md mx-auto mt-16 text-center card">
+      <div class="flex justify-center mb-6">
+        <svg viewBox="0 0 100 100" class="w-20 h-20">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" class="text-primary" stroke-width="8"/>
+          <path d="M50 5 L75 25 L85 55 L65 80 L35 80 L15 55 L25 25 Z" fill="none" stroke="currentColor" class="text-primary" stroke-width="4"/>
+          <line x1="50" y1="5" x2="50" y2="40" stroke="currentColor" class="text-primary" stroke-width="4"/>
+          <line x1="75" y1="25" x2="50" y2="40" stroke="currentColor" class="text-primary" stroke-width="4"/>
+          <line x1="25" y1="25" x2="50" y2="40" stroke="currentColor" class="text-primary" stroke-width="4"/>
         </svg>
       </div>
       
-      <h1 class="title">Football Sim Career</h1>
-      <p class="subtitle">Start your managerial journey</p>
+      <h1>Football Sim</h1>
+      <p class="subtle mb-8">Start your managerial journey</p>
       
-      <form method="POST" action="?/startCareer" class="form-group mt-2">
-        <label for="managerName">Manager Name</label>
-        <p class="text-sm text-gray mb-1">Enter your name to begin a new career</p>
+      <form method="POST" action="?/startCareer" class="text-left">
+        <label for="managerName" class="block font-bold mb-1 text-sm uppercase tracking-wider">Manager Name</label>
+        <p class="text-xs subtle mb-3 italic">Choose the name you will be known by in the dugout.</p>
         <input 
           id="managerName"
           name="managerName"
           type="text" 
           placeholder="The Gaffer"
+          class="input-field mb-4"
           required
         />
-        <button type="submit" class="primary w-100 mt-2">Start Career</button>
+        <button type="submit" class="btn-primary w-full py-4 uppercase tracking-widest text-sm">Create Career</button>
       </form>
     </div>
   {:else}
-    <div class="hub-header">
+    <!-- Active Career Hub -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-light-border p-6 rounded-xl shadow-sm mb-8 gap-4">
       <div>
-        <h1 class="flex items-center gap-1 font-black tracking-tighter">
+        <h1 class="mb-1 flex items-center gap-3">
           {data.manager.name}
-          <span class="season-badge">Season {data.currentSeason}</span>
+          <span class="bg-primary text-white text-[0.65rem] px-2 py-1 rounded uppercase font-black tracking-widest">Season {data.currentSeason}</span>
         </h1>
-        <p class="text-gray uppercase tracking-widest font-bold" style="font-size: 0.7rem;">{data.team.name} Manager</p>
-        <form method="POST" action="?/deleteCareer" class="mt-1" onsubmit={(e) => !confirm('Are you sure? All season progress will be lost.') && e.preventDefault()}>
-          <button type="submit" class="danger-link">RESET CAREER & RESTART UNIVERSE</button>
-        </form>
+        <p class="subtle uppercase tracking-widest font-black text-xs">{data.team.name} Manager</p>
+        <button 
+          type="button" 
+          class="mt-2 text-danger text-[0.65rem] font-black underline opacity-40 hover:opacity-100 transition-opacity uppercase tracking-tighter"
+          onclick={() => showTerminateModal = true}
+        >
+          TERMINATE CAREER
+        </button>
       </div>
-      <div class="week-badge">
-        Week {data.week}
+      <div class="bg-light-bg text-primary px-6 py-3 rounded-xl font-black border border-light-border shadow-inner flex flex-col items-center leading-none">
+        <span class="text-[0.6rem] subtle uppercase mb-1">Current Week</span>
+        <span class="text-2xl">{data.week}</span>
       </div>
     </div>
 
-    <div class="grid grid-2 gap-2 mt-2">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       <!-- Next Match Panel -->
-      <div class="card match-panel">
-        <h2 class="mb-2 uppercase tracking-widest text-gray" style="font-size: 0.8rem;">Next Fixture</h2>
+      <div class="card flex flex-col border-t-4 border-t-primary">
+        <h2 class="text-xs font-black subtle uppercase tracking-widest mb-6 flex justify-between">
+          Next Fixture
+          <span class="text-primary">MATCHDAY {data.week}</span>
+        </h2>
+        
         {#if data.nextFixture}
-          <div class="fixture-display">
-            <div class="team">
-              <div class="team-shield home-shield"></div>
-              <h3>{getTeamName(data.nextFixture.homeTeamId)}</h3>
+          <div class="flex items-center justify-between bg-light-bg p-8 rounded-2xl border border-light-border mb-8 shadow-inner relative overflow-hidden">
+            <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/50 via-primary to-primary/50 opacity-20"></div>
+            
+            <div class="text-center flex-1 z-10">
+              <div class="w-16 h-20 mx-auto bg-primary rounded-b-3xl shadow-lg mb-4 ring-4 ring-white"></div>
+              <a href="/teams/{data.nextFixture.homeTeamId}" class="font-black text-lg hover:text-primary transition-colors block leading-tight">{getTeamName(data.nextFixture.homeTeamId)}</a>
+              <span class="text-[0.6rem] font-bold bg-white px-2 py-0.5 rounded border border-light-border mt-1 inline-block">HOME</span>
             </div>
-            <div class="vs-badge">VS</div>
-            <div class="team">
-              <div class="team-shield away-shield"></div>
-              <h3>{getTeamName(data.nextFixture.awayTeamId)}</h3>
+            
+            <div class="flex flex-col items-center gap-1 z-10 px-4">
+              <div class="font-black text-light-subtle bg-white w-10 h-10 flex items-center justify-center rounded-full border-2 border-light-border shadow-sm text-xs">VS</div>
+            </div>
+            
+            <div class="text-center flex-1 z-10">
+              <div class="w-16 h-20 mx-auto bg-danger rounded-b-3xl shadow-lg mb-4 ring-4 ring-white"></div>
+              <a href="/teams/{data.nextFixture.awayTeamId}" class="font-black text-lg hover:text-primary transition-colors block leading-tight">{getTeamName(data.nextFixture.awayTeamId)}</a>
+              <span class="text-[0.6rem] font-bold bg-white px-2 py-0.5 rounded border border-light-border mt-1 inline-block">AWAY</span>
             </div>
           </div>
           
-          <div class="mt-3 flex flex-col gap-1">
-            <a href="/match/{data.nextFixture.id}/tactics" class="btn primary btn-lg w-100">
+          <div class="mt-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <a href="/match/{data.nextFixture.id}/tactics" class="btn-primary flex items-center justify-center gap-2">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               PLAY MATCH
             </a>
             
+            <a href="/formation" class="btn-secondary flex items-center justify-center gap-2">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+              TEAM TACTICS
+            </a>
+
             {#if data.hasAnalytics}
-              <a href="/analytics" class="btn secondary w-100 font-bold" style="padding: 0.75rem;">
-                📊 VIEW LAST MATCH ANALYTICS
+              <a href="/analytics" class="btn-secondary sm:col-span-2 py-2 text-xs flex items-center justify-center gap-2">
+                📊 POST-MATCH ANALYTICS
               </a>
             {/if}
           </div>
         {:else}
-          <div class="empty-state">
-            <p class="mb-2 text-lg font-black">Season {data.manager.currentSeason || 1} Complete!</p>
+          <div class="text-center p-12 bg-light-bg rounded-2xl border border-light-border mb-6 flex-1 flex flex-col justify-center shadow-inner">
+            <p class="text-2xl font-black mb-6 text-primary">🏆 SEASON COMPLETE!</p>
+            <p class="subtle mb-8 italic">You've finished your matches for this year. Ready for the next challenge?</p>
             <form method="POST" action="?/advanceSeason">
-              <button type="submit" class="primary btn-lg w-100">
-                PROCEED TO SEASON {(data.manager.currentSeason || 1) + 1}
+              <button type="submit" class="btn-primary w-full py-4 text-lg">
+                ADVANCE TO SEASON {(data.manager.currentSeason || 1) + 1}
               </button>
             </form>
           </div>
         {/if}
       </div>
 
-      <!-- League Table -->
-      <div class="card league-panel">
-        <div class="flex justify-between items-center mb-2">
-          <h2 class="uppercase tracking-widest text-gray" style="font-size: 0.8rem;">Standings</h2>
-          <div class="flex gap-1 items-center">
-            <label class="toggle-label">
-              <input type="checkbox" bind:checked={expandedView} />
-              Expanded
-            </label>
-            <select bind:value={selectedLeagueId} class="league-select">
+      <!-- Compact League Table -->
+      <div class="card flex flex-col h-[520px]">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xs font-black subtle uppercase tracking-widest mb-0">Live Standings</h2>
+          <div class="flex gap-4 items-center">
+            <button 
+              class="text-xs font-black text-primary hover:underline flex items-center gap-1"
+              onclick={() => showExpandedTable = true}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              EXPAND
+            </button>
+            <select bind:value={selectedLeagueId} class="text-xs font-black bg-light-bg border border-light-border rounded px-2 py-1 focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer pr-6 relative">
               {#each data.leagues as league}
                 <option value={league.id}>{league.name}</option>
               {/each}
@@ -149,39 +170,29 @@
           </div>
         </div>
 
-        <div class="table-container">
-          <table class="league-table">
-            <thead>
+        <div class="flex-1 overflow-y-auto pr-1">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="sticky top-0 bg-white z-10">
               <tr>
-                <th>Pos</th>
-                <th>Club</th>
-                <th title="Played">P</th>
-                {#if expandedView}
-                  <th title="Won">W</th>
-                  <th title="Drawn">D</th>
-                  <th title="Lost">L</th>
-                  <th title="Goals For">GF</th>
-                  <th title="Goals Against">GA</th>
-                {/if}
-                <th title="Goal Difference">GD</th>
-                <th title="Points">Pts</th>
+                <th class="pb-3 subtle font-black border-b border-light-border uppercase">#</th>
+                <th class="pb-3 subtle font-black border-b border-light-border uppercase">Club</th>
+                <th class="pb-3 subtle font-black border-b border-light-border uppercase text-center">P</th>
+                <th class="pb-3 subtle font-black border-b border-light-border uppercase text-center">GD</th>
+                <th class="pb-3 font-black border-b border-light-border uppercase text-center text-primary">Pts</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-gray-50">
               {#each sortedStandings as row, i}
-                <tr class="{row.teamId === data.team.id ? 'highlight' : ''} {getZoneClass(selectedLeague?.level || 1, i)}">
-                  <td class="pos-cell">{i + 1}</td>
-                  <td class="team-name">{getTeamName(row.teamId)}</td>
-                  <td>{row.played}</td>
-                  {#if expandedView}
-                    <td>{row.won}</td>
-                    <td>{row.drawn}</td>
-                    <td>{row.lost}</td>
-                    <td>{row.goalsFor}</td>
-                    <td>{row.goalsAgainst}</td>
-                  {/if}
-                  <td>{row.goalsFor - row.goalsAgainst}</td>
-                  <td class="pts">{row.points}</td>
+                <tr class="hover:bg-light-bg group {row.teamId === data.team.id ? 'bg-primary/5' : ''} {getZoneClass(selectedLeague?.level || 1, i)}">
+                  <td class="py-3 px-1 font-black subtle opacity-50">{i + 1}</td>
+                  <td class="py-3 font-bold">
+                    <a href="/teams/{row.teamId}" class="{row.teamId === data.team.id ? 'text-primary' : 'text-light-text'} hover:underline truncate block max-w-[150px]">{getTeamName(row.teamId)}</a>
+                  </td>
+                  <td class="py-3 text-center">{row.played}</td>
+                  <td class="py-3 text-center font-bold {row.goalsFor - row.goalsAgainst >= 0 ? 'text-green-600' : 'text-red-600'}">
+                    {(row.goalsFor - row.goalsAgainst) > 0 ? '+' : ''}{row.goalsFor - row.goalsAgainst}
+                  </td>
+                  <td class="py-3 text-center font-black text-primary text-sm">{row.points}</td>
                 </tr>
               {/each}
             </tbody>
@@ -192,171 +203,93 @@
   {/if}
 </div>
 
-<style>
-  .login-card {
-    max-width: 500px;
-    margin: 4rem auto 0;
-    padding: 3rem 2rem;
-    text-align: center;
-    background: #111;
-    border: 1px solid #222;
-  }
-  
-  .logo { display: flex; justify-content: center; margin-bottom: 1.5rem; }
-  .title { font-size: 2.5rem; color: white; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 0.5rem; }
-  .subtitle { color: var(--gray); font-size: 1.1rem; margin-bottom: 2rem; }
-  .form-group { text-align: left; margin-bottom: 2rem; }
-  .form-group label { font-size: 1.25rem; font-weight: bold; color: white; }
-  .w-100 { width: 100%; }
+<!-- Terminate Career Confirmation Modal -->
+{#if showTerminateModal}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onclick={() => showTerminateModal = false}>
+    <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col p-8 border-t-8 border-t-danger" onclick={(e) => e.stopPropagation()}>
+      <div class="text-center mb-8">
+        <div class="w-20 h-20 bg-red-50 text-danger rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-lg ring-4 ring-red-50/50">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h2 class="text-2xl font-black mb-2">Resign & Terminate?</h2>
+        <p class="subtle font-bold italic leading-relaxed">Warning: This action is permanent. Your entire managerial legacy and season progress will be wiped from existence.</p>
+      </div>
 
-  .hub-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: linear-gradient(to right, #111, #0a0a0a);
-    padding: 2rem 2.5rem;
-    border-radius: 12px;
-    border: 1px solid #222;
-    box-shadow: var(--shadow-lg);
-    margin-top: 2rem;
-  }
-  
-  .week-badge {
-    background: #1a1a1a;
-    color: var(--accent);
-    padding: 0.6rem 1.2rem;
-    border-radius: 4px;
-    font-weight: 900;
-    border: 1px solid #333;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-  }
+      <div class="flex flex-col gap-3">
+        <form method="POST" action="?/deleteCareer" class="w-full">
+          <button type="submit" class="btn-primary bg-danger hover:bg-red-700 border-none w-full py-4 uppercase font-black tracking-widest shadow-xl ring-4 ring-red-500/20">
+            CONFIRM TERMINATION
+          </button>
+        </form>
+        <button 
+          class="btn-secondary w-full py-3 uppercase font-black tracking-widest text-xs border-2 border-light-border" 
+          onclick={() => showTerminateModal = false}
+        >
+          STAY IN THE DUGOUT
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
-  .season-badge {
-    font-size: 0.7rem;
-    background: var(--primary);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    vertical-align: middle;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 900;
-  }
+<!-- Expanded League Modal -->
+{#if showExpandedTable && selectedLeague}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-8" onclick={() => showExpandedTable = false}>
+    <div class="bg-white w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onclick={(e) => e.stopPropagation()}>
+      <div class="p-6 border-b border-light-border bg-light-bg flex justify-between items-center">
+        <div>
+          <h2 class="mb-0 text-2xl font-black">{selectedLeague.name}</h2>
+          <p class="text-xs font-black subtle uppercase tracking-widest mt-1">Full Season Standings • Week {data.week}</p>
+        </div>
+        <button class="w-12 h-12 rounded-full bg-white border border-light-border flex items-center justify-center font-bold hover:bg-gray-100 transition-colors shadow-sm" onclick={() => showExpandedTable = false}>&times;</button>
+      </div>
 
-  .match-panel { padding: 2.5rem; border: 1px solid #222; background: linear-gradient(180deg, #111 0%, #0a0a0a 100%); }
-  .fixture-display {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #000;
-    padding: 2.5rem;
-    border-radius: 12px;
-    border: 1px solid #1a1a1a;
-    box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
-    margin-bottom: 1.5rem;
-  }
-  
-  .team { text-align: center; flex: 1; }
-  .team h3 { margin-top: 1rem; font-size: 1.1rem; font-weight: 900; color: white; }
-  
-  .team-shield {
-    width: 60px;
-    height: 70px;
-    margin: 0 auto;
-    border-radius: 0 0 30px 30px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-  }
-  .home-shield { background: var(--primary); }
-  .away-shield { background: var(--danger); }
-  
-  .vs-badge {
-    font-size: 0.9rem;
-    font-weight: 900;
-    color: #444;
-    background: #111;
-    padding: 0.4rem 0.8rem;
-    border-radius: 4px;
-    border: 1px solid #222;
-  }
+      <div class="flex-1 overflow-auto p-4 sm:p-8">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead class="sticky top-0 bg-white z-10 shadow-sm">
+            <tr>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase">Pos</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase">Club</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">P</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">W</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">D</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">L</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GF</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GA</th>
+              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GD</th>
+              <th class="p-4 text-sm font-black text-primary border-b border-light-border uppercase text-center">Pts</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {#each sortedStandings as row, i}
+              <tr class="hover:bg-light-bg {row.teamId === data.team.id ? 'bg-primary/5' : ''} {getZoneClass(selectedLeague?.level || 1, i)}">
+                <td class="p-4 font-black text-light-subtle">{i + 1}</td>
+                <td class="p-4 font-black">
+                  <a href="/teams/{row.teamId}" class="{row.teamId === data.team.id ? 'text-primary' : 'text-light-text'} hover:underline text-lg">{getTeamName(row.teamId)}</a>
+                </td>
+                <td class="p-4 text-center font-bold">{row.played}</td>
+                <td class="p-4 text-center">{row.won}</td>
+                <td class="p-4 text-center">{row.drawn}</td>
+                <td class="p-4 text-center">{row.lost}</td>
+                <td class="p-4 text-center">{row.goalsFor}</td>
+                <td class="p-4 text-center">{row.goalsAgainst}</td>
+                <td class="p-4 text-center font-black {row.goalsFor - row.goalsAgainst >= 0 ? 'text-green-600' : 'text-red-600'}">
+                  {(row.goalsFor - row.goalsAgainst) > 0 ? '+' : ''}{row.goalsFor - row.goalsAgainst}
+                </td>
+                <td class="p-4 text-center font-black text-primary text-xl">{row.points}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
 
-  .league-panel { padding: 1.5rem; max-height: 600px; display: flex; flex-direction: column; border: 1px solid #222; }
-  .table-container { overflow-y: auto; flex: 1; margin-top: 0.5rem; }
-  
-  .league-select {
-    padding: 0.4rem 0.8rem;
-    border-radius: 4px;
-    border: 1px solid #333;
-    background: #111;
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 0.8rem;
-  }
-
-  .toggle-label {
-    font-size: 0.75rem;
-    font-weight: bold;
-    color: #666;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    cursor: pointer;
-  }
-
-  .league-table { width: 100%; border-collapse: collapse; text-align: left; }
-  .league-table th, .league-table td { padding: 0.8rem 0.5rem; border-bottom: 1px solid #1a1a1a; font-size: 0.9rem; }
-  .league-table th { color: #555; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 0; background: #1a1a1a; z-index: 10; font-weight: 900; }
-  .league-table .team-name { font-weight: 800; color: #ccc; }
-  .league-table .pts { font-weight: 900; color: var(--accent); }
-  .league-table tr.highlight { background: rgba(255, 235, 59, 0.05); }
-  .league-table tr.highlight .team-name { color: var(--accent); }
-
-  .pos-cell { font-weight: 900; position: relative; color: #444; }
-  
-  /* Zone Highlighting */
-  tr.zone-champ .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #3b82f6; } 
-  tr.zone-promo .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #10b981; } 
-  tr.zone-playoff .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #f59e0b; } 
-  tr.zone-relegation .pos-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #ef4444; } 
-  
-  .btn {
-    text-decoration: none;
-    text-align: center;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    display: inline-block;
-    transition: all 0.2s;
-  }
-
-  .danger-link {
-    background: none;
-    border: none;
-    color: var(--danger);
-    font-size: 0.65rem;
-    font-weight: 900;
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    opacity: 0.5;
-    letter-spacing: 1px;
-  }
-  .danger-link:hover { opacity: 1; }
-
-  .empty-state { text-align: center; color: #666; font-style: italic; padding: 2rem; background: #050505; border-radius: 8px; }
-  .flex { display: flex; }
-  .flex-col { flex-direction: column; }
-  .justify-between { justify-content: space-between; }
-  .items-center { align-items: center; }
-  .mb-1 { margin-bottom: 1rem; }
-  .mb-2 { margin-bottom: 2rem; }
-  .mt-1 { margin-top: 1rem; }
-  .mt-2 { margin-top: 2rem; }
-  .mt-3 { margin-top: 3rem; }
-  .gap-1 { gap: 1rem; }
-  .font-black { font-weight: 900; }
-  .tracking-tighter { letter-spacing: -0.05em; }
-</style>
-
+      <div class="p-6 bg-light-bg border-t border-light-border flex justify-end">
+        <button class="btn-secondary py-3 px-12 uppercase tracking-widest text-xs font-black" onclick={() => showExpandedTable = false}>Close Standings</button>
+      </div>
+    </div>
+  </div>
+{/if}
