@@ -333,6 +333,7 @@
           <form method="POST" action="?/processMatch" use:enhance>
             <input type="hidden" name="homeScore" value={finalHomeScore} />
             <input type="hidden" name="awayScore" value={finalAwayScore} />
+            <input type="hidden" name="matchAnalytics" value={JSON.stringify(match.analytics)} />
             <button 
               type="submit"
               class="btn-primary w-full py-5 text-xl font-black tracking-widest shadow-2xl ring-8 ring-primary/10 rounded-3xl uppercase transition-transform hover:scale-[1.02] active:scale-[0.98]" 

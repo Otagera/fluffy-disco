@@ -72,7 +72,7 @@ export class PixiRenderer {
     
     // Nose
     g.poly([radius, -radius/4, radius * 1.5, 0, radius, radius/4])
-     .fill(0xffffff);
+     .fill({ color: 0xffffff });
     
     this.playerTexture = this.app.renderer.generateTexture(g);
     
@@ -93,7 +93,7 @@ export class PixiRenderer {
 
     g.clear();
     // Ball
-    g.circle(0, 0, 0.4 * s).fill(0xffffff);
+    g.circle(0, 0, 0.4 * s).fill({ color: 0xffffff });
     this.ballTexture = this.app.renderer.generateTexture(g);
   }
 
@@ -103,8 +103,8 @@ export class PixiRenderer {
     const offsetX = PITCH_PADDING * s;
     const offsetY = 5 * s; 
 
-    g.rect(0, 0, (PITCH_W + PITCH_PADDING * 2) * s, (PITCH_H + 10) * s).fill(0x111111);
-    g.rect(offsetX, offsetY, PITCH_W * s, PITCH_H * s).fill(0x2d8a4a);
+    g.rect(0, 0, (PITCH_W + PITCH_PADDING * 2) * s, (PITCH_H + 10) * s).fill({ color: 0x111111 });
+    g.rect(offsetX, offsetY, PITCH_W * s, PITCH_H * s).fill({ color: 0x2d8a4a });
     
     for (let i = 0; i < 8; i++) {
       if (i % 2 === 0) {
@@ -226,7 +226,7 @@ export class PixiRenderer {
         
         // Foreground
         const color = p.currentStamina > 50 ? 0x4caf50 : p.currentStamina > 30 ? 0xffeb3b : 0xf44336;
-        staminaBar.rect(-barW/2, barY, barW * (p.currentStamina / 100), barH).fill(color);
+        staminaBar.rect(-barW/2, barY, barW * (p.currentStamina / 100), barH).fill({ color });
       }
     });
 

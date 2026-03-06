@@ -55,14 +55,14 @@ export class MatchRenderer {
                 const graphics = new PIXI.Graphics();
                 // Home: Primary Green, Away: Red
                 const color = i < 11 ? 0x1a5f2a : 0xdc3545; 
-                graphics.circle(0, 0, 14).fill(color).stroke({ color: 0xffffff, width: 2 });
+                graphics.circle(0, 0, 14).fill({ color }).stroke({ color: 0xffffff, width: 2 });
                 
                 const text = new PIXI.Text({ text: labels[i] || (i + 1).toString(), style: textStyle });
                 text.anchor.set(0.5);
                 text.y = 0; // Center number in circle
 
-                const stamBg = new PIXI.Graphics().rect(-12, 18, 24, 4).fill(0x000000, 0.3);
-                const stamFill = new PIXI.Graphics().rect(-12, 18, 24, 4).fill(0xffffff);
+                const stamBg = new PIXI.Graphics().rect(-12, 18, 24, 4).fill({ color: 0x000000, alpha: 0.3 });
+                const stamFill = new PIXI.Graphics().rect(-12, 18, 24, 4).fill({ color: 0xffffff });
                 stamFill.label = 'staminaFill'; 
 
                 container.addChild(graphics);
@@ -75,12 +75,12 @@ export class MatchRenderer {
             }
 
             this.ballSprite = new PIXI.Graphics()
-                .circle(0, 0, 6).fill(0xffffff)
+                .circle(0, 0, 6).fill({ color: 0xffffff })
                 .stroke({ color: 0x000000, width: 1.5 });
             
             // Add a subtle shadow to the ball
             const ballShadow = new PIXI.Graphics()
-                .circle(2, 2, 6).fill(0x000000, 0.2);
+                .circle(2, 2, 6).fill({ color: 0x000000, alpha: 0.2 });
             
             const ballContainer = new PIXI.Container();
             ballContainer.addChild(ballShadow);
@@ -112,7 +112,7 @@ export class MatchRenderer {
         g.moveTo(525, 0).lineTo(525, 680).stroke(lineStyle);
         // Center Circle
         g.circle(525, 340, 91.5).stroke(lineStyle);
-        g.circle(525, 340, 3).fill(0xffffff);
+        g.circle(525, 340, 3).fill({ color: 0xffffff });
 
         // Penalty Areas
         g.rect(0, 138.5, 165, 403).stroke(lineStyle); 

@@ -16,8 +16,10 @@ export class MatchMemory {
         this.playerBuffer = new Float32Array(PLAYER_COUNT * PLAYER_STRIDE);
         this.ballBuffer = new Float32Array(BALL_STRIDE);
         
-        // Default Ball Friction
-        this.ballBuffer[BALL_OFFSET_FRICTION] = 0.99; // Velocity decay per tick
+        // Default Ball State
+        this.ballBuffer[5] = 0; // VZ
+        this.ballBuffer[6] = 0.45; // Mass (kg)
+        this.ballBuffer[7] = 5.0;  // Linear Friction (m/s^2 deceleration)
     }
 
     /**

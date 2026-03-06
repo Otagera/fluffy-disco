@@ -10,37 +10,79 @@ export const load: PageServerLoad = () => {
   }
 
   if (!save.lastMatchAnalytics) {
-    // If no match has been played or analytics recorded yet, we could redirect or show a placeholder
     return {
       hasAnalytics: false
     };
   }
 
-  // To make the analytics meaningful, we need the player names.
-  // We'll attach player names to the analytics data.
-  const analytics = save.lastMatchAnalytics;
+  const rawAnalytics = save.lastMatchAnalytics;
   
-  // We don't have the explicit team objects saved with the analytics, 
-  // but we can look up the manager's team and the last played fixture if needed.
-  // For simplicity, we'll just look up player names from the global players dictionary.
+  // We need to map the player indices (0-21) to actual player names and IDs.
+  // The last match analytics should ideally store which teams were playing.
+  // Since we don't have that explicitly, we'll try to find the last played fixture.
+  const lastFixture = save.fixtures.find(f => f.status === 'FT'); // This is a bit of a hack
   
-  const enrichPasses = analytics.passes.map(p => ({
-    ...p,
-    fromName: save.players[p.fromId]?.name || `Player ${p.fromId}`,
-    toName: save.players[p.toId]?.name || `Player ${p.toId}`
-  }));
+  let homePlayerIds: string[] = [];
+  let awayPlayerIds: string[] = [];
+  
+  if (lastFixture) {
+    homePlayerIds = save.teams[lastFixture.homeTeamId]?.players || [];
+    awayPlayerIds = save.teams[lastFixture.awayTeamId]?.players || [];
+  }
 
-  const enrichShots = analytics.shots.map(s => ({
+  const getPlayerName = (idx: number) => {
+    const isHome = idx < 11;
+    const playerIdx = isHome ? idx : idx - 11;
+    const playerId = isHome ? homePlayerIds[playerIdx] : awayPlayerIds[playerIdx];
+    return {
+        id: playerId || `p${idx}`,
+        name: save.players[playerId]?.name || `Player ${idx + 1}`
+    };
+  };
+
+  const passes = (rawAnalytics.events || [])
+    .filter((e: any) => e.type === 'pass')
+    .map((e: any) => {
+        const player = getPlayerName(e.playerId);
+        return {
+            fromId: player.id,
+            fromName: player.name,
+            toId: 'unknown', // We don't track the receiver yet
+            toName: 'Teammate',
+            startX: e.x / 105, // Normalize back to 0-1 for the UI
+            startY: e.y / 68,
+            endX: (e.endX || e.x) / 105,
+            endY: (e.endY || e.y) / 68,
+            team: e.team === 0 ? 'home' : 'away'
+        };
+    });
+
+  const shots = (rawAnalytics.events || [])
+    .filter((e: any) => e.type === 'shot')
+    .map((e: any) => {
+        const player = getPlayerName(e.playerId);
+        return {
+            playerId: player.id,
+            playerName: player.name,
+            x: e.x / 105,
+            y: e.y / 68,
+            xg: 0.1, // Placeholder
+            result: e.result || 'MISS',
+            team: e.team === 0 ? 'home' : 'away'
+        };
+    });
+
+  const heatmapSamples = (rawAnalytics.heatmapSamples || []).map((s: any) => ({
     ...s,
-    playerName: save.players[s.playerId]?.name || `Player ${s.playerId}`
+    team: s.team === 0 ? 'home' : 'away'
   }));
 
   return {
     hasAnalytics: true,
     analytics: {
-      passes: enrichPasses,
-      shots: enrichShots,
-      heatmapSamples: analytics.heatmapSamples
+      passes,
+      shots,
+      heatmapSamples
     }
   };
 };

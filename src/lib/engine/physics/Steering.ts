@@ -1,8 +1,8 @@
 import { 
     PLAYER_COUNT, PLAYER_STRIDE,
     PLAYER_OFFSET_X, PLAYER_OFFSET_Y, PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
-    PLAYER_OFFSET_MAX_SPEED, PLAYER_OFFSET_MAX_FORCE, PLAYER_OFFSET_MASS,
-    BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_VX, BALL_OFFSET_VY, BALL_OFFSET_FRICTION
+    PLAYER_OFFSET_MAX_SPEED, PLAYER_OFFSET_MAX_FORCE, PLAYER_OFFSET_MASS, PLAYER_OFFSET_STAMINA,
+    BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z, BALL_OFFSET_VX, BALL_OFFSET_VY, BALL_OFFSET_VZ, BALL_OFFSET_FRICTION
 } from '../core/constants';
 
 /**
@@ -77,7 +77,11 @@ export class PhysicsEngine {
             let py = buffer[offset + PLAYER_OFFSET_Y];
             let vx = buffer[offset + PLAYER_OFFSET_VX];
             let vy = buffer[offset + PLAYER_OFFSET_VY];
-            const maxS = buffer[offset + PLAYER_OFFSET_MAX_SPEED];
+            let stamina = buffer[offset + PLAYER_OFFSET_STAMINA];
+            
+            // Degrade max speed based on stamina (at 10% stamina, speed is 70% of max)
+            const staminaPenalty = 0.7 + (0.3 * stamina);
+            const maxS = buffer[offset + PLAYER_OFFSET_MAX_SPEED] * staminaPenalty;
             const maxF = buffer[offset + PLAYER_OFFSET_MAX_FORCE];
             const mass = buffer[offset + PLAYER_OFFSET_MASS];
 
@@ -99,10 +103,20 @@ export class PhysicsEngine {
             // 4. Integrate (Euler)
             vx += ax * dt;
             vy += ay * dt;
-            px += vx * dt;
-            py += vy * dt;
+            const dx = vx * dt;
+            const dy = vy * dt;
+            px += dx;
+            py += dy;
 
-            // 5. Write back
+            // 5. Stamina Drain
+            const distanceMoved = Math.sqrt(dx * dx + dy * dy);
+            // Example drain: 0.0001 per meter moved. Sprinting drains more because distance is higher per tick.
+            if (stamina > 0.1) {
+                stamina -= distanceMoved * 0.00005; // Adjust drain rate as needed
+                buffer[offset + PLAYER_OFFSET_STAMINA] = Math.max(0.1, stamina); // Don't let it hit absolute 0
+            }
+
+            // 6. Write back
             buffer[offset + PLAYER_OFFSET_X] = px;
             buffer[offset + PLAYER_OFFSET_Y] = py;
             buffer[offset + PLAYER_OFFSET_VX] = vx;
@@ -111,31 +125,60 @@ export class PhysicsEngine {
     }
 
     /**
-     * Updates the ball physics.
+     * Updates the ball physics including Z-axis (height) and linear friction.
      */
     static updateBall(buffer: Float32Array, dt: number) {
         let px = buffer[BALL_OFFSET_X];
         let py = buffer[BALL_OFFSET_Y];
+        let pz = buffer[BALL_OFFSET_Z];
         let vx = buffer[BALL_OFFSET_VX];
         let vy = buffer[BALL_OFFSET_VY];
-        const friction = buffer[BALL_OFFSET_FRICTION];
+        let vz = buffer[BALL_OFFSET_VZ];
+        const friction = buffer[BALL_OFFSET_FRICTION]; // Linear deceleration (m/s^2)
 
-        // 1. Apply Integration
+        // 1. Apply Gravity to VZ
+        const GRAVITY = -9.81;
+        vz += GRAVITY * dt;
+
+        // 2. Update Positions
         px += vx * dt;
         py += vy * dt;
+        pz += vz * dt;
 
-        // 2. Apply Friction (Exponential Decay)
-        vx *= friction;
-        vy *= friction;
+        // 3. Ground Collision & Bounce
+        if (pz <= 0) {
+            pz = 0;
+            vz *= -0.6; // Bounce coefficient (energy loss)
+            
+            // Apply Linear Friction when on ground
+            const speed = Math.sqrt(vx * vx + vy * vy);
+            if (speed > 0.01) {
+                const deceleration = friction * dt;
+                const newSpeed = Math.max(0, speed - deceleration);
+                const ratio = newSpeed / speed;
+                vx *= ratio;
+                vy *= ratio;
+            } else {
+                vx = 0;
+                vy = 0;
+            }
 
-        // 3. Stop if velocity is negligible
-        if (Math.abs(vx) < 0.01) vx = 0;
-        if (Math.abs(vy) < 0.01) vy = 0;
+            // Stop bouncing if velocity is negligible
+            if (Math.abs(vz) < 0.1) vz = 0;
+        }
 
-        // 4. Write back
+        // 4. Air Resistance (Simple drag while in air)
+        if (pz > 0) {
+            vx *= 0.995;
+            vy *= 0.995;
+        }
+
+        // 5. Write back
         buffer[BALL_OFFSET_X] = px;
         buffer[BALL_OFFSET_Y] = py;
+        buffer[BALL_OFFSET_Z] = pz;
         buffer[BALL_OFFSET_VX] = vx;
         buffer[BALL_OFFSET_VY] = vy;
+        buffer[BALL_OFFSET_VZ] = vz;
     }
 }
