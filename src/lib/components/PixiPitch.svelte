@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { MatchRenderer } from '$lib/renderer/PixiApp';
-    import type { Match } from '$lib/engine/Match';
+    import type { Match } from '$lib/engine/Match.svelte.ts';
 
     let { match, labels }: { match: Match, labels: string[] } = $props();
     

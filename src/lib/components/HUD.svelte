@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { TeamProfile } from '../data/types';
-  import type { Match } from '../engine/Match';
+  import type { Match } from '../engine/Match.svelte.ts';
 
-  let { currentTime, homeTeam, awayTeam } = $props<{
+  let { currentTime, homeTeam, awayTeam, match, cinematicUi, forceShowControls } = $props<{
     match: Match;
     currentTime: number;
     homeTeam?: TeamProfile;
     awayTeam?: TeamProfile;
+    cinematicUi: boolean;
+    forceShowControls: boolean;
   }>();
 
   let clockDisplay = $derived.by(() => {
@@ -15,14 +17,16 @@
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   });
   
-  // These should eventually come from the match engine
-  let homeScore = $state(0);
-  let awayScore = $state(0);
+  let homeScore = $derived(match.homeScore);
+  let awayScore = $derived(match.awayScore);
 </script>
 
-<div class="hud-container p-4 sm:p-8">
+<div 
+  class="hud-container p-4 sm:p-8 transition-transform duration-500"
+  class:-translate-y-full={cinematicUi && !forceShowControls}
+>
   <div class="flex justify-center">
-    <div class="bg-white border border-light-border rounded-xl shadow-xl overflow-hidden flex items-stretch divide-x divide-light-border h-16 sm:h-20">
+    <div class="bg-white/90 backdrop-blur-md border border-light-border rounded-xl shadow-2xl overflow-hidden flex items-stretch divide-x divide-light-border h-16 sm:h-20 pointer-events-auto">
       <!-- Home Team -->
       <div class="flex items-center gap-4 px-6 sm:px-8 bg-light-bg/30">
         <div class="w-8 h-10 sm:w-10 sm:h-12 bg-primary rounded-b-2xl shadow-sm border-2 border-white"></div>
@@ -33,7 +37,7 @@
       </div>
 
       <!-- Score & Clock -->
-      <div class="flex flex-col items-center justify-center px-8 sm:px-12 bg-white min-w-[140px] sm:min-w-[180px]">
+      <div class="flex flex-col items-center justify-center px-8 sm:px-12 bg-white/50 min-w-[140px] sm:min-w-[180px]">
         <div class="flex items-center gap-4 sm:gap-6 mb-1">
           <span class="text-3xl sm:text-4xl font-black text-primary tracking-tighter">{homeScore}</span>
           <span class="text-lg font-black text-light-subtle opacity-30">VS</span>
