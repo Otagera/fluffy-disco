@@ -111,9 +111,11 @@ export class Match {
             
             // AI Action Decisions
             const inFinalThird = team === 0 ? px > 85 : px < 20;
-            const randomPassChance = Math.random() < 0.05; // 5% chance per tick to look for pass
+            // Use dt-scaled probabilities so decisions remain stable across render speeds.
+            const randomPassChance = this.rollChancePerSecond(0.9, dt);
+            const randomShotChance = this.rollChancePerSecond(0.55, dt);
 
-            if (inFinalThird) {
+            if (inFinalThird && randomShotChance) {
                 // Shooting
                 const targetGoalX = team === 0 ? 105 : 0;
                 const targetGoalY = 34; // Goal center
@@ -171,6 +173,12 @@ export class Match {
         
         this.memory.ballBuffer[BALL_OFFSET_VX] = vx;
         this.memory.ballBuffer[BALL_OFFSET_VY] = vy;
+    }
+
+    private rollChancePerSecond(ratePerSecond: number, dt: number): boolean {
+        if (ratePerSecond <= 0 || dt <= 0) return false;
+        const p = 1 - Math.exp(-ratePerSecond * dt);
+        return Math.random() < p;
     }
 
     /**
