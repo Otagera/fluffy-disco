@@ -43,6 +43,7 @@
   let awayStartPositions: {x:number, y:number}[] = [];
   let playerStats: any[] = [];
   let starterRoles: string[] = [];
+  let squad = $state<any[]>([]);
 
   // New Game Loop using the Match Orchestrator
   let lastFrameTime = 0;
@@ -108,7 +109,7 @@
     // Prepare player list (possibly overridden squad)
     const homePlayers = data.homePlayers || [];
     const awayPlayers = data.awayPlayers || [];
-    let squad = isHome ? homePlayers.slice() : awayPlayers.slice();
+    squad = isHome ? homePlayers.slice() : awayPlayers.slice();
     if (overrides && overrides.customSquad) {
       squad = overrides.customSquad;
     }
@@ -158,6 +159,43 @@
     match.lastPossessorIdx = homeStartIdx + 2; // centre forward by default
     match.memory.ballBuffer[BALL_OFFSET_X] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_X];
     match.memory.ballBuffer[BALL_OFFSET_Y] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_Y];
+  }
+
+  function handleTacticsSwap(id1: string, id2: string) {
+    const idx1 = squad.findIndex((p: any) => p.id === id1);
+    const idx2 = squad.findIndex((p: any) => p.id === id2);
+    
+    if (idx1 !== -1 && idx2 !== -1) {
+      const isSub = (idx1 < 11 && idx2 >= 11) || (idx2 < 11 && idx1 >= 11);
+      
+      if (isSub) {
+        const outIdx = idx1 < 11 ? idx1 : idx2;
+        const incomingId = idx1 >= 11 ? id1 : id2;
+        
+        const benchIdx = benchPlayers.findIndex((p: any) => p.id === incomingId);
+        if (benchIdx !== -1) {
+           const teamNum = isHome ? 0 : 1;
+           match.makeSub(teamNum, outIdx, benchIdx);
+           
+           const incomingPlayer = benchPlayers.splice(benchIdx, 1)[0];
+           
+           const newSquad = [...squad];
+           newSquad[outIdx] = incomingPlayer;
+           const originalBenchIdx = newSquad.findIndex((p: any) => p.id === incomingId);
+           if (originalBenchIdx >= 11) {
+               newSquad.splice(originalBenchIdx, 1);
+           }
+           squad = newSquad;
+           benchPlayers = [...benchPlayers]; 
+        }
+      } else {
+        const newSquad = [...squad];
+        const temp = newSquad[idx1];
+        newSquad[idx1] = newSquad[idx2];
+        newSquad[idx2] = temp;
+        squad = newSquad;
+      }
+    }
   }
 
   function handleSkip() {
@@ -333,13 +371,13 @@
       <div class="flex-1 bg-white rounded-3xl overflow-hidden shadow-2xl">
         <div class="w-full h-full max-w-4xl mx-auto py-8">
           <FormationBoard 
-            team={data.homeTeam} 
-            players={data.homePlayers || []} 
+            team={isHome ? data.homeTeam : data.awayTeam} 
+            players={squad} 
             allowSubs={true}
             allowRoleOverrides={true}
             allowPositionOverrides={true}
-            isHome={true}
-            onSwap={(a, b) => console.log('Swap', a, b)}
+            isHome={isHome}
+            onSwap={handleTacticsSwap}
             onFormationChange={(f) => console.log('Formation', f)}
             onOverridesChange={(o) => console.log('Overrides', o)}
           />
