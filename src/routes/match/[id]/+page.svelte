@@ -1,299 +1,80 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { matchState } from '$lib/game/matchState.svelte';
-  import { resetMatch, loadMatchState, updateTeamTactics } from '$lib/game/rules';
+  import { Match } from '$lib/engine/Match';
   import { formations } from '$lib/game/formations';
-  import { tick as engineTick } from '$lib/game/engine.svelte';
-  import { handleInput } from '$lib/game/input';
-  import { downloadReplay, clearReplay } from '$lib/game/recorder';
-  import Pitch from '$lib/components/Pitch.svelte';
+  import PixiPitch from '$lib/components/PixiPitch.svelte';
   import HUD from '$lib/components/HUD.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
   const matchIdStr = $derived($page.params.id || '1');
+  
+  // New Engine Instance
+  const match = new Match();
+  
+  let currentTime = $state(0);
+  let playerLabels = $state<string[]>([]);
+
   let shake = $state(false);
   let showFinalOverlay = $state(false);
-  let showTacticsOverlay = $state(false);
   let isSimulating = $state(false);
   let cinematicUi = $state(true);
-  let selectedSubOut = $state<number | null>(null);
-  let selectedSubIn = $state<number | null>(null);
-  let isHomeManager = $derived(data.managerTeamId === data.homeTeam.id);
-  
-  let currentFormation = $state(data.homeTeam.formation);
-  let currentStyle = $state(data.homeTeam.tacticalStyle);
-  let currentMentality = $state(data.homeTeam.mentality || 'BALANCED');
-  
-  let fileInput: HTMLInputElement;
-  let resultForm: HTMLFormElement;
 
-  // Directive 1: UI-driven render loop for headless engine
+  // New Game Loop using the Match Orchestrator
   let lastFrameTime = 0;
   function gameLoop(time: number) {
-    const dt = lastFrameTime ? time - lastFrameTime : 16.67;
+    const dt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
     lastFrameTime = time;
 
-    // Pulse the engine
-    engineTick(dt);
+    // Pulse the new engine
+    match.tick(dt);
+    
+    // Sync reactive state
+    currentTime = match.currentTime;
 
-    if (matchState.status !== 'FINISHED') {
-      requestAnimationFrame(gameLoop);
-    }
+    requestAnimationFrame(gameLoop);
   }
 
   onMount(() => {
+    // 1. Get Formations
+    const homeForm = formations[data.homeTeam.formation] || formations['4-4-2 Wide'];
+    const awayForm = formations[data.awayTeam.formation] || formations['4-4-2 Wide'];
+
+    // 2. Map to Pitch (105m x 68m)
+    const startPositions = [];
+    for (let i = 0; i < 11; i++) {
+        startPositions.push({ x: homeForm[i].x * 105, y: homeForm[i].y * 68 });
+    }
+    for (let i = 0; i < 11; i++) {
+        startPositions.push({ x: (1 - awayForm[i].x) * 105, y: (1 - awayForm[i].y) * 68 });
+    }
+
+    // 3. Labels
+    const hL = (data.homePlayers || []).slice(0, 11).map(p => p.number?.toString() || p.name?.substring(0,2) || 'P1');
+    const aL = (data.awayPlayers || []).slice(0, 11).map(p => p.number?.toString() || p.name?.substring(0,2) || 'P2');
+    playerLabels = [...hL, ...aL];
+    
+    match.setup(startPositions);
     requestAnimationFrame(gameLoop);
-    
-    isHomeManager ? currentFormation = data.homeTeam.formation : currentFormation = data.awayTeam.formation;
-    isHomeManager ? currentStyle = data.homeTeam.tacticalStyle : currentStyle = data.awayTeam.tacticalStyle;
-    isHomeManager ? currentMentality = data.homeTeam.mentality : currentMentality = data.awayTeam.mentality;
-    // Read any tactical overrides (formation, style, roles) set on the tactics page
-    let homeTeam = data.homeTeam;
-    let awayTeam = data.awayTeam;
-    let homePlayers = data.homePlayers;
-    let awayPlayers = data.awayPlayers;
-    let customRoles = {};
-    let homeCustomPositions = {};
-    let awayCustomPositions = {};
-    
-    const savedOverrides = sessionStorage.getItem('tacticalOverrides');
-    if (savedOverrides) {
-      try {
-        const overrides = JSON.parse(savedOverrides);
-        if (overrides.isHome) {
-          homeTeam = { ...homeTeam, formation: overrides.formation, tacticalStyle: overrides.style, mentality: overrides.mentality };
-          if (overrides.customSquad) homePlayers = overrides.customSquad;
-          homeCustomPositions = overrides.customPositions || {};
-        } else {
-          awayTeam = { ...awayTeam, formation: overrides.formation, tacticalStyle: overrides.style, mentality: overrides.mentality };
-          if (overrides.customSquad) awayPlayers = overrides.customSquad;
-          awayCustomPositions = overrides.customPositions || {};
-        }
-        customRoles = overrides.customRoles || {};
-      } catch (e) {
-        console.error("Failed to parse tactical overrides", e);
-      }
-    }
-
-    resetMatch({ 
-      status: 'PLAYING', 
-      resetStats: true,
-      homeTeam,
-      awayTeam,
-      homePlayers,
-      awayPlayers,
-      customRoles,
-      homeCustomPositions,
-      awayCustomPositions
-    });
-    
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
   });
-
-  $effect(() => {
-    if (matchState.events.length > 0) {
-      const last = matchState.events[matchState.events.length - 1];
-      if (last.type === 'goal') {
-        triggerShake();
-      }
-    }
-  });
-
-  function triggerShake() {
-    shake = true;
-    setTimeout(() => { shake = false; }, 400);
-  }
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key.toLowerCase() === 'h') {
-      cinematicUi = !cinematicUi;
-      return;
-    }
-    handleInput(e, 'keydown');
-  }
-  function onKeyUp(e: KeyboardEvent) { handleInput(e, 'keyup'); }
-
-  function handleStart() {
-    clearReplay();
-    matchState.replay.isRecording = true;
-    
-    // Use saved overrides even on restart
-    let homeTeam = data.homeTeam;
-    let awayTeam = data.awayTeam;
-    let homePlayers = data.homePlayers;
-    let awayPlayers = data.awayPlayers;
-    let customRoles = {};
-    let homeCustomPositions = {};
-    let awayCustomPositions = {};
-    const savedOverrides = sessionStorage.getItem('tacticalOverrides');
-    if (savedOverrides) {
-      try {
-        const overrides = JSON.parse(savedOverrides);
-        if (overrides.isHome) {
-          homeTeam = { ...homeTeam, formation: overrides.formation, tacticalStyle: overrides.style, mentality: overrides.mentality };
-          if (overrides.customSquad) homePlayers = overrides.customSquad;
-          homeCustomPositions = overrides.customPositions || {};
-        } else {
-          awayTeam = { ...awayTeam, formation: overrides.formation, tacticalStyle: overrides.style, mentality: overrides.mentality };
-          if (overrides.customSquad) awayPlayers = overrides.customSquad;
-          awayCustomPositions = overrides.customPositions || {};
-        }
-        customRoles = overrides.customRoles || {};
-      } catch (e) {
-        console.error("Failed to parse tactical overrides", e);
-      }
-    }
-
-    resetMatch({ 
-      status: 'PLAYING', 
-      resetStats: true,
-      homeTeam,
-      awayTeam,
-      homePlayers,
-      awayPlayers,
-      customRoles,
-      homeCustomPositions,
-      awayCustomPositions
-    });
-  }
-
-  function handleDownload() {
-    matchState.replay.isRecording = false;
-    downloadReplay(matchIdStr);
-  }
 
   function handleSkip() {
     if (isSimulating) return;
     isSimulating = true;
-    matchState.isSimulating = true;
     
-    const wasRecording = matchState.replay.isRecording;
-    matchState.replay.isRecording = false;
-
-    const FIXED_DT = 16.67; // 60fps equivalent
-
-    const runBatch = () => {
-      // Simulate 2 minutes of game time per UI frame to keep it responsive but fast
-      const ticksPerBatch = (120 * 1000) / FIXED_DT;
-      
-      for (let i = 0; i < ticksPerBatch; i++) {
-        engineTick(FIXED_DT);
-        if (matchState.status === 'FINISHED') break;
-      }
-
-      if (matchState.status !== 'FINISHED' && matchState.timer < 5400) {
-        requestAnimationFrame(runBatch);
-      } else {
-        matchState.status = 'FINISHED';
-        matchState.replay.isRecording = wasRecording;
-        isSimulating = false;
-        matchState.isSimulating = false;
-        showFinalOverlay = true;
-      }
-    };
-
-    requestAnimationFrame(runBatch);
-  }
-
-  function handleFileChange(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
+    // Use the high-speed batch simulation method
+    const results = match.simulateMatch();
+    console.log("Match Sim Results:", results);
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        loadMatchState(data);
-      } catch (err) {
-        console.error("Failed to parse replay file", err);
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  function toggleTactics() {
-    if (matchState.status === 'PLAYING') {
-      matchState.status = 'PAUSED';
-      // Initialize with current state just in case
-      currentFormation = isHomeManager ? matchState.homeFormation : matchState.awayFormation;
-      currentStyle = isHomeManager ? matchState.homeTacticalStyle : matchState.awayTacticalStyle;
-      currentMentality = isHomeManager ? matchState.homeMentality : matchState.awayMentality;
-    } else if (matchState.status === 'PAUSED') {
-      // Apply tactical changes on resume
-      updateTeamTactics(isHomeManager ? 'home' : 'away', currentFormation, currentStyle, currentMentality);
-      matchState.status = 'PLAYING';
-    }
-    showTacticsOverlay = !showTacticsOverlay;
-    selectedSubOut = null;
-    selectedSubIn = null;
-  }
-
-  function handleSub() {
-    if (selectedSubOut === null || selectedSubIn === null) return;
-    if (matchState.homeSubsUsed >= 5) {
-      alert("No substitutions remaining.");
-      return;
-    }
-
-    const outIndex = matchState.players.findIndex(p => p.id === selectedSubOut);
-    const inIndex = matchState.homeBench.findIndex(p => p.id === selectedSubIn);
-
-    if (outIndex !== -1 && inIndex !== -1) {
-      const pOut = matchState.players[outIndex];
-      const pIn = matchState.homeBench[inIndex];
-
-      // Swap physical representation but keep roles/positions
-      const newPlayer = {
-        ...pIn,
-        x: pOut.x,
-        y: pOut.y,
-        homeX: pOut.homeX,
-        homeY: pOut.homeY,
-        role: pOut.role,
-        tacticalRole: pOut.tacticalRole,
-        anchorX: pOut.anchorX,
-        anchorY: pOut.anchorY,
-        vx: 0, vy: 0,
-        aiState: 'POSITION' as any,
-        pressure: 0,
-        currentStamina: 100, // Fresh legs!
-        possessionStrength: 1.0,
-        currentAction: null,
-        actionTimer: 0,
-        btState: {}
-      };
-
-      matchState.players[outIndex] = newPlayer;
-      matchState.homeBench.splice(inIndex, 1);
-      matchState.homeSubsUsed++;
-
-      // Log sub event
-      const minute = Math.floor(matchState.timer / 60);
-      matchState.events.push({ minute, type: 'sub', desc: `SUB: ${pIn.name} ON for ${pOut.name}` });
-
-      selectedSubOut = null;
-      selectedSubIn = null;
-    }
-  }
-
-  function getStatColor(val: number) {
-    if (val >= 15) return '#4caf50';
-    if (val >= 10) return '#ffeb3b';
-    return '#ff5722';
+    isSimulating = false;
+    showFinalOverlay = true;
   }
 </script>
 
 <div class="container relative" class:shake={shake}>
-  <HUD shotPower={matchState.shotPower} isCharging={matchState.isCharging} homeTeam={data.homeTeam} awayTeam={data.awayTeam} />
+  <HUD {match} {currentTime} homeTeam={data.homeTeam} awayTeam={data.awayTeam} />
   
   <!-- Simulating Overlay -->
   {#if isSimulating}
@@ -307,7 +88,7 @@
   {/if}
 
   <!-- Final Score Overlay -->
-  {#if showFinalOverlay || matchState.status === 'FINISHED'}
+  {#if showFinalOverlay}
     <div class="modal-overlay" style="z-index: 1000; pointer-events: auto; position: fixed;">
       <div class="stats-modal" style="background: #1a1a1a; border: 2px solid var(--primary); min-width: 500px;">
         <h1 style="color: #888; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 1rem;">FULL TIME RESULT</h1>
@@ -317,171 +98,26 @@
             <h2 style="font-size: 1.4rem; margin-top: 1rem;">{data.homeTeam.name}</h2>
           </div>
           <div style="font-size: 5rem; font-weight: 900; letter-spacing: 5px; font-family: monospace;">
-            {matchState.homeScore} - {matchState.awayScore}
+             SIM COMPLETE
           </div>
           <div style="text-align: center; flex: 1;">
             <div style="width: 60px; height: 70px; background: var(--danger); margin: 0 auto; border-radius: 0 0 30px 30px;"></div>
             <h2 style="font-size: 1.4rem; margin-top: 1rem;">{data.awayTeam.name}</h2>
           </div>
         </div>
-
-        <div class="final-stats-grid">
-          <div class="stat-item">
-            <span>{matchState.stats.home.shots}</span>
-            <span class="stat-label">SHOTS</span>
-            <span>{matchState.stats.away.shots}</span>
-          </div>
-          <div class="stat-item">
-            <span>{matchState.stats.home.dangerousEntries}</span>
-            <span class="stat-label">DANGEROUS ENTRIES</span>
-            <span>{matchState.stats.away.dangerousEntries}</span>
-          </div>
-          <div class="stat-item">
-            <span>{matchState.stats.home.passesCompleted} / {matchState.stats.home.passesAttempted}</span>
-            <span class="stat-label">PASSES</span>
-            <span>{matchState.stats.away.passesCompleted} / {matchState.stats.away.passesAttempted}</span>
-          </div>
-        </div>
         
         <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #333;">
-          <button class="primary btn-lg" style="width: 100%; padding: 1.5rem; font-size: 1.2rem;" onclick={() => resultForm.submit()}>
-            CONFIRM & RETURN TO DASHBOARD
+          <button class="primary btn-lg" style="width: 100%; padding: 1.5rem; font-size: 1.2rem;" onclick={() => window.location.href = '/'}>
+            RETURN TO DASHBOARD
           </button>
         </div>
       </div>
     </div>
   {/if}
 
-  <!-- In-Game Management Overlay -->
-  {#if showTacticsOverlay}
-    <div class="modal-overlay" style="z-index: 900; pointer-events: auto; position: fixed;">
-      <div class="stats-modal" style="background: #111; border: 2px solid var(--primary); min-width: 800px; max-height: 80vh; overflow-y: auto;">
-        <div class="flex justify-between items-center mb-2">
-          <h1 style="color: white; margin: 0;">In-Game Management</h1>
-          <button class="secondary btn-lg" style="padding: 0.5rem 1rem;" onclick={toggleTactics}>RESUME MATCH</button>
-        </div>
-        
-        <!-- TACTICAL CHANGES -->
-        <div class="flex gap-1 mb-2" style="background: #222; padding: 1rem; border-radius: 8px;">
-          <div style="flex: 1;">
-            <h3 style="color: #888; margin-bottom: 0.5rem;">Your Tactics</h3>
-            <div class="flex gap-1 flex-wrap">
-              <select bind:value={currentFormation} class="tactic-select" title="Formation">
-                {#each Object.keys(formations) as f}
-                  <option value={f}>{f}</option>
-                {/each}
-              </select>
-              <select bind:value={currentStyle} class="tactic-select" title="Tactical Style">
-                <option>Tiki-Taka</option>
-                <option>Gegenpress</option>
-                <option>Route One</option>
-                <option>Park the Bus</option>
-                <option>Fluid Counter</option>
-              </select>
-              <select bind:value={currentMentality} class="tactic-select mentality-select" title="Mentality">
-                <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
-                <option value="DEFENSIVE">Defensive</option>
-                <option value="BALANCED">Balanced</option>
-                <option value="ATTACKING">Attacking</option>
-                <option value="ULTRA_ATTACKING">Ultra Attacking</option>
-              </select>
-            </div>
-          </div>
-          <div style="flex: 1; border-left: 1px solid #333; padding-left: 1rem;">
-            <h3 style="color: #888; margin-bottom: 0.5rem;">Opponent Tactics</h3>
-            <p style="color: white; font-weight: bold;">
-              {isHomeManager ? matchState.awayFormation : matchState.homeFormation} • 
-              {isHomeManager ? matchState.awayTacticalStyle : matchState.homeTacticalStyle}
-            </p>
-            <p style="color: var(--danger); font-size: 0.8rem; font-weight: bold;">
-              {(isHomeManager ? matchState.awayMentality : matchState.homeMentality).replace('_', ' ')}
-            </p>
-          </div>
-        </div>
+  <PixiPitch {match} labels={playerLabels} />
 
-        <p style="color: #ccc; margin-bottom: 1rem; text-align: left;">Subs Remaining: {5 - (isHomeManager ? matchState.homeSubsUsed : matchState.awaySubsUsed)}/5</p>
-
-        <div class="grid grid-2 gap-2" style="text-align: left;">
-          <div>
-            <h3 style="color: #888; border-bottom: 1px solid #333; padding-bottom: 0.5rem;">On Pitch</h3>
-            <div class="player-list mt-1">
-              {#each matchState.players.filter(p => p.team === 'home') as p}
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="player-row {selectedSubOut === p.id ? 'selected' : ''}" onclick={() => selectedSubOut = p.id} style="position: relative; overflow: hidden; cursor: pointer;">
-                  <div class="stam-bar" style="width: 5px; height: 100%; background: {p.currentStamina > 50 ? '#4caf50' : p.currentStamina > 30 ? '#ffeb3b' : '#f44336'}; position: absolute; left: 0; top: 0;"></div>
-                  <span class="number" style="margin-left: 10px;">{p.number}</span>
-                  <span class="role-badge">{p.tacticalRole}</span>
-                  <span class="name" style="color: white;">{p.name}</span>
-                  <span style="color: #aaa; font-size: 0.8rem;">{Math.round(p.currentStamina)}%</span>
-                </div>
-              {/each}
-            </div>
-          </div>
-          <div>
-            <h3 style="color: #888; border-bottom: 1px solid #333; padding-bottom: 0.5rem;">Bench</h3>
-            <div class="player-list mt-1">
-              {#each matchState.homeBench as p}
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="player-row {selectedSubIn === p.id ? 'selected' : ''}" onclick={() => selectedSubIn = p.id} style="cursor: pointer;">
-                  <span class="role-badge" style="margin-left: 10px;">{p.role}</span>
-                  <span class="name" style="color: white;">{p.name}</span>
-                  <div class="mini-stats">
-                    <span style="color: {getStatColor(p.attributes.passing)}">PAS {p.attributes.passing}</span>
-                    <span style="color: {getStatColor(p.attributes.shooting)}">SHO {p.attributes.shooting}</span>
-                    <span style="color: {getStatColor(p.attributes.pace)}">PAC {p.attributes.pace}</span>
-                  </div>
-                </div>
-              {/each}
-              {#if matchState.homeBench.length === 0}
-                <p style="color: #666; font-style: italic;">No players remaining on bench.</p>
-              {/if}
-            </div>
-            
-            <div style="margin-top: 2rem;">
-              <button 
-                class="primary btn-lg w-100" 
-                disabled={selectedSubOut === null || selectedSubIn === null || matchState.homeSubsUsed >= 5}
-                onclick={handleSub}
-                style={selectedSubOut === null || selectedSubIn === null || matchState.homeSubsUsed >= 5 ? 'opacity: 0.5; cursor: not-allowed;' : ''}
-              >
-                CONFIRM SUBSTITUTION
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Result Form (Hidden) -->
-  <form bind:this={resultForm} method="POST" action="?/processMatch" style="display:none">
-    <input type="hidden" name="homeScore" value={matchState.homeScore} />
-    <input type="hidden" name="awayScore" value={matchState.awayScore} />
-    <input type="hidden" name="playerStamina" value={JSON.stringify(
-      Object.fromEntries(matchState.players.filter(p => p.originalId).map(p => [p.originalId, Math.round(p.currentStamina)]))
-    )} />
-    <input type="hidden" name="matchAnalytics" value={JSON.stringify(matchState.analytics)} />
-  </form>
-
-  <div class="replay-status" class:hidden-live={matchState.status === 'PLAYING' && cinematicUi}>
-    {#if matchState.replay.isRecording}
-      <div class="flex items-center gap-1">
-        <div class="recording-dot"></div>
-        <span class="text-xs font-bold text-white">REC ({matchState.replay.frames.length})</span>
-      </div>
-    {/if}
-    {#if matchState.replay.frames.length > 0}
-      <button class="save-btn" onclick={handleDownload}>💾 SAVE JSON</button>
-    {/if}
-    <input type="file" accept=".json" bind:this={fileInput} onchange={handleFileChange} style="display: none;" />
-    <button class="save-btn" onclick={() => fileInput.click()}>📂 LOAD REPLAY</button>
-  </div>
-
-  <Pitch />
-
-  <div class="controls mt-1 flex justify-center gap-1" class:hidden-live={matchState.status === 'PLAYING' && cinematicUi}>
+  <div class="controls mt-1 flex justify-center gap-1" class:hidden-live={cinematicUi}>
     <button class="save-btn" onclick={() => window.location.href = `/`}>
       ⚙️ DASHBOARD
     </button>
@@ -489,18 +125,9 @@
       {cinematicUi ? '🎬 SHOW UI' : '🎬 HIDE UI'}
     </button>
     
-    {#if matchState.status === 'FINISHED'}
-      <button class="primary btn-lg" onclick={() => showFinalOverlay = true}>
-        VIEW FULL TIME SCORE
-      </button>
-    {:else if matchState.status === 'PLAYING' || matchState.status === 'PAUSED'}
-      <button class="primary btn-lg" style="background: #f59e0b;" onclick={toggleTactics}>
-        TACTICS & SUBS
-      </button>
-      <button class="secondary btn-lg" onclick={handleSkip}>
+    <button class="secondary btn-lg" onclick={handleSkip}>
         SKIP TO END
-      </button>
-    {/if}
+    </button>
   </div>
 </div>
 
