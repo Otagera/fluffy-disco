@@ -78,6 +78,20 @@ export class PhysicsEngine {
             let vx = buffer[offset + PLAYER_OFFSET_VX];
             let vy = buffer[offset + PLAYER_OFFSET_VY];
             let stamina = buffer[offset + PLAYER_OFFSET_STAMINA];
+
+            const toTargetX = target.x - px;
+            const toTargetY = target.y - py;
+            const distSqToTarget = toTargetX * toTargetX + toTargetY * toTargetY;
+            const speedSq = vx * vx + vy * vy;
+
+            // Dead-zone snap: prevents endless tiny circles around a reached anchor/ball.
+            if (distSqToTarget < (0.35 * 0.35) && speedSq < (1.2 * 1.2)) {
+                buffer[offset + PLAYER_OFFSET_X] = target.x;
+                buffer[offset + PLAYER_OFFSET_Y] = target.y;
+                buffer[offset + PLAYER_OFFSET_VX] = 0;
+                buffer[offset + PLAYER_OFFSET_VY] = 0;
+                continue;
+            }
             
             // Degrade max speed based on stamina (at 10% stamina, speed is 70% of max)
             const staminaPenalty = 0.7 + (0.3 * stamina);
@@ -103,6 +117,12 @@ export class PhysicsEngine {
             // 4. Integrate (Euler)
             vx += ax * dt;
             vy += ay * dt;
+
+            // Mild damping reduces overshoot/orbiting at high simulation speeds.
+            const damping = Math.pow(0.98, Math.max(1, dt * 60));
+            vx *= damping;
+            vy *= damping;
+
             const dx = vx * dt;
             const dy = vy * dt;
             px += dx;

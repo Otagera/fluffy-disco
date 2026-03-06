@@ -45,10 +45,29 @@
   let starterRoles: string[] = [];
   let squad = $state<any[]>([]);
 
+  function normalizeEngineStat(value: number | undefined, fallback: number = 50): number {
+    if (typeof value !== 'number' || Number.isNaN(value)) return fallback;
+    if (value <= 20) return Math.max(1, Math.min(100, value * 5));
+    return Math.max(1, Math.min(100, value));
+  }
+
+  function toEngineStats(attributes: any) {
+    return {
+      passing: normalizeEngineStat(attributes?.passing),
+      finishing: normalizeEngineStat(attributes?.finishing),
+      tackling: normalizeEngineStat(attributes?.tackling),
+      dribbling: normalizeEngineStat(attributes?.dribbling),
+      vision: normalizeEngineStat(attributes?.vision),
+      composure: normalizeEngineStat(attributes?.composure),
+      aggression: normalizeEngineStat(attributes?.aggression, 40)
+    };
+  }
+
   // New Game Loop using the Match Orchestrator
   let lastFrameTime = 0;
   function gameLoop(time: number) {
-    const dt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
+    const rawDt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
+    const dt = Math.min(rawDt, 0.05);
     lastFrameTime = time;
 
     // Pulse the new engine
@@ -114,17 +133,25 @@
       squad = overrides.customSquad;
     }
 
-    // Build stats and roles arrays, and bench
-    const allStats = squad.map((p: any) => p.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
-    const allRoles = squad.map((p: any, idx: number) => overrides?.customRoles?.[idx] || p.role);
-    const starterStats = allStats.slice(0, 11);
-    starterRoles = allRoles.slice(0, 11);
-    const benchStatsArr = allStats.slice(11);
-    const benchRolesArr = allRoles.slice(11);
+    // Build full starter arrays for both teams; managed side can still use tactical overrides.
+    const managedRoles = squad.map((p: any, idx: number) => overrides?.customRoles?.[idx] || p.role);
+    const managedStats = squad.map((p: any) => toEngineStats(p.attributes));
+    const opponentSquad = (isHome ? awayPlayers : homePlayers).slice();
+    const opponentRoles = opponentSquad.map((p: any) => p.role);
+    const opponentStats = opponentSquad.map((p: any) => toEngineStats(p.attributes));
+
+    const starterStats = isHome
+      ? [...managedStats.slice(0, 11), ...opponentStats.slice(0, 11)]
+      : [...opponentStats.slice(0, 11), ...managedStats.slice(0, 11)];
+    starterRoles = isHome
+      ? [...managedRoles.slice(0, 11), ...opponentRoles.slice(0, 11)]
+      : [...opponentRoles.slice(0, 11), ...managedRoles.slice(0, 11)];
+    const benchStatsArr = managedStats.slice(11);
+    const benchRolesArr = managedRoles.slice(11);
     benchPlayers = squad.slice(11);
 
     // assign to match instance after setup
-    for (let i = 0; i < 11; i++) playerStats.push(starterStats[i]);
+    playerStats = [...starterStats];
 
     // 3. Labels (Numbers)
     const hL = squad.slice(0, 11).map((p: any) => p.number?.toString() || 'P');
@@ -175,7 +202,8 @@
         const benchIdx = benchPlayers.findIndex((p: any) => p.id === incomingId);
         if (benchIdx !== -1) {
            const teamNum = isHome ? 0 : 1;
-           match.makeSub(teamNum, outIdx, benchIdx);
+           const didSub = match.makeSub(teamNum, outIdx, benchIdx);
+           if (!didSub) return;
            
            const incomingPlayer = benchPlayers.splice(benchIdx, 1)[0];
            
@@ -226,9 +254,19 @@
       }
     }
     const outIdx = worst - start;
-    match.makeSub(teamNum, outIdx, benchIdx);
+    const didSub = match.makeSub(teamNum, outIdx, benchIdx);
+    if (!didSub) return;
+
+    const incoming = benchPlayers[benchIdx];
+    if (incoming) {
+      const newSquad = [...squad];
+      newSquad[outIdx] = incoming;
+      squad = newSquad;
+    }
+
     // also update local benchPlayers list so button disappears
     benchPlayers.splice(benchIdx, 1);
+    benchPlayers = [...benchPlayers];
     showSubs = false;
   }
 </script>
