@@ -142,7 +142,7 @@ describe('Match Engine Integration', () => {
       m.makeSub(0, 0, 0);
       expect(m.playerStats[0]).toEqual({ passing: 70 });
       expect(m.benchStats.length).toBe(1);
-      expect(m.subsUsed[0]).toBe(0); // manual sub doesn't increment
+      expect(m.subsUsed[0]).toBe(1);
     });
 
     it('should let CPU automatically sub tired players after the 60th minute', () => {

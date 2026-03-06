@@ -158,9 +158,6 @@ export class Match {
         // 1.5 AI Substitutions (CPU)
         this.handleCPUSubs();
 
-        // CPU substitution checks
-        this.handleCPUSubs();
-
         // Analytics: Heatmap Sampling (every 5 seconds)
         this.analyticsSampleTimer += dt;
         if (this.analyticsSampleTimer >= 5.0) {
@@ -528,7 +525,6 @@ export class Match {
                 if (benchIdx !== -1) {
                     // perform substitution
                     this.makeSub(team, tiredIdx - startIdx, benchIdx);
-                    this.subsUsed[team]++;
                 }
             }
         }
@@ -538,9 +534,12 @@ export class Match {
      * Swap a starter (outIdx relative to team 0-10) with a bench entry.
      * team: 0 home, 1 away
      */
-    public makeSub(team: number, outIdx: number, benchIdx: number) {
+    public makeSub(team: number, outIdx: number, benchIdx: number): boolean {
         const globalIdx = team * 11 + outIdx;
-        if (benchIdx < 0 || benchIdx >= this.benchStats.length) return;
+        if (team < 0 || team > 1) return false;
+        if (outIdx < 0 || outIdx > 10) return false;
+        if (this.subsUsed[team] >= 5) return false;
+        if (benchIdx < 0 || benchIdx >= this.benchStats.length) return false;
         const incomingStats = this.benchStats.splice(benchIdx, 1)[0];
         const incomingRole = this.benchRoles.splice(benchIdx, 1)[0];
 
@@ -550,6 +549,9 @@ export class Match {
 
         // restore stamina for new player (scale 0..1)
         this.memory.playerBuffer[globalIdx * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA] = 1.0;
+
+        this.subsUsed[team]++;
+        return true;
     }
 
     /**
