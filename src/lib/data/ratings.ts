@@ -64,7 +64,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'attributes' | 'condition' | 'age' | 'potential'>): number {
+export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'attributes' | 'condition' | 'age' | 'potential'>, options?: { includeTransient?: boolean }): number {
   const weights = WEIGHTS[player.role];
   let weighted = 0;
   let weightTotal = 0;
@@ -80,10 +80,16 @@ export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'att
 
   // Keep current ability close to long-term potential while still reflecting fitness/age.
   const developmentGap = (player.potential - base) * (player.age < 24 ? 0.15 : 0.05);
-  const fitnessMod = (clamp(player.condition, 35, 100) - 85) / 25;
   const ageDecline = player.age > 31 ? -(player.age - 31) * 0.15 : 0;
 
-  return Math.round(clamp(base + developmentGap + fitnessMod + ageDecline, 1, 20));
+  let score = base + developmentGap + ageDecline;
+
+  if (options?.includeTransient) {
+    const fitnessMod = (clamp(player.condition, 35, 100) - 85) / 25;
+    score += fitnessMod;
+  }
+
+  return Math.round(clamp(score, 1, 20));
 }
 
 export function calculateTeamOverall(team: TeamProfile, players: Record<string, PlayerProfile>): number {

@@ -160,6 +160,20 @@ function getMentalityModifier(mentality: string | undefined) {
 
 function simFixtures(save: SaveGame, filter: (f: Fixture) => boolean, teamsPlayed: Set<string>) {
   const fixturesToSim = save.fixtures.filter(filter);
+
+  // Helper to get effective team fitness modifier (0 at 90%, -0.25 at 80%, -0.5 at 70%, etc.)
+  const getTeamConditionMod = (team: any) => {
+    const topPlayers = team.players
+      .map((id: string) => save.players[id])
+      .filter((p: any) => !!p && !p.injury)
+      .sort((a: any, b: any) => (b.overall ?? 0) - (a.overall ?? 0))
+      .slice(0, 11);
+
+    if (topPlayers.length === 0) return -0.5; // Severe penalty for no players
+    const avgCondition = topPlayers.reduce((sum: number, p: any) => sum + (p.condition ?? 100), 0) / topPlayers.length;
+    return (Math.min(90, avgCondition) - 90) / 40; 
+  };
+
   for (const f of fixturesToSim) {
     const homeTeam = save.teams[f.homeTeamId];
     const awayTeam = save.teams[f.awayTeamId];
@@ -173,14 +187,17 @@ function simFixtures(save: SaveGame, filter: (f: Fixture) => boolean, teamsPlaye
     const homeAdv = 0.24;
     const reputationDiff = (homeTeam.reputation - awayTeam.reputation) / 28;
     const overallDiff = ((homeTeam.overall ?? 1) - (awayTeam.overall ?? 1)) / 5;
+    
+    const homeConditionMod = getTeamConditionMod(homeTeam);
+    const awayConditionMod = getTeamConditionMod(awayTeam);
 
     const homeStyle = getStyleAttackModifier(homeTeam.tacticalStyle);
     const awayStyle = getStyleAttackModifier(awayTeam.tacticalStyle);
     const homeMentality = getMentalityModifier(homeTeam.mentality);
     const awayMentality = getMentalityModifier(awayTeam.mentality);
 
-    const lambdaHome = Math.max(0.2, 1.2 + homeAdv + reputationDiff + overallDiff + homeStyle + homeMentality - awayMentality * 0.4);
-    const lambdaAway = Math.max(0.2, 1.1 - reputationDiff - overallDiff + awayStyle + awayMentality - homeMentality * 0.4);
+    const lambdaHome = Math.max(0.1, 1.2 + homeAdv + reputationDiff + overallDiff + homeConditionMod + homeStyle + homeMentality - awayMentality * 0.4);
+    const lambdaAway = Math.max(0.1, 1.1 - reputationDiff - overallDiff + awayConditionMod + awayStyle + awayMentality - homeMentality * 0.4);
     
     f.homeScore = poisson(lambdaHome);
     f.awayScore = poisson(lambdaAway);
