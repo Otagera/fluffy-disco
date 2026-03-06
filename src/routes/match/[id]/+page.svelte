@@ -378,8 +378,8 @@
             allowPositionOverrides={true}
             isHome={isHome}
             onSwap={handleTacticsSwap}
-            onFormationChange={(f) => console.log('Formation', f)}
-            onOverridesChange={(o) => console.log('Overrides', o)}
+            onFormationChange={(f) => console.log('Formation', $state.snapshot(f))}
+            onOverridesChange={(o) => console.log('Overrides', $state.snapshot(o))}
           />
         </div>
       </div>
