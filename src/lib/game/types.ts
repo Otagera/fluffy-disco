@@ -28,6 +28,10 @@ export interface Player {
   actionTimer: number;
   thinkCooldown: number;
   btState: Record<string, any>;
+  cautions: number; // Yellow cards accumulated
+  sentOff: boolean; // Red card sent off
+  lastPassReceiver?: number; // For receiver-based pass variance
+  recentTouchTime?: number; // Last time player touched ball
   attributes: {
     // Technical
     passing: number;

@@ -35,13 +35,15 @@
       linkCounts[linkKey] = (linkCounts[linkKey] || 0) + 1;
     });
 
-    const nodes = Object.entries(nodePositions).map(([id, pos]) => ({
-      id,
-      name: pos.name,
-      x: pos.x / pos.count,
-      y: pos.y / pos.count,
-      radius: Math.min(10, 2 + (pos.count * 0.1)) // Size node by involvement
-    }));
+    const nodes = Object.entries(nodePositions)
+      .filter(([id]) => id !== 'unknown') // Don't draw a giant 'Teammate' node
+      .map(([id, pos]) => ({
+        id,
+        name: pos.name,
+        x: pos.x / pos.count,
+        y: pos.y / pos.count,
+        radius: Math.min(10, 2 + (pos.count * 0.1)) // Size node by involvement
+      }));
 
     const maxLinkCount = Math.max(1, ...Object.values(linkCounts));
     
@@ -160,7 +162,7 @@
             <circle 
               cx={node.x * PITCH_W} cy={node.y * PITCH_H} 
               r={node.radius} 
-              fill={selectedTeam === 'home' ? 'var(--primary)' : 'var(--danger)'} 
+              fill={selectedTeam === 'home' ? '#1a5f2a' : '#dc3545'} 
               stroke="white" 
               stroke-width="1" 
             />

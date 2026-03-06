@@ -1,6 +1,6 @@
 import { matchState } from './matchState.svelte';
 import { PITCH_W, PITCH_H } from './constants';
-import { resetMatch } from './rules';
+import { resetMatch, checkOffside, triggerOffside } from './rules';
 import { emitMatchEvent, emitPassEvent } from './events';
 import { getForwardDir } from './utils';
 
@@ -8,6 +8,8 @@ let dribbleTimer = 0;
 const DRIBBLE_INTERVAL = 24;
 let possessionCooldown = 0; 
 let lastTouchTeam: 'home' | 'away' | null = null;
+let lastPossessionTeam: 'home' | 'away' | null = null;
+let possessionTicks = 0;
 
 export function resetPhysics() {
   possessionCooldown = 0;
@@ -16,6 +18,18 @@ export function resetPhysics() {
 
 export function updatePhysics() {
   const b = matchState.ball;
+  
+  // Track possession for stamina recovery
+  const currentPossessionTeam = matchState.possessionPlayerId !== null 
+    ? matchState.players.find(p => p.id === matchState.possessionPlayerId)?.team || null
+    : null;
+  
+  if (currentPossessionTeam === lastPossessionTeam) {
+    possessionTicks++;
+  } else {
+    possessionTicks = 0;
+    lastPossessionTeam = currentPossessionTeam;
+  }
   
   if (matchState.setPiece) {
     b.vx = 0;
@@ -144,7 +158,8 @@ export function resolvePossession() {
 
   if (minD < 2.5 && b.z < 1.0) {
     // Record pass completion if applicable
-    if (matchState.lastKickType === 'PASS' && matchState.lastKickerId !== null) {
+    const wasPass = matchState.lastKickType === 'PASS';
+    if (wasPass && matchState.lastKickerId !== null) {
       const kicker = allPlayers.find(p => p.id === matchState.lastKickerId);
       if (kicker && kicker.team === closestPlayer.team) {
         const teamStats = kicker.team === 'home' ? matchState.stats.home : matchState.stats.away;
@@ -156,8 +171,22 @@ export function resolvePossession() {
     matchState.possessionPlayerId = closestPlayer.id;
     lastTouchTeam = closestPlayer.team;
     possessionCooldown = 20; 
-    closestPlayer.possessionStrength = 1.0; 
-    matchState.lastKickerId = null; matchState.lastKickType = null; matchState.lastKickPos = null;
+    closestPlayer.possessionStrength = 1.0;
+    
+    // Check offside after pass reception (before clearing kick info)
+    if (wasPass && checkOffside()) {
+      triggerOffside();
+      matchState.lastKickerId = null; 
+      matchState.lastKickType = null; 
+      matchState.lastKickPos = null;
+      const kickingTeam = closestPlayer.team === 'home' ? 'away' : 'home';
+      resetMatch({ status: 'PLAYING', kickingTeam });
+      return;
+    }
+    
+    matchState.lastKickerId = null; 
+    matchState.lastKickType = null; 
+    matchState.lastKickPos = null;
   }
 }
 
@@ -191,8 +220,33 @@ export function updatePlayerPhysics() {
     else if (tacticalStyle === 'Park the Bus') intensityMod = 0.7; 
     else if (tacticalStyle === 'Fluid Counter') intensityMod = 1.1; 
 
+    // STAMINA DRAIN
     const staminaCost = ((speed * 0.005) + (p.aiState === 'PRESS' ? 0.015 : 0)) * intensityMod;
-    p.currentStamina = Math.max(0, p.currentStamina - (staminaCost * (1 - p.attributes.stamina / 100) * (1 + p.attributes.workRate / 100)));
+    let drainRate = staminaCost * (1 - p.attributes.stamina / 100) * (1 + p.attributes.workRate / 100);
+    
+    // POSSESSION HOLDING RECOVERY: Reduce drain by 60% if team controls ball for 2+ ticks
+    const teamInPossession = lastPossessionTeam && possessionTicks >= 2;
+    if (teamInPossession && p.team === lastPossessionTeam) {
+      drainRate *= 0.4;
+    }
+    
+    p.currentStamina = Math.max(0, p.currentStamina - drainRate);
+    
+    // LATE-GAME FATIGUE PENALTY: After 75min, apply mental fatigue for low stamina
+    const minute = Math.floor(matchState.timer / 60);
+    if (minute > 75 && p.currentStamina < 40) {
+      // This penalty is applied in utilityAI via cognitiveLaziness, but reinforce it here
+      // If stamina drops critically, further reduce physical performance
+      if (p.currentStamina < 25) {
+        p.vx *= 0.85;
+        p.vy *= 0.85;
+      }
+    }
+    
+    // STAMINA RECOVERY during low-activity phases (defensive shape, not pressing)
+    if (p.aiState === 'POSITION' || p.aiState === 'DEFEND') {
+      p.currentStamina = Math.min(100, p.currentStamina + 0.01);
+    }
 
     if (matchState.possessionPlayerId === p.id) {
       p.possessionStrength = Math.max(0, (p.possessionStrength || 1.0) - (((p.pressure || 0) * 0.02) + 0.002) * (1 - p.attributes.strength / 100));
@@ -204,7 +258,7 @@ export function updatePlayerPhysics() {
     const currV = Math.hypot(p.vx, p.vy);
     if (currV > maxV && currV > 0) { p.vx = (p.vx / currV) * maxV; p.vy = (p.vy / currV) * maxV; }
     p.x += p.vx; p.y += p.vy;
-    p.vx *= 0.9; p.vy *= 0.9;
+    p.vx *= 0.96; p.vy *= 0.96;
     p.x = Math.max(0, Math.min(1, p.x)); p.y = Math.max(0, Math.min(1, p.y));
   });
 

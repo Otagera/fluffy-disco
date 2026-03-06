@@ -124,6 +124,8 @@ export function resetMatch(options: {
       actionTimer: 0,
       thinkCooldown: 0,
       btState: {},
+      cautions: existing?.cautions ?? 0,
+      sentOff: existing?.sentOff ?? false,
       attributes
     });
   });
@@ -140,6 +142,8 @@ export function resetMatch(options: {
         tacticalRole: p.role, vx: 0, vy: 0, aiState: 'POSITION', pressure: 0,
         anchorX: 0, anchorY: 0, currentStamina: p.condition ?? 100, possessionStrength: 1.0,
         currentAction: { type: 'POSITION', score: 1.0 }, actionTimer: 0, thinkCooldown: 0, btState: {}, 
+        cautions: 0,
+        sentOff: false,
         attributes: normalizeAttributes(p.attributes, p.role)
       });
     }
@@ -182,6 +186,8 @@ export function resetMatch(options: {
       actionTimer: 0,
       thinkCooldown: 0,
       btState: {},
+      cautions: existing?.cautions ?? 0,
+      sentOff: existing?.sentOff ?? false,
       attributes
     });
   });
@@ -198,6 +204,8 @@ export function resetMatch(options: {
         tacticalRole: p.role, vx: 0, vy: 0, aiState: 'POSITION', pressure: 0,
         anchorX: 0, anchorY: 0, currentStamina: p.condition ?? 100, possessionStrength: 1.0,
         currentAction: { type: 'POSITION', score: 1.0 }, actionTimer: 0, thinkCooldown: 0, btState: {}, 
+        cautions: 0,
+        sentOff: false, 
         attributes: normalizeAttributes(p.attributes, p.role)
       });
     }

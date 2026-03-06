@@ -9,7 +9,7 @@ export interface RollResult {
   quality: number; 
 }
 
-export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEAR', distance: number = 20): RollResult {
+export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEAR', distance: number = 20, receiver?: Player): RollResult {
   // MILESTONE 9: PHYSICAL FATIGUE IMPACT
   let fatigueMod = 0.7 + (player.currentStamina / 100) * 0.3;
   if (player.currentStamina < 30) {
@@ -28,7 +28,30 @@ export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEA
     const oppositionFactor = 1.5 * distanceFactor; 
     const pressurePenalty = effectivePressure * 12;
     
-    const threshold = (baseAbility / distanceFactor) - pressurePenalty - oppositionFactor;
+    // RECEIVER MODIFIERS
+    let receiverPenalty = 0;
+    let errorAngleMult = 1.0;
+    if (receiver) {
+      // First-touch fatigue penalty
+      const receiverFatigue = 1 - (receiver.currentStamina / 100);
+      receiverPenalty += receiverFatigue * 0.2;
+      
+      // Receiver pressure penalty: if opponent nearby, harder to control
+      const opponents = matchState.players.filter(p => p.team !== receiver.team);
+      const closestOpponent = opponents.reduce((closest, opp) => {
+        const dx = (opp.x - receiver.x) * PITCH_W;
+        const dy = (opp.y - receiver.y) * PITCH_H;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        return d < Math.hypot((closest.x - receiver.x) * PITCH_W, (closest.y - receiver.y) * PITCH_H) ? opp : closest;
+      });
+      const oppDist = Math.hypot((closestOpponent.x - receiver.x) * PITCH_W, (closestOpponent.y - receiver.y) * PITCH_H);
+      if (oppDist < 3) {
+        receiverPenalty += 0.15;
+        errorAngleMult += 1.0; // Increases angle error when under pressure
+      }
+    }
+    
+    const threshold = (baseAbility / distanceFactor) - pressurePenalty - oppositionFactor - (receiverPenalty * 10);
     
     const roll = Math.random() * 20;
     const margin = threshold - roll;
@@ -39,7 +62,7 @@ export function resolveActionRoll(player: Player, type: 'PASS' | 'SHOOT' | 'CLEA
       const failScale = Math.abs(margin) / 10;
       return { 
         success: false, 
-        errorAngle: (Math.random() - 0.5) * 45 * failScale, 
+        errorAngle: (Math.random() - 0.5) * 45 * failScale * errorAngleMult, 
         errorPower: 0.7 + (Math.random() * 0.6 * failScale),
         quality: 0.3
       };

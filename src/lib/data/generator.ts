@@ -167,7 +167,7 @@ function orderSquadForMatchday(players: PlayerProfile[]) {
   return [...starters, ...bench, ...rest];
 }
 
-function generateTeam(level: number, usedNames: Set<string>): { team: TeamProfile; players: PlayerProfile[] } {
+export function generateTeam(level: number, usedNames: Set<string>): { team: TeamProfile; players: PlayerProfile[] } {
   let name = '';
   const profile = LEAGUE_GENERATION[level] ?? LEAGUE_GENERATION[4];
   const teamSuffixes = ['City', 'United', 'Rovers', 'Wanderers', 'Athletic', 'Town', 'FC', 'Sporting', 'Albion', 'Argyle', 'Alexandra', 'Thistle', 'Wednesday', 'Academicals', 'Rangers', 'Borough', 'County', 'Dons', 'Stanley', 'Orient'];

@@ -56,6 +56,11 @@ function handleMatchStateTransitions(minute: number) {
     if (!alreadyHasHalftime) {
       matchState.status = 'HALFTIME';
       matchState.events.push({ minute: 45, type: 'whistle', desc: 'Half time!' });
+      
+      // HALFTIME STAMINA RECOVERY: Restore to 85%
+      matchState.players.forEach(p => {
+        p.currentStamina = Math.min(100, 85);
+      });
     }
   }
 
@@ -129,7 +134,9 @@ function handleCPUSubs() {
         currentAction: null,
         actionTimer: 0,
         thinkCooldown: 0,
-        btState: {}
+        btState: {},
+        cautions: 0,
+        sentOff: false
       };
 
       matchState.players[outIndex] = newPlayer;

@@ -30,7 +30,8 @@ export const load: PageServerLoad = () => {
     awayPlayerIds = save.teams[lastFixture.awayTeamId]?.players || [];
   }
 
-  const getPlayerName = (idx: number) => {
+  const getPlayerName = (idx?: number) => {
+    if (idx === undefined || idx === null) return { id: 'unknown', name: 'Unknown' };
     const isHome = idx < 11;
     const playerIdx = isHome ? idx : idx - 11;
     const playerId = isHome ? homePlayerIds[playerIdx] : awayPlayerIds[playerIdx];

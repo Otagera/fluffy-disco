@@ -15,7 +15,10 @@ const behaviors: Record<string, BTNode> = {
   'PRESS': new MoveToTarget(),
   'JOCKEY': new MoveToTarget(),
   'SUPPORT': new MoveToTarget(),
-  'OVERLAP': new MoveToTarget()
+  'OVERLAP': new MoveToTarget(),
+  'DISTRIBUTE': new Sequence('distribute', [new MoveToTarget(), new ExecuteKick(3.2)]),
+  'SHOT_STOP': new MoveToTarget(),
+  'CLAIM_CROSS': new MoveToTarget()
 };
 
 const defaultMove = new MoveToTarget();
@@ -33,6 +36,9 @@ export function updateAI(dt: number) {
   updateTacticalAnchors();
 
   allPlayers.forEach(p => {
+    // Skip sent-off players
+    if (p.sentOff) return;
+    
     const isPossessor = matchState.possessionPlayerId === p.id;
     
     // Decrease think cooldown

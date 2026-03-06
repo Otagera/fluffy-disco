@@ -4,7 +4,7 @@ import { PITCH_W, PITCH_H } from './constants';
 import type { Action } from './utilityAI';
 import { resolveActionRoll, applyRollToVector } from './resolution';
 import { calculateShotXG } from './recorder';
-import { emitShotEvent } from './events';
+import { emitShotEvent, emitMatchEvent } from './events';
 import { getOpponentGoalX } from './utils';
 
 export type BTStatus = 'SUCCESS' | 'FAILURE' | 'RUNNING';
@@ -76,7 +76,7 @@ export class MoveToTarget implements BTNode {
       return 'SUCCESS';
     }
 
-    let accel = 0.0015 + (player.attributes.acceleration / 10000); 
+    let accel = 0.002 + (player.attributes.acceleration / 8000); 
     const slowingRadius = 4.0; 
     if (d < slowingRadius) accel *= (d / slowingRadius);
 
@@ -112,7 +112,10 @@ export class ExecuteKick implements BTNode {
     }
 
     const rollType = action.type as 'PASS' | 'SHOOT' | 'CLEAR';
-    const roll = resolveActionRoll(player, rollType, d);
+    const receiver = action.type === 'PASS' && action.targetPlayerId !== undefined 
+      ? matchState.players.find(p => p.id === action.targetPlayerId)
+      : undefined;
+    const roll = resolveActionRoll(player, rollType, d, receiver);
     const vector = applyRollToVector((dx / d) * power, (dy / d) * power, roll);
 
     // Analytics & Stats
@@ -142,6 +145,7 @@ export class ExecuteKick implements BTNode {
 /**
  * ExecuteTackle (Directive 4)
  * Active attempt to dislodge the ball from an opponent.
+ * May commit a foul leading to yellow/red cards.
  */
 export class ExecuteTackle implements BTNode {
   tick(player: Player, action: Action): BTStatus {
@@ -160,6 +164,32 @@ export class ExecuteTackle implements BTNode {
     
     const successThreshold = (tacklingAbility / (dribblingAbility + tacklingAbility)) * 100;
     const roll = Math.random() * 100;
+
+    // FOUL GENERATION
+    // Higher aggression increases foul probability (5% base, up to 15% with high aggression)
+    const foulProb = 0.05 * (1 + (player.attributes.aggression / 20)) * (1 - (player.attributes.tackling / 20));
+    const foulRoll = Math.random();
+    
+    if (foulRoll < foulProb) {
+      // FOUL COMMITTED
+      const minute = Math.floor(matchState.timer / 60);
+      player.cautions++;
+      
+      if (player.cautions === 1) {
+        // Yellow card
+        emitMatchEvent('card', `YELLOW! ${player.name} (${player.team})`, minute);
+      } else if (player.cautions >= 2) {
+        // Red card (sent off)
+        player.sentOff = true;
+        emitMatchEvent('card', `RED! ${player.name} (${player.team}) sent off!`, minute);
+      }
+      
+      // Foul resets possession to foul team
+      matchState.possessionPlayerId = null;
+      matchState.ball.vx = (Math.random() - 0.5) * 2;
+      matchState.ball.vy = (Math.random() - 0.5) * 2;
+      return 'FAILURE';
+    }
 
     if (roll < successThreshold) {
       // Success! Dislodge ball

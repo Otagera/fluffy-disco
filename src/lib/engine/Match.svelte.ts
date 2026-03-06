@@ -5,7 +5,7 @@ import { TacticalManager } from './ai/Tactics';
 import { MathUtils } from './core/MathUtils';
 import { 
     PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y,
-    PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
+    PLAYER_OFFSET_VX, PLAYER_OFFSET_VY, PLAYER_OFFSET_STAMINA,
     BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z, BALL_OFFSET_VX, BALL_OFFSET_VY, BALL_OFFSET_VZ
 } from './core/constants';
 
@@ -51,6 +51,13 @@ export class Match {
     
     private initialAnchors: { x: number, y: number }[] = [];
     private playerStats: any[] = [];
+    private playerRoles: string[] = [];           // corresponding roles for each stat index
+
+    // bench storage (also index-aligned)
+    public benchStats: any[] = [];
+    public benchRoles: string[] = [];
+    public subsUsed: [number, number] = [0, 0];
+    private lastSubCheckMinute: number = -1;
     
     private analyticsSampleTimer: number = 0;
     
@@ -80,7 +87,11 @@ export class Match {
     /**
      * Initializes the match with starting positions (e.g., Kick-off).
      */
-    public setup(startingPositions: { x: number, y: number }[], stats?: any[]) {
+    /**
+     * Initializes the match with starting positions (e.g., Kick-off).
+     * Optionally supply parallel roles array that aligns with stats.
+     */
+    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[]) {
         this.initialAnchors = startingPositions;
         if (stats && stats.length > 0) {
             this.playerStats = stats;
@@ -89,6 +100,11 @@ export class Match {
             for (let i = 0; i < PLAYER_COUNT; i++) {
                 this.playerStats.push({ passing: 50, finishing: 50, tackling: 50, dribbling: 50, vision: 50, composure: 50 });
             }
+        }
+        if (roles && roles.length === this.playerStats.length) {
+            this.playerRoles = roles;
+        } else if (this.playerRoles.length === 0) {
+            this.playerRoles = new Array(this.playerStats.length).fill('');
         }
         
         this.memory.initialize(startingPositions);
@@ -134,8 +150,16 @@ export class Match {
         this.offsideLineTeam0 = offsideLineTeam0;
         this.offsideLineTeam1 = offsideLineTeam1;
 
+        // continue CPU subs below
+
         // 1. Update AI Spatial Awareness (Influence Map)
         this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
+
+        // 1.5 AI Substitutions (CPU)
+        this.handleCPUSubs();
+
+        // CPU substitution checks
+        this.handleCPUSubs();
 
         // Analytics: Heatmap Sampling (every 5 seconds)
         this.analyticsSampleTimer += dt;
@@ -331,6 +355,8 @@ export class Match {
             return;
         }
 
+        // kickoff transition is handled later in the normal flow below (possession check) – no early return here
+
         // 2. Identify Possession
         if (this.possessionCooldown > 0) {
             this.possessionCooldown -= dt;
@@ -344,7 +370,8 @@ export class Match {
 
         // Auto-start play if ball moves or someone grabs it, 
         // or just start after a tiny delay to get players moving
-        if (this.status === MatchStatus.KICKOFF && (possessionIdx !== null || this.currentTime > 0.1)) {
+        // note: currentTime hasn't been incremented yet this tick so include dt
+        if (this.status === MatchStatus.KICKOFF && (possessionIdx !== null || this.currentTime + dt > 0.1)) {
             this.status = MatchStatus.PLAYING;
         }
 
@@ -468,6 +495,61 @@ export class Match {
         if (ratePerSecond <= 0 || dt <= 0) return false;
         const p = 1 - Math.exp(-ratePerSecond * dt);
         return Math.random() < p;
+    }
+
+    /**
+     * Handles automatic CPU substitutions for both teams.
+     * Called each tick but only acts once per minute starting after 60'.
+     */
+    private handleCPUSubs() {
+        const minute = Math.floor(this.currentTime / 60);
+        if (minute < 60 || minute === this.lastSubCheckMinute) return;
+        this.lastSubCheckMinute = minute;
+
+        for (let team = 0; team < 2; team++) {
+            if (this.subsUsed[team] >= 5) continue;
+            const startIdx = team === 0 ? 0 : 11;
+            const endIdx = team === 0 ? 11 : 22;
+
+            // find tired non-GK player
+            let tiredIdx = -1;
+            let minStam = 999;
+            for (let i = startIdx; i < endIdx; i++) {
+                const stam = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
+                const role = this.playerRoles[i] || '';
+                if (role === 'GK') continue;
+                if (stam < minStam) { minStam = stam; tiredIdx = i; }
+            }
+
+            // stamina is stored 0..1 so threshold around 0.6 corresponds to 60%
+            if (tiredIdx !== -1 && minStam < 0.6 && this.benchStats.length > 0) {
+                const tiredRole = this.playerRoles[tiredIdx] || '';
+                const benchIdx = this.benchRoles.findIndex(r => r === tiredRole);
+                if (benchIdx !== -1) {
+                    // perform substitution
+                    this.makeSub(team, tiredIdx - startIdx, benchIdx);
+                    this.subsUsed[team]++;
+                }
+            }
+        }
+    }
+
+    /**
+     * Swap a starter (outIdx relative to team 0-10) with a bench entry.
+     * team: 0 home, 1 away
+     */
+    public makeSub(team: number, outIdx: number, benchIdx: number) {
+        const globalIdx = team * 11 + outIdx;
+        if (benchIdx < 0 || benchIdx >= this.benchStats.length) return;
+        const incomingStats = this.benchStats.splice(benchIdx, 1)[0];
+        const incomingRole = this.benchRoles.splice(benchIdx, 1)[0];
+
+        // replace starter stats/role
+        this.playerStats[globalIdx] = incomingStats;
+        this.playerRoles[globalIdx] = incomingRole;
+
+        // restore stamina for new player (scale 0..1)
+        this.memory.playerBuffer[globalIdx * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA] = 1.0;
     }
 
     /**
@@ -759,7 +841,6 @@ export class Match {
 
         // Stop the ball dead
         this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
-...
         this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
         this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
     }

@@ -4,6 +4,7 @@
   import { enhance } from '$app/forms';
   import { Match, MatchStatus } from '$lib/engine/Match.svelte.ts';
   import { formations } from '$lib/game/formations';
+  import { PLAYER_STRIDE, PLAYER_OFFSET_STAMINA, BALL_OFFSET_X, BALL_OFFSET_Y } from '$lib/engine/core/constants';
   import PixiPitch from '$lib/components/PixiPitch.svelte';
   import HUD from '$lib/components/HUD.svelte';
   import FormationBoard from '$lib/components/FormationBoard.svelte';
@@ -13,11 +14,16 @@
 
   const matchIdStr = $derived($page.params.id || '1');
   
+  // determine which side we're managing
+  const isHome = data.managerTeamId === data.homeTeam.id;
+
   // New Engine Instance
   const match = new Match();
   
   let currentTime = $state(0);
   let playerLabels = $state<string[]>([]);
+  let benchPlayers = $state<any[]>([]);
+  let showSubs = $state(false);
 
   let showFinalOverlay = $state(false);
   let isSimulating = $state(false);
@@ -62,34 +68,73 @@
   }
 
   onMount(() => {
+    // apply any tactical overrides saved earlier
+    let overrides: any = null;
+    try {
+      const raw = sessionStorage.getItem('tacticalOverrides');
+      if (raw) {
+        overrides = JSON.parse(raw);
+        sessionStorage.removeItem('tacticalOverrides');
+      }
+    } catch (e) {
+      console.error('Failed to parse tactical overrides', e);
+    }
+
     // 1. Get Formations
     const homeForm = formations[data.homeTeam.formation] || formations['4-4-2 Wide'];
     const awayForm = formations[data.awayTeam.formation] || formations['4-4-2 Wide'];
 
     // 2. Map to Pitch (105m x 68m)
     for (let i = 0; i < 11; i++) {
-        homeStartPositions.push({ x: homeForm[i].x * 105, y: homeForm[i].y * 68 });
+        let px = homeForm[i].x;
+        let py = homeForm[i].y;
+        if (overrides && overrides.isHome && overrides.customPositions?.[i]) {
+          px = overrides.customPositions[i].x;
+          py = overrides.customPositions[i].y;
+        }
+        homeStartPositions.push({ x: px * 105, y: py * 68 });
     }
     for (let i = 0; i < 11; i++) {
-        awayStartPositions.push({ x: (1 - awayForm[i].x) * 105, y: (1 - awayForm[i].y) * 68 });
+        let px = awayForm[i].x;
+        let py = awayForm[i].y;
+        if (overrides && !overrides.isHome && overrides.customPositions?.[i]) {
+          px = overrides.customPositions[i].x;
+          py = overrides.customPositions[i].y;
+        }
+        awayStartPositions.push({ x: (1 - px) * 105, y: (1 - py) * 68 });
     }
 
-    // Extract stats
+    // Prepare player list (possibly overridden squad)
     const homePlayers = data.homePlayers || [];
     const awayPlayers = data.awayPlayers || [];
-    for (let i = 0; i < 11; i++) {
-        playerStats.push(homePlayers[i]?.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
-    }
-    for (let i = 0; i < 11; i++) {
-        playerStats.push(awayPlayers[i]?.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
+    let squad = isHome ? homePlayers.slice() : awayPlayers.slice();
+    if (overrides && overrides.customSquad) {
+      squad = overrides.customSquad;
     }
 
+    // Build stats and roles arrays, and bench
+    const allStats = squad.map((p: any) => p.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
+    const allRoles = squad.map((p: any, idx: number) => overrides?.customRoles?.[idx] || p.role);
+    const starterStats = allStats.slice(0, 11);
+    const starterRoles = allRoles.slice(0, 11);
+    const benchStatsArr = allStats.slice(11);
+    const benchRolesArr = allRoles.slice(11);
+    benchPlayers = squad.slice(11);
+
+    // assign to match instance after setup
+    for (let i = 0; i < 11; i++) playerStats.push(starterStats[i]);
+
     // 3. Labels (Numbers)
-    const hL = homePlayers.slice(0, 11).map(p => p.number?.toString() || 'P');
-    const aL = awayPlayers.slice(0, 11).map(p => p.number?.toString() || 'P');
+    const hL = squad.slice(0, 11).map((p: any) => p.number?.toString() || 'P');
+    const aL = (isHome ? awayPlayers : homePlayers).slice(0, 11).map((p: any) => p.number?.toString() || 'P');
     playerLabels = [...hL, ...aL];
+
+    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles);
     
-    match.setup([...homeStartPositions, ...awayStartPositions], playerStats);
+    // attach bench if provided
+    match.benchStats = benchStatsArr;
+    match.benchRoles = benchRolesArr;
+
     requestAnimationFrame(gameLoop);
   });
 
@@ -99,8 +144,19 @@
     const swappedAway = awayStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
     
     match.currentHalf = 2;
-    match.setup([...swappedHome, ...swappedAway], playerStats);
+    match.setup([...swappedHome, ...swappedAway], playerStats, starterRoles);
     match.status = MatchStatus.KICKOFF;
+  }
+
+  function startMatch() {
+    // user pressed kickoff – enable ticking and force PLAYING state
+    hasKickedOff = true;
+    match.status = MatchStatus.PLAYING;
+    // give ball to first forward to get things moving
+    const homeStartIdx = isHome ? 0 : 11;
+    match.lastPossessorIdx = homeStartIdx + 2; // centre forward by default
+    match.memory.ballBuffer[BALL_OFFSET_X] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_X];
+    match.memory.ballBuffer[BALL_OFFSET_Y] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_Y];
   }
 
   function handleSkip() {
@@ -115,6 +171,26 @@
     
     isSimulating = false;
     showFinalOverlay = true;
+  }
+
+  function doManualSub(benchIdx: number) {
+    const teamNum = isHome ? 0 : 1;
+    // find weakest stamina starter
+    const start = teamNum * 11;
+    let worst = start;
+    let minStam = match.memory.playerBuffer[start * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
+    for (let i = start + 1; i < start + 11; i++) {
+      const s = match.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
+      if (s < minStam) {
+        minStam = s;
+        worst = i;
+      }
+    }
+    const outIdx = worst - start;
+    match.makeSub(teamNum, outIdx, benchIdx);
+    // also update local benchPlayers list so button disappears
+    benchPlayers.splice(benchIdx, 1);
+    showSubs = false;
   }
 </script>
 
@@ -166,6 +242,24 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Quit
       </button>
+      {#if benchPlayers.length && !isSimulating}
+        <div class="relative">
+          <button
+            class="btn-secondary px-4 py-2 text-xs uppercase font-black tracking-widest"
+            onclick={() => showSubs = !showSubs}
+          >Subs</button>
+          {#if showSubs}
+            <div class="absolute bottom-12 bg-white p-2 rounded-lg shadow-xl flex flex-col gap-1">
+              {#each benchPlayers as bp, idx}
+                <button
+                  class="btn-secondary text-xs px-4 py-1"
+                  onclick={() => doManualSub(idx)}
+                >{bp.name || `Player ${idx+1}`}</button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       <div class="w-px h-8 bg-light-border mx-1"></div>
 
@@ -281,7 +375,7 @@
         <p class="subtle font-bold italic mb-8">The teams are on the pitch. Ready when you are.</p>
         <button 
           class="btn-primary w-full py-5 text-xl font-black tracking-widest shadow-2xl ring-8 ring-primary/10 rounded-3xl uppercase transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          onclick={() => hasKickedOff = true}
+          onclick={startMatch}
         >
           KICK OFF
         </button>
