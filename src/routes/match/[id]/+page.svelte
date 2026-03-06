@@ -35,6 +35,7 @@
   // Keep original formations for swapping sides
   let homeStartPositions: {x:number, y:number}[] = [];
   let awayStartPositions: {x:number, y:number}[] = [];
+  let playerStats: any[] = [];
 
   // New Game Loop using the Match Orchestrator
   let lastFrameTime = 0;
@@ -73,12 +74,22 @@
         awayStartPositions.push({ x: (1 - awayForm[i].x) * 105, y: (1 - awayForm[i].y) * 68 });
     }
 
+    // Extract stats
+    const homePlayers = data.homePlayers || [];
+    const awayPlayers = data.awayPlayers || [];
+    for (let i = 0; i < 11; i++) {
+        playerStats.push(homePlayers[i]?.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
+    }
+    for (let i = 0; i < 11; i++) {
+        playerStats.push(awayPlayers[i]?.attributes || { passing: 50, finishing: 50, tackling: 50, dribbling: 50 });
+    }
+
     // 3. Labels (Numbers)
-    const hL = (data.homePlayers || []).slice(0, 11).map(p => p.number?.toString() || 'P');
-    const aL = (data.awayPlayers || []).slice(0, 11).map(p => p.number?.toString() || 'P');
+    const hL = homePlayers.slice(0, 11).map(p => p.number?.toString() || 'P');
+    const aL = awayPlayers.slice(0, 11).map(p => p.number?.toString() || 'P');
     playerLabels = [...hL, ...aL];
     
-    match.setup([...homeStartPositions, ...awayStartPositions]);
+    match.setup([...homeStartPositions, ...awayStartPositions], playerStats);
     requestAnimationFrame(gameLoop);
   });
 
@@ -88,7 +99,7 @@
     const swappedAway = awayStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
     
     match.currentHalf = 2;
-    match.setup([...swappedHome, ...swappedAway]);
+    match.setup([...swappedHome, ...swappedAway], playerStats);
     match.status = MatchStatus.KICKOFF;
   }
 

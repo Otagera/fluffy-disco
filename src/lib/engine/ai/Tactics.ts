@@ -1,4 +1,4 @@
-import { BALL_OFFSET_X, BALL_OFFSET_Y, PLAYER_COUNT } from '../core/constants';
+import { BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_VX, BALL_OFFSET_VY, PLAYER_COUNT } from '../core/constants';
 
 export enum PlayPhase {
     POSSESSION = 'POSSESSION',
@@ -44,6 +44,8 @@ export class TacticalManager {
         const anchors: { x: number, y: number }[] = [];
         const bx = ballBuffer[BALL_OFFSET_X];
         const by = ballBuffer[BALL_OFFSET_Y];
+        const bvx = ballBuffer[BALL_OFFSET_VX];
+        const bvy = ballBuffer[BALL_OFFSET_VY];
 
         // 1. Identify which defender is closest to the ball for each team
         let closestHomeIdx = -1;
@@ -81,8 +83,9 @@ export class TacticalManager {
 
             // 2. Goalkeeper Logic (Lock to penalty area)
             if (i === 0 || i === 11) {
-                // Keep GK close to the goal line, only shifting slightly based on ball Y position
-                tx = team === 0 ? 5 : 100; // X position near goal line
+                // Keep GK close to their specific goal line based on their base formation anchor
+                // The base.x handles which side of the pitch they are on (swaps at half time)
+                tx = base.x; 
                 ty = 34 + (by - 34) * 0.2; // 34 is center Y. Move max 20% towards ball Y
                 anchors.push({ x: tx, y: ty });
                 continue;
@@ -92,9 +95,15 @@ export class TacticalManager {
             const isPressing = (team === 0 && i === closestHomeIdx) || (team === 1 && i === closestAwayIdx);
 
             if (isPressing && !isPossession) {
-                // The closest player aggressively presses the ball
-                tx = bx;
-                ty = by;
+                // Predictive Interception (Pursuit)
+                // Calculate distance to ball using the pre-calculated minDistSq
+                const distToBall = Math.sqrt(team === 0 ? minHomeDistSq : minAwayDistSq);
+                
+                // Estimate time to reach ball assuming ~8m/s sprint. Cap at 1.5 seconds.
+                const lookaheadTime = Math.min(distToBall / 8.0, 1.5);
+                
+                tx = bx + (bvx * lookaheadTime);
+                ty = by + (bvy * lookaheadTime);
             } else if (isPossession) {
                 // Possession: Offensive push + better spacing (Expansion)
                 // Home team (0) attacks towards X=105, Away team (1) towards X=0

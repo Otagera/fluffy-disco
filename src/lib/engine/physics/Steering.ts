@@ -81,8 +81,9 @@ export class PhysicsEngine {
             const maxF = buffer[offset + PLAYER_OFFSET_MAX_FORCE];
             const mass = buffer[offset + PLAYER_OFFSET_MASS];
 
-            // 1. Calculate Force (Seek)
-            const force = this.calculateSeek(px, py, vx, vy, target.x, target.y, maxS);
+            // 1. Calculate Force (Arrive instead of Seek to prevent orbiting)
+            const slowingRadius = 5.0; // Start braking 5 meters away
+            const force = this.calculateArrive(px, py, vx, vy, target.x, target.y, maxS, slowingRadius);
 
             // 2. Clamp Force (Biomechanics)
             const forceMag = Math.sqrt(force.fx * force.fx + force.fy * force.fy);
