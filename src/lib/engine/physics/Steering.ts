@@ -40,7 +40,7 @@ export class PhysicsEngine {
      */
     static calculateArrive(
         px: number, py: number, vx: number, vy: number,
-        tx: number, ty: number, maxSpeed: number, slowingRadius: number = 50
+        tx: number, ty: number, maxSpeed: number, slowingRadius: number = 3.0
     ): { fx: number, fy: number } {
         let dx = tx - px;
         let dy = ty - py;
@@ -100,8 +100,13 @@ export class PhysicsEngine {
             const mass = buffer[offset + PLAYER_OFFSET_MASS];
 
             // 1. Calculate Force (Arrive instead of Seek to prevent orbiting)
-            const slowingRadius = 5.0; // Start braking 5 meters away
+            const slowingRadius = 3.0; // Start braking 3 meters away
             const force = this.calculateArrive(px, py, vx, vy, target.x, target.y, maxS, slowingRadius);
+
+            // Amplify the steering force so players actually accelerate quickly
+            const steeringGain = 10.0;
+            force.fx *= steeringGain;
+            force.fy *= steeringGain;
 
             // 2. Clamp Force (Biomechanics)
             const forceMag = Math.sqrt(force.fx * force.fx + force.fy * force.fy);
@@ -118,10 +123,12 @@ export class PhysicsEngine {
             vx += ax * dt;
             vy += ay * dt;
 
-            // Mild damping reduces overshoot/orbiting at high simulation speeds.
-            const damping = Math.pow(0.98, Math.max(1, dt * 60));
-            vx *= damping;
-            vy *= damping;
+            // Cap absolute velocity to maxSpeed to prevent overshoot
+            const currentSpeed = Math.sqrt(vx * vx + vy * vy);
+            if (currentSpeed > maxS) {
+                vx = (vx / currentSpeed) * maxS;
+                vy = (vy / currentSpeed) * maxS;
+            }
 
             const dx = vx * dt;
             const dy = vy * dt;
@@ -188,9 +195,11 @@ export class PhysicsEngine {
         }
 
         // 4. Air Resistance (Simple drag while in air)
+        // Time-independent dampening factor
         if (pz > 0) {
-            vx *= 0.995;
-            vy *= 0.995;
+            const airDrag = Math.pow(0.7, dt); // 30% velocity loss per second in air
+            vx *= airDrag;
+            vy *= airDrag;
         }
 
         // 5. Write back
