@@ -1,4 +1,7 @@
-import { BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_VX, BALL_OFFSET_VY, PLAYER_COUNT } from '../core/constants';
+import { 
+    BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_VX, BALL_OFFSET_VY, PLAYER_COUNT,
+    PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y
+} from '../core/constants';
 
 export enum PlayPhase {
     POSSESSION = 'POSSESSION',
@@ -34,6 +37,15 @@ export class TacticalManager {
 
     /**
      * Calculates dynamic anchors for all players.
+     * @param ballBuffer Flat ball memory
+     * @param baseFormations Standard 4-4-2 or similar grid anchors
+     * @param roles Array of tactical roles for each player
+     * @param styles Array of tactical styles [homeStyle, awayStyle]
+     * @param offsideLineTeam0 Current offside line for home
+     * @param offsideLineTeam1 Current offside line for away
+     * @param playerStats Individual player attributes
+     * @param playerBuffer Actual real-time player coordinates
+     * @param isBallLoose True if no one currently has possession
      */
     calculateAnchors(
         ballBuffer: Float32Array, 
@@ -42,7 +54,9 @@ export class TacticalManager {
         styles?: string[],
         offsideLineTeam0: number = 52.5,
         offsideLineTeam1: number = 52.5,
-        playerStats?: any[]
+        playerStats?: any[],
+        playerBuffer?: Float32Array,
+        isBallLoose: boolean = true
     ): { x: number, y: number }[] {
         const anchors: { x: number, y: number }[] = [];
         const bx = ballBuffer[BALL_OFFSET_X];
@@ -56,8 +70,18 @@ export class TacticalManager {
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
             if (i === 0 || i === 11) continue; // Skip GKs
-            const base = baseFormations[i];
-            const distSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
+            
+            // Use real player positions if available, otherwise fallback to formation anchors
+            let px, py;
+            if (playerBuffer) {
+                px = playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_X];
+                py = playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_Y];
+            } else {
+                px = baseFormations[i].x;
+                py = baseFormations[i].y;
+            }
+
+            const distSq = (px - bx) * (px - bx) + (py - by) * (py - by);
             
             if (i < 11) {
                 homeDistances.push({ idx: i, distSq });
@@ -87,6 +111,13 @@ export class TacticalManager {
         const homePressers = new Set(homeDistances.slice(0, homePressCount).map(d => d.idx));
         const awayPressers = new Set(awayDistances.slice(0, awayPressCount).map(d => d.idx));
 
+        // If the ball is loose, the attacking team's closest player MUST also press (recover)
+        if (isBallLoose && this.possessionTeam !== null) {
+            const bestDist = this.possessionTeam === 0 ? homeDistances[0] : awayDistances[0];
+            if (this.possessionTeam === 0) homePressers.add(bestDist.idx);
+            else awayPressers.add(bestDist.idx);
+        }
+
         for (let i = 0; i < PLAYER_COUNT; i++) {
             const base = baseFormations[i];
             const team = i < 11 ? 0 : 1;
@@ -110,15 +141,19 @@ export class TacticalManager {
             let isPressing = (team === 0 && homePressers.has(i)) || (team === 1 && awayPressers.has(i));
             
             if (role === 'BWM' && !isPossession && !isPressing) {
-                const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
+                const px = playerBuffer ? playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_X] : base.x;
+                const py = playerBuffer ? playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_Y] : base.y;
+                const distToBallSq = (px - bx) * (px - bx) + (py - by) * (py - by);
                 if (distToBallSq < 400) { 
                     isPressing = true;
                 }
             }
 
-            if (isPressing && !isPossession) {
+            if (isPressing && (!isPossession || isBallLoose)) {
                 // Predictive Interception (Pursuit)
-                const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
+                const px = playerBuffer ? playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_X] : base.x;
+                const py = playerBuffer ? playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_Y] : base.y;
+                const distToBallSq = (px - bx) * (px - bx) + (py - by) * (py - by);
                 const distToBall = Math.sqrt(distToBallSq);
                 
                 // Anticipation affects pursuit tracking

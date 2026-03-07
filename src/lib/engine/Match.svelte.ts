@@ -189,7 +189,9 @@ export class Match {
                 this.tacticalStyles,
                 this.offsideLineTeam0,
                 this.offsideLineTeam1,
-                this.playerStats
+                this.playerStats,
+                this.memory.playerBuffer,
+                this.setPieceTakerIdx === null
             );
             
             // Override taker's target to be exactly the ball's position
@@ -394,7 +396,9 @@ export class Match {
                 this.tacticalStyles,
                 this.offsideLineTeam0,
                 this.offsideLineTeam1,
-                this.playerStats
+                this.playerStats,
+                this.memory.playerBuffer,
+                possessionIdx === null
             );
 
         // 4. Basic Ball Interaction (Dribbling, Passing, & Shooting)
