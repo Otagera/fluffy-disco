@@ -3,10 +3,13 @@ import { PhysicsEngine } from './physics/Steering';
 import { SpatialMap } from './ai/SpatialMap';
 import { TacticalManager } from './ai/Tactics';
 import { MathUtils } from './core/MathUtils';
+import { MatchRecorder } from '../game/BinaryRecorder';
 import { 
-    PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y,
-    PLAYER_OFFSET_VX, PLAYER_OFFSET_VY, PLAYER_OFFSET_STAMINA,
-    BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z, BALL_OFFSET_VX, BALL_OFFSET_VY, BALL_OFFSET_VZ
+    PLAYER_COUNT, PLAYER_STRIDE,
+    PLAYER_OFFSET_X, PLAYER_OFFSET_Y, PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
+    PLAYER_OFFSET_STAMINA,
+    BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z, 
+    BALL_OFFSET_VX, BALL_OFFSET_VY, BALL_OFFSET_VZ
 } from './core/constants';
 
 export enum MatchStatus {
@@ -72,6 +75,8 @@ export class Match {
     
     private offsideLineTeam0: number = 52.5;
     private offsideLineTeam1: number = 52.5;
+    
+    public recorder: MatchRecorder | null = null;
 
     get formattedTime(): string {
         const minutes = Math.floor(this.currentTime / 60);
@@ -508,6 +513,10 @@ export class Match {
         PhysicsEngine.updateBall(this.memory.ballBuffer, dt);
 
         this.checkBoundariesAndGoals();
+
+        if (this.recorder) {
+            this.recorder.captureFrame(this.memory, this.currentTime);
+        }
 
         this.currentTime += dt;
     }

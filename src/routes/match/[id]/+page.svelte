@@ -8,6 +8,7 @@
   import PixiPitch from '$lib/components/PixiPitch.svelte';
   import HUD from '$lib/components/HUD.svelte';
   import FormationBoard from '$lib/components/FormationBoard.svelte';
+  import { MatchRecorder } from '$lib/game/BinaryRecorder';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -19,6 +20,7 @@
 
   // New Engine Instance
   const match = new Match();
+  match.recorder = new MatchRecorder(matchIdStr, data.homeTeam.id, data.awayTeam.id);
   
   let currentTime = $state(0);
   let playerLabels = $state<string[]>([]);
@@ -30,7 +32,8 @@
   let cinematicUi = $state(false);
   let forceShowControls = $state(false);
 
-  let gameSpeed = $state(20);
+  let gameSpeed = $state(1);
+  // let gameSpeed = $state(20);
   let isPaused = $state(false);
   let hasKickedOff = $state(false);
   let showTacticsModal = $state(false);
@@ -83,6 +86,11 @@
         finalHomeScore = match.homeScore;
         finalAwayScore = match.awayScore;
         showFinalOverlay = true;
+        
+        // Save Replay
+        if (match.recorder) {
+            match.recorder.saveToIndexedDB();
+        }
     }
 
     requestAnimationFrame(gameLoop);
@@ -158,7 +166,10 @@
     const aL = (isHome ? awayPlayers : homePlayers).slice(0, 11).map((p: any) => p.number?.toString() || 'P');
     playerLabels = [...hL, ...aL];
 
-    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles);
+    const homeStyle = (overrides && overrides.isHome) ? overrides.style : data.homeTeam.tacticalStyle;
+    const awayStyle = (overrides && !overrides.isHome) ? overrides.style : data.awayTeam.tacticalStyle;
+
+    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles, [homeStyle, awayStyle]);
     
     // attach bench if provided
     match.benchStats = benchStatsArr;
@@ -235,6 +246,11 @@
     const results = match.simulateMatch();
     finalHomeScore = results.homeScore;
     finalAwayScore = results.awayScore;
+    
+    // Save Replay
+    if (match.recorder) {
+        match.recorder.saveToIndexedDB();
+    }
     
     isSimulating = false;
     showFinalOverlay = true;
