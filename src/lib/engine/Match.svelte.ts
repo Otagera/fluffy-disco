@@ -180,7 +180,7 @@ export class Match {
             
             // Calculate Tactical Anchors for everyone to settle
             this.tactics.updatePhase(this.memory.ballBuffer, this.setPieceTakerIdx);
-            const targets = this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors);
+            const targets = this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles);
             
             // Override taker's target to be exactly the ball's position
             if (this.setPieceTakerIdx !== null) {
@@ -377,7 +377,7 @@ export class Match {
         // 3. Calculate Tactical Anchors
         const targets = this.status === MatchStatus.KICKOFF 
             ? this.initialAnchors 
-            : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors);
+            : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles);
 
         // 4. Basic Ball Interaction (Dribbling, Passing, & Shooting)
         if (possessionIdx !== null) {
@@ -391,13 +391,37 @@ export class Match {
             const speed = Math.sqrt(vx * vx + vy * vy);
             const lead = 0.6; 
             const stats = this.playerStats[possessionIdx] || { passing: 50, finishing: 50, tackling: 50, dribbling: 50, vision: 50, composure: 50 };
+            const role = this.playerRoles[possessionIdx] || '';
             
             // AI Action Decisions
             const attackDir = this.getAttackDir(team);
             const inFinalThird = attackDir === 1 ? px > 85 : px < 20;
+            
+            let basePassChance = 0.9;
+            let baseShotChance = 0.55;
+            
+            // Apply Tactical Role Intent Modifiers
+            if (role === 'TM') {
+                // Target Man: Wait for support (hold up ball)
+                basePassChance *= 0.3; 
+                baseShotChance *= 0.6;
+            } else if (role === 'IF') {
+                // Inverted Forward: Selfish, looking to shoot
+                basePassChance *= 0.7;
+                baseShotChance *= 1.5;
+            } else if (role === 'BWM' || role === 'CB') {
+                // Defensive player: Lay it off quickly, rarely shoot
+                basePassChance *= 1.5;
+                baseShotChance *= 0.1;
+            } else if (role === 'W') {
+                // Winger: Pass (cross) when wide
+                basePassChance *= 1.3;
+                baseShotChance *= 0.4;
+            }
+
             // Use dt-scaled probabilities so decisions remain stable across render speeds.
-            const randomPassChance = this.rollChancePerSecond(0.9, dt);
-            const randomShotChance = this.rollChancePerSecond(0.55, dt);
+            const randomPassChance = this.rollChancePerSecond(basePassChance, dt);
+            const randomShotChance = this.rollChancePerSecond(baseShotChance, dt);
 
             if (inFinalThird && randomShotChance) {
                 // Shooting
