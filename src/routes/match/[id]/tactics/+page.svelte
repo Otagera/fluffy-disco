@@ -17,6 +17,14 @@
   let tacticalPositions = $state<Record<number, {x: number, y: number}>>({});
   let tacticalRoles = $state<Record<number, string>>({});
 
+  const styleDescriptions: Record<string, string> = {
+    'Tiki-Taka': 'Fluid attacking shape. Players drift to offer short passing lanes.',
+    'Gegenpress': 'Aggressive swarm pressing. High stamina drain, leaves gaps if bypassed.',
+    'Route One': 'Immediate vertical push. Players sprint forward directly.',
+    'Park the Bus': 'Deep, rigid defensive line. No pressing until the final third.',
+    'Fluid Counter': 'Balanced pressing with dynamic attacking movement.'
+  };
+
   onMount(() => {
     window.scrollTo(0, 0);
   });
@@ -71,21 +79,24 @@
       <p class="text-xs font-black subtle uppercase tracking-widest mb-1">HOME TEAM</p>
       <h1 class="text-3xl font-black mb-3">{data.homeTeam.name}</h1>
       {#if isHome}
-        <div class="flex flex-wrap gap-2 justify-center md:justify-start">
-          <select bind:value={currentTeam.tacticalStyle} class="bg-light-bg border border-light-border text-sm font-bold px-3 py-2 rounded">
-            <option>Tiki-Taka</option>
-            <option>Gegenpress</option>
-            <option>Route One</option>
-            <option>Park the Bus</option>
-            <option>Fluid Counter</option>
-          </select>
-          <select bind:value={currentTeam.mentality} class="bg-light-bg border-l-4 border-l-primary border border-light-border text-sm font-bold px-3 py-2 rounded">
-            <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
-            <option value="DEFENSIVE">Defensive</option>
-            <option value="BALANCED">Balanced</option>
-            <option value="ATTACKING">Attacking</option>
-            <option value="ULTRA_ATTACKING">Ultra Attacking</option>
-          </select>
+        <div class="flex flex-col items-center md:items-start gap-2">
+          <div class="flex flex-wrap gap-2 justify-center md:justify-start">
+            <select bind:value={currentTeam.tacticalStyle} class="bg-light-bg border border-light-border text-sm font-bold px-3 py-2 rounded">
+              <option>Tiki-Taka</option>
+              <option>Gegenpress</option>
+              <option>Route One</option>
+              <option>Park the Bus</option>
+              <option>Fluid Counter</option>
+            </select>
+            <select bind:value={currentTeam.mentality} class="bg-light-bg border-l-4 border-l-primary border border-light-border text-sm font-bold px-3 py-2 rounded">
+              <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
+              <option value="DEFENSIVE">Defensive</option>
+              <option value="BALANCED">Balanced</option>
+              <option value="ATTACKING">Attacking</option>
+              <option value="ULTRA_ATTACKING">Ultra Attacking</option>
+            </select>
+          </div>
+          <p class="text-xs text-light-subtle italic">{styleDescriptions[currentTeam.tacticalStyle]}</p>
         </div>
       {:else}
         <div class="text-sm font-bold mb-1">{data.homeTeam.tacticalStyle} • {data.homeTeam.formation}</div>
@@ -99,21 +110,24 @@
       <p class="text-xs font-black subtle uppercase tracking-widest mb-1">AWAY TEAM</p>
       <h1 class="text-3xl font-black mb-3">{data.awayTeam.name}</h1>
       {#if !isHome}
-        <div class="flex flex-wrap gap-2 justify-center md:justify-end">
-          <select bind:value={currentTeam.mentality} class="bg-light-bg border-l-4 border-l-primary border border-light-border text-sm font-bold px-3 py-2 rounded">
-            <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
-            <option value="DEFENSIVE">Defensive</option>
-            <option value="BALANCED">Balanced</option>
-            <option value="ATTACKING">Attacking</option>
-            <option value="ULTRA_ATTACKING">Ultra Attacking</option>
-          </select>
-          <select bind:value={currentTeam.tacticalStyle} class="bg-light-bg border border-light-border text-sm font-bold px-3 py-2 rounded">
-            <option>Tiki-Taka</option>
-            <option>Gegenpress</option>
-            <option>Route One</option>
-            <option>Park the Bus</option>
-            <option>Fluid Counter</option>
-          </select>
+        <div class="flex flex-col items-center md:items-end gap-2">
+          <div class="flex flex-wrap gap-2 justify-center md:justify-end">
+            <select bind:value={currentTeam.mentality} class="bg-light-bg border-l-4 border-l-primary border border-light-border text-sm font-bold px-3 py-2 rounded">
+              <option value="ULTRA_DEFENSIVE">Ultra Defensive</option>
+              <option value="DEFENSIVE">Defensive</option>
+              <option value="BALANCED">Balanced</option>
+              <option value="ATTACKING">Attacking</option>
+              <option value="ULTRA_ATTACKING">Ultra Attacking</option>
+            </select>
+            <select bind:value={currentTeam.tacticalStyle} class="bg-light-bg border border-light-border text-sm font-bold px-3 py-2 rounded">
+              <option>Tiki-Taka</option>
+              <option>Gegenpress</option>
+              <option>Route One</option>
+              <option>Park the Bus</option>
+              <option>Fluid Counter</option>
+            </select>
+          </div>
+          <p class="text-xs text-light-subtle italic">{styleDescriptions[currentTeam.tacticalStyle]}</p>
         </div>
       {:else}
         <div class="text-sm font-bold mb-1">{data.awayTeam.tacticalStyle} • {data.awayTeam.formation}</div>

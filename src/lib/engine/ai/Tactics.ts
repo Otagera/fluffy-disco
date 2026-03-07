@@ -37,11 +37,13 @@ export class TacticalManager {
      * @param ballBuffer Flat ball memory
      * @param baseFormations Standard 4-4-2 or similar grid anchors
      * @param roles Array of tactical roles for each player
+     * @param styles Array of tactical styles [homeStyle, awayStyle]
      */
     calculateAnchors(
         ballBuffer: Float32Array, 
         baseFormations: { x: number, y: number }[],
-        roles?: string[]
+        roles?: string[],
+        styles?: string[]
     ): { x: number, y: number }[] {
         const anchors: { x: number, y: number }[] = [];
         const bx = ballBuffer[BALL_OFFSET_X];
@@ -49,55 +51,67 @@ export class TacticalManager {
         const bvx = ballBuffer[BALL_OFFSET_VX];
         const bvy = ballBuffer[BALL_OFFSET_VY];
 
-        // 1. Identify which defender is closest to the ball for each team
-        let closestHomeIdx = -1;
-        let closestAwayIdx = -1;
-        let minHomeDistSq = Infinity;
-        let minAwayDistSq = Infinity;
+        // 1. Identify distances to ball for pressing logic
+        const homeDistances: { idx: number, distSq: number }[] = [];
+        const awayDistances: { idx: number, distSq: number }[] = [];
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
-            // GKs shouldn't press the ball into the outfield
-            if (i === 0 || i === 11) continue;
-
+            if (i === 0 || i === 11) continue; // Skip GKs
             const base = baseFormations[i];
+            // Use actual player positions if available in a real system, but base formation anchors work for structural pressing
             const distSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
             
             if (i < 11) {
-                if (distSq < minHomeDistSq) {
-                    minHomeDistSq = distSq;
-                    closestHomeIdx = i;
-                }
+                homeDistances.push({ idx: i, distSq });
             } else {
-                if (distSq < minAwayDistSq) {
-                    minAwayDistSq = distSq;
-                    closestAwayIdx = i;
-                }
+                awayDistances.push({ idx: i, distSq });
             }
         }
+
+        homeDistances.sort((a, b) => a.distSq - b.distSq);
+        awayDistances.sort((a, b) => a.distSq - b.distSq);
+
+        const homeStyle = styles ? styles[0] : 'Balanced';
+        const awayStyle = styles ? styles[1] : 'Balanced';
+
+        // Determine how many players should press based on tactical style
+        const getPressingCount = (style: string, inDefensiveThird: boolean) => {
+            if (style === 'Gegenpress') return 3;
+            if (style === 'Park the Bus') return inDefensiveThird ? 2 : 0;
+            return 1; // Default
+        };
+
+        const homeInDefensiveThird = bx < 35;
+        const awayInDefensiveThird = bx > 70;
+        
+        const homePressCount = getPressingCount(homeStyle, homeInDefensiveThird);
+        const awayPressCount = getPressingCount(awayStyle, awayInDefensiveThird);
+
+        const homePressers = new Set(homeDistances.slice(0, homePressCount).map(d => d.idx));
+        const awayPressers = new Set(awayDistances.slice(0, awayPressCount).map(d => d.idx));
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
             const base = baseFormations[i];
             const team = i < 11 ? 0 : 1;
             const isPossession = this.possessionTeam === team;
             const role = roles ? roles[i] : '';
+            const style = team === 0 ? homeStyle : awayStyle;
 
             let tx = base.x;
             let ty = base.y;
 
             // 2. Goalkeeper Logic (Lock to penalty area)
             if (i === 0 || i === 11 || role === 'GK') {
-                // Keep GK close to their specific goal line based on their base formation anchor
-                // The base.x handles which side of the pitch they are on (swaps at half time)
                 tx = base.x; 
-                ty = 34 + (by - 34) * 0.2; // 34 is center Y. Move max 20% towards ball Y
+                ty = 34 + (by - 34) * 0.2;
                 anchors.push({ x: tx, y: ty });
                 continue;
             }
 
             // 3. Pressing Logic
-            let isPressing = (team === 0 && i === closestHomeIdx) || (team === 1 && i === closestAwayIdx);
+            let isPressing = (team === 0 && homePressers.has(i)) || (team === 1 && awayPressers.has(i));
             
-            // Ball-Winning Midfielder (BWM) has an increased pressing range/aggressiveness
+            // Ball-Winning Midfielder (BWM) has an increased pressing range
             if (role === 'BWM' && !isPossession && !isPressing) {
                 const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
                 if (distToBallSq < 400) { // Within 20m, BWM joins the press
@@ -107,11 +121,7 @@ export class TacticalManager {
 
             if (isPressing && !isPossession) {
                 // Predictive Interception (Pursuit)
-                // Calculate distance to ball using the pre-calculated minDistSq
-                const distToBallSq = (team === 0 && i === closestHomeIdx) ? minHomeDistSq : 
-                                     (team === 1 && i === closestAwayIdx) ? minAwayDistSq :
-                                     ((base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by));
-                
+                const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
                 const distToBall = Math.sqrt(distToBallSq);
                 
                 // Estimate time to reach ball assuming ~8m/s sprint. Cap at 1.5 seconds.
@@ -121,13 +131,16 @@ export class TacticalManager {
                 ty = by + (bvy * lookaheadTime);
             } else if (isPossession) {
                 // Possession: Offensive push + better spacing (Expansion)
-                // Home team (0) attacks towards X=105, Away team (1) towards X=0
                 const attackDir = team === 0 ? 1 : -1;
                 const progress = team === 0 ? bx / 105 : (105 - bx) / 105;
                 const inFinalThird = team === 0 ? bx > 70 : bx < 35;
                 
                 // Shift formation based on ball progress
-                let forwardPush = 40 * progress;
+                let forwardPushMultiplier = 40;
+                if (style === 'Route One') forwardPushMultiplier = 60; // Push extremely high immediately
+                if (style === 'Park the Bus') forwardPushMultiplier = 20; // Hesitant to commit forward
+                
+                let forwardPush = forwardPushMultiplier * progress;
                 
                 // BWM stays deeper in attack
                 if (role === 'BWM') forwardPush *= 0.3;
@@ -138,18 +151,24 @@ export class TacticalManager {
                 const centerY = 34;
                 let verticalExpansion = 1.2;
                 
-                if (role === 'W') {
-                    // Wingers hug the touchline
-                    verticalExpansion = 1.5;
+                if (style === 'Tiki-Taka' || style === 'Fluid Counter') {
+                    // Fluidity: Allow players to drift towards the ball's Y to offer short passes
+                    verticalExpansion = 1.0; 
+                    ty = base.y + (by - base.y) * 0.4;
+                } else {
+                    ty = centerY + (base.y - centerY) * verticalExpansion;
                 }
                 
-                ty = centerY + (base.y - centerY) * verticalExpansion;
+                if (role === 'W') {
+                    verticalExpansion = 1.5;
+                    ty = centerY + (base.y - centerY) * verticalExpansion; // Wingers always stay wide
+                }
                 
                 if (role === 'IF' && inFinalThird) {
                     // Inverted Forwards cut inside in the final third
                     ty = centerY + (ty - centerY) * 0.4; // Squeeze towards center
                     tx += attackDir * 5; // Push a bit further up into the box
-                } else if (role !== 'W') {
+                } else if (role !== 'W' && style !== 'Tiki-Taka' && style !== 'Fluid Counter') {
                     // Standard players pull slightly towards ball Y to stay involved
                     ty = ty + (by - ty) * 0.2;
                 }
@@ -161,8 +180,16 @@ export class TacticalManager {
                 
             } else {
                 // Defending: Contraction + shift towards ball
-                tx = base.x + (bx - base.x) * 0.2 + (team === 0 ? -5 : 5);
-                ty = base.y + (by - base.y) * 0.2;
+                let dropBack = (bx - base.x) * 0.2;
+                let contractY = (by - base.y) * 0.2;
+
+                if (style === 'Park the Bus') {
+                    dropBack = (team === 0 ? -15 : 15); // Drop deep rigidly
+                    contractY = 0; // Maintain rigid horizontal lines
+                }
+
+                tx = base.x + dropBack + (team === 0 ? -5 : 5);
+                ty = base.y + contractY;
                 
                 if (role === 'BWM') {
                     // BWM drops back slightly more to protect backline

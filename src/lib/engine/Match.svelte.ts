@@ -52,6 +52,7 @@ export class Match {
     private initialAnchors: { x: number, y: number }[] = [];
     private playerStats: any[] = [];
     private playerRoles: string[] = [];           // corresponding roles for each stat index
+    private tacticalStyles: string[] = ['Balanced', 'Balanced']; // [HomeStyle, AwayStyle]
 
     // bench storage (also index-aligned)
     public benchStats: any[] = [];
@@ -86,12 +87,9 @@ export class Match {
 
     /**
      * Initializes the match with starting positions (e.g., Kick-off).
-     */
-    /**
-     * Initializes the match with starting positions (e.g., Kick-off).
      * Optionally supply parallel roles array that aligns with stats.
      */
-    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[]) {
+    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[], styles?: string[]) {
         this.initialAnchors = startingPositions;
         if (stats && stats.length > 0) {
             this.playerStats = stats;
@@ -105,6 +103,10 @@ export class Match {
             this.playerRoles = roles;
         } else if (this.playerRoles.length === 0) {
             this.playerRoles = new Array(this.playerStats.length).fill('');
+        }
+
+        if (styles && styles.length === 2) {
+            this.tacticalStyles = styles;
         }
         
         this.memory.initialize(startingPositions);
@@ -180,7 +182,7 @@ export class Match {
             
             // Calculate Tactical Anchors for everyone to settle
             this.tactics.updatePhase(this.memory.ballBuffer, this.setPieceTakerIdx);
-            const targets = this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles);
+            const targets = this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles, this.tacticalStyles);
             
             // Override taker's target to be exactly the ball's position
             if (this.setPieceTakerIdx !== null) {
@@ -377,7 +379,7 @@ export class Match {
         // 3. Calculate Tactical Anchors
         const targets = this.status === MatchStatus.KICKOFF 
             ? this.initialAnchors 
-            : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles);
+            : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles, this.tacticalStyles);
 
         // 4. Basic Ball Interaction (Dribbling, Passing, & Shooting)
         if (possessionIdx !== null) {
