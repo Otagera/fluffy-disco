@@ -124,7 +124,10 @@ export class TacticalManager {
             const isPossession = this.possessionTeam === team;
             const role = roles ? roles[i] : '';
             const style = team === 0 ? homeStyle : awayStyle;
-            const stats = playerStats ? playerStats[i] : { anticipation: 50, positioning: 50, marking: 50 };
+            const stats = playerStats && playerStats[i] ? playerStats[i] : {};
+            const anticipation = stats.anticipation ?? 50;
+            const positioning = stats.positioning ?? 50;
+            const marking = stats.marking ?? 50;
 
             let tx = base.x;
             let ty = base.y;
@@ -157,7 +160,7 @@ export class TacticalManager {
                 const distToBall = Math.sqrt(distToBallSq);
                 
                 // Anticipation affects pursuit tracking
-                const pursuitAggression = 1.0 + (stats.anticipation / 100) * 0.5;
+                const pursuitAggression = 1.0 + (anticipation / 100) * 0.5;
                 const lookaheadTime = Math.min(distToBall / (8.0 * pursuitAggression), 1.5);
                 
                 tx = bx + (bvx * lookaheadTime);
@@ -191,15 +194,15 @@ export class TacticalManager {
                 // PENETRATION RUNS (Runners)
                 if (['W', 'IF', 'ST', 'AF'].includes(role)) {
                     // Push the offside line based on Anticipation and Positioning
-                    const offsideBuffer = 1.0 + (1.0 - stats.anticipation / 100) * 2.0; // High ant = run closer to line
+                    const offsideBuffer = 1.0 + (1.0 - anticipation / 100) * 2.0; // High ant = run closer to line
                     const potentialRunX = activeOffsideLine - (attackDir * offsideBuffer);
                     
                     // Only make the run if we are in the opponent's half
                     const inOpponentHalf = team === 0 ? bx > 52.5 : bx < 52.5;
                     
-                    if (inOpponentHalf && Math.random() < (stats.positioning / 100)) {
-                        // Blend between base position and the deep run
-                        const runCommitment = 0.5 + (stats.anticipation / 200);
+                    if (inOpponentHalf) {
+                        // Blend between base position and the deep run smoothly
+                        const runCommitment = (positioning / 100) * (0.5 + (anticipation / 200));
                         tx = tx + (potentialRunX - tx) * runCommitment;
                     }
                 }
@@ -229,7 +232,7 @@ export class TacticalManager {
                 // SUPPORT DROPS (Connectors)
                 if (['AM', 'DLP', 'B2B', 'WM'].includes(role)) {
                     // Move towards the ball Y to offer a passing lane
-                    const supportDrift = (stats.positioning / 100) * 0.8;
+                    const supportDrift = (positioning / 100) * 0.8;
                     ty = ty + (by - ty) * supportDrift;
 
                     // Drop into pocket if too close to defenders
