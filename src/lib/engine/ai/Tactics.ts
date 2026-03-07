@@ -111,11 +111,11 @@ export class TacticalManager {
         const homePressers = new Set(homeDistances.slice(0, homePressCount).map(d => d.idx));
         const awayPressers = new Set(awayDistances.slice(0, awayPressCount).map(d => d.idx));
 
-        // If the ball is loose, the attacking team's closest player MUST also press (recover)
-        if (isBallLoose && this.possessionTeam !== null) {
-            const bestDist = this.possessionTeam === 0 ? homeDistances[0] : awayDistances[0];
-            if (this.possessionTeam === 0) homePressers.add(bestDist.idx);
-            else awayPressers.add(bestDist.idx);
+        // If the ball is loose, the closest player from BOTH teams MUST press (recover)
+        // regardless of who nominally has possession, to prevent dead zones.
+        if (isBallLoose) {
+            if (homeDistances.length > 0) homePressers.add(homeDistances[0].idx);
+            if (awayDistances.length > 0) awayPressers.add(awayDistances[0].idx);
         }
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
