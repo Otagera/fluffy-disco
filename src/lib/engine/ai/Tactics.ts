@@ -20,7 +20,7 @@ export class TacticalManager {
     updatePhase(ballBuffer: Float32Array, possessionPlayerIdx: number | null) {
         if (possessionPlayerIdx === null) {
             this.phase = PlayPhase.TRANSITION;
-            this.possessionTeam = null;
+            // Do not clear this.possessionTeam so the attacking team doesn't instantly retreat when a pass is in the air.
         } else {
             const team = possessionPlayerIdx < 11 ? 0 : 1;
             if (team !== this.possessionTeam) {
