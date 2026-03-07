@@ -1,16 +1,16 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { MatchRenderer } from '$lib/renderer/PixiApp';
-    import type { Match } from '$lib/engine/Match.svelte.ts';
+    import type { MatchMemory } from '$lib/engine/core/MatchMemory';
 
-    let { match, labels }: { match: Match, labels: string[] } = $props();
+    let { memory, labels }: { memory: MatchMemory, labels: string[] } = $props();
     
     let canvas: HTMLCanvasElement;
     let renderer: MatchRenderer;
 
     onMount(() => {
-        if (canvas && match) {
-            renderer = new MatchRenderer(canvas, match.memory, labels);
+        if (canvas && memory) {
+            renderer = new MatchRenderer(canvas, memory, labels);
         }
     });
 

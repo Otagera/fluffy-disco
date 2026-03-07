@@ -83,3 +83,24 @@ export class MatchRecorder {
         }
     }
 }
+
+export async function downloadReplay(matchId: string) {
+    try {
+        const replay = await browserDB.replays.where({ matchId }).first();
+        if (!replay) {
+            console.error('No replay found for match:', matchId);
+            return;
+        }
+
+        const url = URL.createObjectURL(replay.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `replay-${matchId}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error('Failed to download replay', e);
+    }
+}

@@ -293,7 +293,7 @@
   
   <!-- Main Pitch Area -->
   <main class="flex-1 flex items-center justify-center">
-    <PixiPitch {match} labels={playerLabels} />
+    <PixiPitch memory={match.memory} labels={playerLabels} />
   </main>
 
   <!-- Invisible Hover Zones to reveal controls in Cinematic mode -->
@@ -517,16 +517,37 @@
           </div>
 
           <!-- Form submission to process match results -->
-          <form method="POST" action="?/processMatch" use:enhance>
+          <form method="POST" action="?/processMatch" use:enhance class="flex flex-col gap-3">
             <input type="hidden" name="homeScore" value={finalHomeScore} />
             <input type="hidden" name="awayScore" value={finalAwayScore} />
             <input type="hidden" name="matchAnalytics" value={JSON.stringify(match.analytics)} />
+            
             <button 
               type="submit"
               class="btn-primary w-full py-5 text-xl font-black tracking-widest shadow-2xl ring-8 ring-primary/10 rounded-3xl uppercase transition-transform hover:scale-[1.02] active:scale-[0.98]" 
             >
               Return to Dashboard
             </button>
+            
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <button 
+                type="button"
+                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest"
+                onclick={() => window.location.href = `/replay/${matchIdStr}`}
+              >
+                Watch Replay
+              </button>
+              <button 
+                type="button"
+                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest"
+                onclick={async () => {
+                  const { downloadReplay } = await import('$lib/game/BinaryRecorder');
+                  downloadReplay(matchIdStr);
+                }}
+              >
+                Export for AI
+              </button>
+            </div>
           </form>
         </div>
       </div>

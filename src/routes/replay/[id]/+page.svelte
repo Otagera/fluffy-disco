@@ -1,0 +1,158 @@
+<script lang="ts">
+    import { onMount, onDestroy } from 'svelte';
+    import { browserDB } from '$lib/data/dexie';
+    import { MatchMemory } from '$lib/engine/core/MatchMemory';
+    import { 
+        PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, 
+        BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z 
+    } from '$lib/engine/core/constants';
+    import PixiPitch from '$lib/components/PixiPitch.svelte';
+    import type { PageData } from './$types';
+
+    let { data }: { data: PageData } = $props();
+
+    let memory = new MatchMemory();
+    memory.initialize([]); // setup buffers
+    
+    let combined: Float32Array | null = null;
+    let totalFrames = $state(0);
+    let currentFrame = $state(0);
+    let isPlaying = $state(false);
+    let fps = 10;
+    
+    let loading = $state(true);
+    let errorMsg = $state('');
+
+    let labels = Array.from({length: 22}, (_, i) => ((i%11)+1).toString());
+
+    onMount(async () => {
+        try {
+            const replay = await browserDB.replays.where({ matchId: data.id }).first();
+            if (!replay) {
+                errorMsg = 'Replay not found in local database.';
+                loading = false;
+                return;
+            }
+            
+            fps = replay.fps;
+            const arrayBuffer = await replay.blob.arrayBuffer();
+            combined = new Float32Array(arrayBuffer);
+            totalFrames = replay.frameCount;
+            
+            applyFrame(0);
+            loading = false;
+        } catch (e: any) {
+            errorMsg = e.message;
+            loading = false;
+        }
+    });
+
+    let animationId: number;
+    let lastTick = 0;
+    
+    function loop(time: number) {
+        if (!isPlaying) return;
+        
+        if (time - lastTick > 1000 / fps) {
+            if (currentFrame < totalFrames - 1) {
+                currentFrame++;
+                applyFrame(currentFrame);
+            } else {
+                isPlaying = false;
+            }
+            lastTick = time;
+        }
+        animationId = requestAnimationFrame(loop);
+    }
+
+    $effect(() => {
+        if (isPlaying) {
+            lastTick = performance.now();
+            animationId = requestAnimationFrame(loop);
+        } else {
+            if (animationId) cancelAnimationFrame(animationId);
+        }
+    });
+
+    onDestroy(() => {
+        if (animationId) cancelAnimationFrame(animationId);
+    });
+
+    function applyFrame(idx: number) {
+        if (!combined) return;
+        const offset = idx * 48;
+        
+        memory.ballBuffer[BALL_OFFSET_X] = combined[offset + 1];
+        memory.ballBuffer[BALL_OFFSET_Y] = combined[offset + 2];
+        memory.ballBuffer[BALL_OFFSET_Z] = combined[offset + 3];
+
+        for (let i = 0; i < PLAYER_COUNT; i++) {
+            const memOffset = i * PLAYER_STRIDE;
+            const fOffset = offset + 4 + (i * 2);
+            memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOffset];
+            memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOffset + 1];
+        }
+    }
+
+    function handleSeek(e: Event) {
+        const val = parseInt((e.target as HTMLInputElement).value, 10);
+        currentFrame = val;
+        applyFrame(currentFrame);
+    }
+</script>
+
+<div class="min-h-screen bg-light-bg flex flex-col items-center p-8">
+    <div class="w-full max-w-5xl mb-6 flex justify-between items-center">
+        <h1 class="text-3xl font-black uppercase tracking-tighter">Match Replay</h1>
+        <a href="/" class="btn-secondary py-2 px-6 uppercase tracking-widest text-xs font-bold">Back to Hub</a>
+    </div>
+
+    {#if loading}
+        <div class="flex-1 flex items-center justify-center">
+            <div class="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        </div>
+    {:else if errorMsg}
+        <div class="card p-8 text-center text-danger">
+            <h2 class="text-xl font-bold">Failed to Load Replay</h2>
+            <p>{errorMsg}</p>
+        </div>
+    {:else}
+        <div class="w-full flex-1 flex flex-col">
+            <!-- Pitch -->
+            <div class="flex-1 w-full flex items-center justify-center">
+                <PixiPitch {memory} {labels} />
+            </div>
+
+            <!-- Controls -->
+            <div class="bg-white border border-light-border p-6 rounded-2xl shadow-xl w-full max-w-5xl mx-auto mt-6 flex flex-col gap-4">
+                <div class="flex items-center gap-4">
+                    <button 
+                        class="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+                        onclick={() => isPlaying = !isPlaying}
+                    >
+                        {#if isPlaying}
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        {:else}
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        {/if}
+                    </button>
+
+                    <div class="flex-1 flex flex-col">
+                        <div class="flex justify-between text-xs font-black subtle uppercase tracking-widest mb-2">
+                            <span>Frame {currentFrame}</span>
+                            <span>{Math.floor((currentFrame / fps) / 60)}:{(Math.floor(currentFrame / fps) % 60).toString().padStart(2, '0')}</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min="0" 
+                            max={totalFrames - 1} 
+                            value={currentFrame} 
+                            oninput={handleSeek}
+                            class="w-full accent-primary"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+</div>
