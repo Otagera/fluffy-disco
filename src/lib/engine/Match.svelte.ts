@@ -191,7 +191,8 @@ export class Match {
                 this.offsideLineTeam1,
                 this.playerStats,
                 this.memory.playerBuffer,
-                this.setPieceTakerIdx === null
+                this.setPieceTakerIdx === null,
+                this.currentHalf
             );
             
             // Override taker's target to be exactly the ball's position
@@ -398,7 +399,8 @@ export class Match {
                 this.offsideLineTeam1,
                 this.playerStats,
                 this.memory.playerBuffer,
-                possessionIdx === null
+                possessionIdx === null,
+                this.currentHalf
             );
 
         // 4. Basic Ball Interaction (Dribbling, Passing, & Shooting)

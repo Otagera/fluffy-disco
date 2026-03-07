@@ -56,7 +56,8 @@ export class TacticalManager {
         offsideLineTeam1: number = 52.5,
         playerStats?: any[],
         playerBuffer?: Float32Array,
-        isBallLoose: boolean = true
+        isBallLoose: boolean = true,
+        currentHalf: number = 1
     ): { x: number, y: number }[] {
         const anchors: { x: number, y: number }[] = [];
         const bx = ballBuffer[BALL_OFFSET_X];
@@ -132,6 +133,11 @@ export class TacticalManager {
             let tx = base.x;
             let ty = base.y;
 
+            let attackDir = team === 0 ? 1 : -1;
+            if (currentHalf === 2) {
+                attackDir *= -1;
+            }
+
             // 2. Goalkeeper Logic (Lock to penalty area)
             if (i === 0 || i === 11 || role === 'GK') {
                 tx = base.x; 
@@ -167,9 +173,8 @@ export class TacticalManager {
                 ty = by + (bvy * lookaheadTime);
             } else if (isPossession) {
                 // Possession: Penetration, Support, and Overlaps
-                const attackDir = team === 0 ? 1 : -1;
-                const progress = team === 0 ? bx / 105 : (105 - bx) / 105;
-                const inFinalThird = team === 0 ? bx > 70 : bx < 35;
+                const progress = attackDir === 1 ? bx / 105 : (105 - bx) / 105;
+                const inFinalThird = attackDir === 1 ? bx > 70 : bx < 35;
                 
                 let forwardPushMultiplier = 40;
                 if (style === 'Route One') forwardPushMultiplier = 60;
@@ -198,7 +203,7 @@ export class TacticalManager {
                     const potentialRunX = activeOffsideLine - (attackDir * offsideBuffer);
                     
                     // Only make the run if we are in the opponent's half
-                    const inOpponentHalf = team === 0 ? bx > 52.5 : bx < 52.5;
+                    const inOpponentHalf = attackDir === 1 ? bx > 52.5 : bx < 52.5;
                     
                     if (inOpponentHalf) {
                         // Blend between base position and the deep run smoothly
@@ -262,14 +267,15 @@ export class TacticalManager {
 
                 if (style === 'Park the Bus') {
                     dropBack = (team === 0 ? -15 : 15);
+                    if (currentHalf === 2) dropBack *= -1;
                     contractY = 0;
                 }
 
-                tx = base.x + dropBack + (team === 0 ? -5 : 5);
+                tx = base.x + dropBack + (attackDir === 1 ? -5 : 5);
                 ty = base.y + contractY;
                 
                 if (role === 'BWM') {
-                    tx += (team === 0 ? -3 : 3);
+                    tx += (attackDir === 1 ? -3 : 3);
                 }
             }
 
