@@ -14,11 +14,15 @@ export function saveNewGameToDB(save: SaveGame) {
     const insertPlayer = db.prepare(`
         INSERT INTO players (
             id, teamId, name, squadNumber, age, role, potential, overall, condition,
+            matchSharpness, morale, preferredFoot, wage, contractExpires,
+            injuryType, injuryWeeksRemaining,
             passing, finishing, tackling, dribbling, crossing, marking,
             vision, composure, decisions, positioning, concentration, aggression, anticipation, workRate,
-            pace, acceleration, stamina, strength, reflexes, handling
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pace, acceleration, stamina, strength, reflexes, handling,
+            injuryProneness, consistency, dirtiness, importantMatches
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const insertPlayerStats = db.prepare('INSERT INTO player_stats (playerId) VALUES (?)');
     const insertFixture = db.prepare('INSERT INTO fixtures (id, leagueId, week, homeTeamId, awayTeamId, played) VALUES (?, ?, ?, ?, ?, ?)');
     const insertStanding = db.prepare('INSERT INTO standings (leagueId, teamId) VALUES (?, ?)');
     const insertGameState = db.prepare('INSERT OR REPLACE INTO gamestate (id, managerName, managerTeamId, currentSeason, currentDate, currentWeek) VALUES (1, ?, ?, ?, ?, ?)');
@@ -47,11 +51,15 @@ export function saveNewGameToDB(save: SaveGame) {
             const teamId = Object.values(save.teams).find(t => t.players.includes(p.id))?.id || null;
             insertPlayer.run(
                 p.id, teamId, p.name, p.number || null, p.age, p.role, p.potential, p.overall || 50, p.condition,
+                p.matchSharpness ?? 50, p.morale ?? 50, p.preferredFoot ?? 'Right', p.wage ?? 0, p.contractExpires ?? null,
+                p.injury?.type || null, p.injury?.weeksRemaining || 0,
                 p.attributes.passing, p.attributes.finishing, p.attributes.tackling, p.attributes.dribbling, p.attributes.crossing, p.attributes.marking,
                 p.attributes.vision, p.attributes.composure, p.attributes.decisions, p.attributes.positioning, p.attributes.concentration, p.attributes.aggression, p.attributes.anticipation, p.attributes.workRate,
                 p.attributes.pace, p.attributes.acceleration, p.attributes.stamina, p.attributes.strength,
-                p.attributes.reflexes, p.attributes.handling
+                p.attributes.reflexes, p.attributes.handling,
+                p.hiddenTraits?.injuryProneness ?? 50, p.hiddenTraits?.consistency ?? 50, p.hiddenTraits?.dirtiness ?? 50, p.hiddenTraits?.importantMatches ?? 50
             );
+            insertPlayerStats.run(p.id);
         }
 
         for (const f of save.fixtures) {
