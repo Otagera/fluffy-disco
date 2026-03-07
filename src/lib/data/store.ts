@@ -10,7 +10,13 @@ initializeDatabase();
 
 export function saveNewGameToDB(save: SaveGame) {
     const insertLeague = db.prepare('INSERT INTO leagues (id, name, level) VALUES (?, ?, ?)');
-    const insertTeam = db.prepare('INSERT INTO teams (id, name, leagueId, reputation, overall, tacticalStyle, mentality, formation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insertTeam = db.prepare(`
+        INSERT INTO teams (
+            id, name, leagueId, reputation, overall, tacticalStyle, mentality, formation,
+            stadiumName, stadiumCapacity, primaryColor, secondaryColor,
+            transferBudget, wageBudget, managerConfidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
     const insertPlayer = db.prepare(`
         INSERT INTO players (
             id, teamId, name, squadNumber, age, role, potential, overall, condition,
@@ -43,7 +49,11 @@ export function saveNewGameToDB(save: SaveGame) {
         for (const t of Object.values(save.teams)) {
             // Find league for team
             const league = save.leagues.find(l => l.teams.includes(t.id));
-            insertTeam.run(t.id, t.name, league?.id || '', t.reputation, t.overall || 50, t.tacticalStyle, t.mentality, t.formation);
+            insertTeam.run(
+                t.id, t.name, league?.id || '', t.reputation, t.overall || 50, t.tacticalStyle, t.mentality, t.formation,
+                t.stadiumName ?? null, t.stadiumCapacity ?? null, t.primaryColor ?? null, t.secondaryColor ?? null,
+                t.transferBudget ?? 0, t.wageBudget ?? 0, t.managerConfidence ?? 50
+            );
         }
 
         for (const p of Object.values(save.players)) {
