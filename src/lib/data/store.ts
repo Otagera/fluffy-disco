@@ -1,41 +1,180 @@
 import fs from 'fs';
 import path from 'path';
-import type { SaveGame, Standing, Fixture } from './types';
+import type { SaveGame, Standing, Fixture, PlayerProfile, TeamProfile, League } from './types';
 import { generateFixtures } from './generator';
 import { calculatePlayerOverall, calculateTeamOverall } from './ratings';
+import { db, initializeDatabase } from './db';
 
-const SAVE_FILE_PATH = path.join(process.cwd(), 'data', 'savegame.json');
+// Ensure DB is initialized
+initializeDatabase();
+
+export function saveNewGameToDB(save: SaveGame) {
+    const insertLeague = db.prepare('INSERT INTO leagues (id, name, level) VALUES (?, ?, ?)');
+    const insertTeam = db.prepare('INSERT INTO teams (id, name, leagueId, reputation, overall, tacticalStyle, mentality, formation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insertPlayer = db.prepare(`
+        INSERT INTO players (
+            id, teamId, name, squadNumber, age, role, potential, overall, condition,
+            passing, finishing, tackling, dribbling, crossing, marking,
+            vision, composure, decisions, positioning, concentration, aggression, anticipation, workRate,
+            pace, acceleration, stamina, strength, reflexes, handling
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertFixture = db.prepare('INSERT INTO fixtures (id, leagueId, week, homeTeamId, awayTeamId, played) VALUES (?, ?, ?, ?, ?, ?)');
+    const insertStanding = db.prepare('INSERT INTO standings (leagueId, teamId) VALUES (?, ?)');
+    const insertGameState = db.prepare('INSERT OR REPLACE INTO gamestate (id, managerName, managerTeamId, currentSeason, currentDate, currentWeek) VALUES (1, ?, ?, ?, ?, ?)');
+
+    db.transaction(() => {
+        // Clear existing
+        db.exec('DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;');
+
+        insertGameState.run(save.manager.name, save.manager.teamId, save.currentSeason, save.currentDate, save.currentWeek);
+
+        for (const l of save.leagues) {
+            insertLeague.run(l.id, l.name, l.level);
+            for (const s of l.standings) {
+                insertStanding.run(l.id, s.teamId);
+            }
+        }
+
+        for (const t of Object.values(save.teams)) {
+            // Find league for team
+            const league = save.leagues.find(l => l.teams.includes(t.id));
+            insertTeam.run(t.id, t.name, league?.id || '', t.reputation, t.overall || 50, t.tacticalStyle, t.mentality, t.formation);
+        }
+
+        for (const p of Object.values(save.players)) {
+            // Find team for player
+            const teamId = Object.values(save.teams).find(t => t.players.includes(p.id))?.id || null;
+            insertPlayer.run(
+                p.id, teamId, p.name, p.number || null, p.age, p.role, p.potential, p.overall || 50, p.condition,
+                p.attributes.passing, p.attributes.finishing, p.attributes.tackling, p.attributes.dribbling, p.attributes.crossing, p.attributes.marking,
+                p.attributes.vision, p.attributes.composure, p.attributes.decisions, p.attributes.positioning, p.attributes.concentration, p.attributes.aggression, p.attributes.anticipation, p.attributes.workRate,
+                p.attributes.pace, p.attributes.acceleration, p.attributes.stamina, p.attributes.strength,
+                p.attributes.reflexes, p.attributes.handling
+            );
+        }
+
+        for (const f of save.fixtures) {
+            const league = save.leagues.find(l => l.teams.includes(f.homeTeamId));
+            insertFixture.run(f.id, league?.id || '', f.week, f.homeTeamId, f.awayTeamId, f.played ? 1 : 0);
+        }
+    })();
+}
 
 export function loadSaveGame(): SaveGame | null {
-  try {
-    if (fs.existsSync(SAVE_FILE_PATH)) {
-      const data = fs.readFileSync(SAVE_FILE_PATH, 'utf-8');
-      const save = JSON.parse(data) as SaveGame;
-      recalculateOverallRatings(save);
-      return save;
+    try {
+        const gs = db.prepare('SELECT * FROM gamestate WHERE id = 1').get() as any;
+        if (!gs) return null;
+
+        const save: SaveGame = {
+            manager: { name: gs.managerName, teamId: gs.managerTeamId },
+            currentSeason: gs.currentSeason,
+            currentDate: gs.currentDate,
+            currentWeek: gs.currentWeek,
+            leagues: [],
+            teams: {},
+            players: {},
+            fixtures: []
+        };
+
+        const leaguesRaw = db.prepare('SELECT * FROM leagues ORDER BY level').all() as any[];
+        for (const l of leaguesRaw) {
+            save.leagues.push({ id: l.id, name: l.name, level: l.level, teams: [], standings: [] });
+        }
+
+        const teamsRaw = db.prepare('SELECT * FROM teams').all() as any[];
+        for (const t of teamsRaw) {
+            save.teams[t.id] = {
+                id: t.id, name: t.name, reputation: t.reputation, overall: t.overall,
+                tacticalStyle: t.tacticalStyle, mentality: t.mentality, formation: t.formation,
+                players: []
+            };
+            const league = save.leagues.find(l => l.id === t.leagueId);
+            if (league) league.teams.push(t.id);
+        }
+
+        const playersRaw = db.prepare('SELECT * FROM players').all() as any[];
+        for (const p of playersRaw) {
+            const player: PlayerProfile = {
+                id: p.id, name: p.name, number: p.squadNumber, age: p.age, role: p.role, potential: p.potential, overall: p.overall, condition: p.condition,
+                injury: p.injuryType ? { type: p.injuryType, weeksRemaining: p.injuryWeeksRemaining } : null,
+                attributes: {
+                    passing: p.passing, finishing: p.finishing, tackling: p.tackling, dribbling: p.dribbling, crossing: p.crossing, marking: p.marking,
+                    vision: p.vision, composure: p.composure, decisions: p.decisions, positioning: p.positioning, concentration: p.concentration, aggression: p.aggression, anticipation: p.anticipation, workRate: p.workRate,
+                    pace: p.pace, acceleration: p.acceleration, stamina: p.stamina, strength: p.strength,
+                    reflexes: p.reflexes, handling: p.handling
+                }
+            };
+            save.players[p.id] = player;
+            if (p.teamId && save.teams[p.teamId]) {
+                save.teams[p.teamId].players.push(p.id);
+            }
+        }
+
+        const standingsRaw = db.prepare('SELECT * FROM standings').all() as any[];
+        for (const s of standingsRaw) {
+            const league = save.leagues.find(l => l.id === s.leagueId);
+            if (league) {
+                league.standings.push({
+                    teamId: s.teamId, played: s.played, won: s.won, drawn: s.drawn, lost: s.lost,
+                    goalsFor: s.goalsFor, goalsAgainst: s.goalsAgainst, points: s.points
+                });
+            }
+        }
+
+        const fixturesRaw = db.prepare('SELECT * FROM fixtures ORDER BY week').all() as any[];
+        for (const f of fixturesRaw) {
+            save.fixtures.push({
+                id: f.id, week: f.week, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId,
+                played: f.played === 1, homeScore: f.homeScore, awayScore: f.awayScore
+            });
+        }
+
+        recalculateOverallRatings(save);
+        return save;
+    } catch (error) {
+        console.error("Error loading save game from DB:", error);
+        return null;
     }
-  } catch (error) {
-    console.error("Error loading save game:", error);
-  }
-  return null;
 }
 
 export function writeSaveGame(saveData: SaveGame): boolean {
-  try {
-    const dataDir = path.dirname(SAVE_FILE_PATH);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    try {
+        const updateGameState = db.prepare('UPDATE gamestate SET currentSeason = ?, currentDate = ?, currentWeek = ? WHERE id = 1');
+        const updateTeam = db.prepare('UPDATE teams SET tacticalStyle = ?, mentality = ?, formation = ?, overall = ? WHERE id = ?');
+        const updatePlayer = db.prepare('UPDATE players SET condition = ?, overall = ?, injuryType = ?, injuryWeeksRemaining = ? WHERE id = ?');
+        const updateFixture = db.prepare('UPDATE fixtures SET played = ?, homeScore = ?, awayScore = ? WHERE id = ?');
+        const updateStanding = db.prepare('UPDATE standings SET played = ?, won = ?, drawn = ?, lost = ?, goalsFor = ?, goalsAgainst = ?, points = ? WHERE leagueId = ? AND teamId = ?');
+        
+        db.transaction(() => {
+            updateGameState.run(saveData.currentSeason, saveData.currentDate, saveData.currentWeek);
+
+            for (const t of Object.values(saveData.teams)) {
+                updateTeam.run(t.tacticalStyle, t.mentality, t.formation, t.overall || 50, t.id);
+            }
+
+            for (const p of Object.values(saveData.players)) {
+                updatePlayer.run(p.condition, p.overall || 50, p.injury?.type || null, p.injury?.weeksRemaining || 0, p.id);
+            }
+
+            for (const f of saveData.fixtures) {
+                updateFixture.run(f.played ? 1 : 0, f.homeScore ?? null, f.awayScore ?? null, f.id);
+            }
+
+            for (const l of saveData.leagues) {
+                for (const s of l.standings) {
+                    updateStanding.run(s.played, s.won, s.drawn, s.lost, s.goalsFor, s.goalsAgainst, s.points, l.id, s.teamId);
+                }
+            }
+        })();
+        return true;
+    } catch (error) {
+        console.error("Error writing save game to DB:", error);
+        return false;
     }
-    // Minify JSON to save time/space during season transitions
-    fs.writeFileSync(SAVE_FILE_PATH, JSON.stringify(saveData));
-    return true;
-  } catch (error) {
-    console.error("Error writing save game:", error);
-    return false;
-  }
 }
 
-
+// ... keeping processWeekResults, recalculateOverallRatings, advanceSeason, etc below exactly as they were ...
 function recalculateOverallRatings(save: SaveGame) {
   for (const player of Object.values(save.players)) {
     player.overall = calculatePlayerOverall(player);

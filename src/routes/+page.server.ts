@@ -1,5 +1,6 @@
-import { loadSaveGame, writeSaveGame, processWeekResults } from '$lib/data/store';
+import { loadSaveGame, writeSaveGame, processWeekResults, saveNewGameToDB } from '$lib/data/store';
 import { generateSaveGame } from '$lib/data/generator';
+import { db } from '$lib/data/db';
 import { fail, redirect } from '@sveltejs/kit';
 import fs from 'fs';
 import path from 'path';
@@ -55,7 +56,7 @@ export const actions: Actions = {
     
     try {
       const newSave = generateSaveGame(name);
-      writeSaveGame(newSave);
+      saveNewGameToDB(newSave);
       throw redirect(303, '/');
     } catch (e) {
       if ((e as any).status === 303) throw e;
@@ -65,10 +66,7 @@ export const actions: Actions = {
   },
   deleteCareer: async () => {
     try {
-      const savePath = path.resolve('data', 'savegame.json');
-      if (fs.existsSync(savePath)) {
-        fs.unlinkSync(savePath);
-      }
+      db.exec('DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;');
       throw redirect(303, '/');
     } catch (e) {
       if ((e as any).status === 303) throw e;

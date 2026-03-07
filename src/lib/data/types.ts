@@ -9,6 +9,11 @@ export interface PlayerProfile {
   potential: number;
   overall?: number;
   condition: number; // 0-100
+  matchSharpness?: number; // 0-100
+  morale?: number; // 0-100
+  preferredFoot?: 'Left' | 'Right' | 'Both';
+  wage?: number;
+  contractExpires?: number;
   injury: { type: string; weeksRemaining: number } | null;
   attributes: {
     // Technical
@@ -36,6 +41,21 @@ export interface PlayerProfile {
     reflexes: number;
     handling: number;
   };
+  hiddenTraits?: {
+    injuryProneness: number;
+    consistency: number;
+    dirtiness: number;
+    importantMatches: number;
+  };
+  seasonStats?: {
+    apps: number;
+    goals: number;
+    assists: number;
+    cleanSheets: number;
+    yellowCards: number;
+    redCards: number;
+    averageRating: number;
+  };
 }
 
 export interface TeamProfile {
@@ -46,6 +66,13 @@ export interface TeamProfile {
   tacticalStyle: string;
   mentality: string; // ULTRA_DEFENSIVE, DEFENSIVE, BALANCED, ATTACKING, ULTRA_ATTACKING
   formation: string;
+  stadiumName?: string;
+  stadiumCapacity?: number;
+  primaryColor?: string;
+  secondaryColor?: string;
+  transferBudget?: number;
+  wageBudget?: number;
+  managerConfidence?: number;
   players: string[]; // Array of PlayerProfile IDs
   customPositions?: Record<number, {x: number, y: number}>;
   customRoles?: Record<number, string>;

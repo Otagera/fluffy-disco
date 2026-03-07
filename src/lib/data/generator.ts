@@ -308,11 +308,8 @@ export function generateSaveGame(managerName: string, selectedTeamId?: string): 
 }
 
 if (process.argv[1] === import.meta.url || (typeof process !== 'undefined' && process.argv[1] === path.resolve('src/lib/data/generator.ts'))) {
+  const { saveNewGameToDB } = require('./store.ts');
   const save = generateSaveGame('The Gaffer');
-  const dataDir = path.resolve('data');
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir);
-  }
-  fs.writeFileSync(path.join(dataDir, 'savegame.json'), JSON.stringify(save, null, 2));
-  console.log(`Generated savegame.json with full fixtures for ${Object.keys(save.teams).length} teams.`);
+  saveNewGameToDB(save);
+  console.log(`Generated and saved game state to SQLite DB for ${Object.keys(save.teams).length} teams.`);
 }
