@@ -100,11 +100,11 @@ export class PhysicsEngine {
             const mass = buffer[offset + PLAYER_OFFSET_MASS];
 
             // 1. Calculate Force (Arrive instead of Seek to prevent orbiting)
-            const slowingRadius = 3.0; // Start braking 3 meters away
+            const slowingRadius = 5.0; // Start braking 5 meters away
             const force = this.calculateArrive(px, py, vx, vy, target.x, target.y, maxS, slowingRadius);
 
             // Amplify the steering force so players actually accelerate quickly
-            const steeringGain = 10.0;
+            const steeringGain = 400.0;
             force.fx *= steeringGain;
             force.fy *= steeringGain;
 
