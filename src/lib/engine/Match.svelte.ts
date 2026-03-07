@@ -182,7 +182,15 @@ export class Match {
             
             // Calculate Tactical Anchors for everyone to settle
             this.tactics.updatePhase(this.memory.ballBuffer, this.setPieceTakerIdx);
-            const targets = this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles, this.tacticalStyles);
+            const targets = this.tactics.calculateAnchors(
+                this.memory.ballBuffer, 
+                this.initialAnchors, 
+                this.playerRoles, 
+                this.tacticalStyles,
+                this.offsideLineTeam0,
+                this.offsideLineTeam1,
+                this.playerStats
+            );
             
             // Override taker's target to be exactly the ball's position
             if (this.setPieceTakerIdx !== null) {
@@ -379,7 +387,15 @@ export class Match {
         // 3. Calculate Tactical Anchors
         const targets = this.status === MatchStatus.KICKOFF 
             ? this.initialAnchors 
-            : this.tactics.calculateAnchors(this.memory.ballBuffer, this.initialAnchors, this.playerRoles, this.tacticalStyles);
+            : this.tactics.calculateAnchors(
+                this.memory.ballBuffer, 
+                this.initialAnchors, 
+                this.playerRoles, 
+                this.tacticalStyles,
+                this.offsideLineTeam0,
+                this.offsideLineTeam1,
+                this.playerStats
+            );
 
         // 4. Basic Ball Interaction (Dribbling, Passing, & Shooting)
         if (possessionIdx !== null) {

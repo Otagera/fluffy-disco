@@ -34,16 +34,15 @@ export class TacticalManager {
 
     /**
      * Calculates dynamic anchors for all players.
-     * @param ballBuffer Flat ball memory
-     * @param baseFormations Standard 4-4-2 or similar grid anchors
-     * @param roles Array of tactical roles for each player
-     * @param styles Array of tactical styles [homeStyle, awayStyle]
      */
     calculateAnchors(
         ballBuffer: Float32Array, 
         baseFormations: { x: number, y: number }[],
         roles?: string[],
-        styles?: string[]
+        styles?: string[],
+        offsideLineTeam0: number = 52.5,
+        offsideLineTeam1: number = 52.5,
+        playerStats?: any[]
     ): { x: number, y: number }[] {
         const anchors: { x: number, y: number }[] = [];
         const bx = ballBuffer[BALL_OFFSET_X];
@@ -58,7 +57,6 @@ export class TacticalManager {
         for (let i = 0; i < PLAYER_COUNT; i++) {
             if (i === 0 || i === 11) continue; // Skip GKs
             const base = baseFormations[i];
-            // Use actual player positions if available in a real system, but base formation anchors work for structural pressing
             const distSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
             
             if (i < 11) {
@@ -74,11 +72,10 @@ export class TacticalManager {
         const homeStyle = styles ? styles[0] : 'Balanced';
         const awayStyle = styles ? styles[1] : 'Balanced';
 
-        // Determine how many players should press based on tactical style
         const getPressingCount = (style: string, inDefensiveThird: boolean) => {
             if (style === 'Gegenpress') return 3;
             if (style === 'Park the Bus') return inDefensiveThird ? 2 : 0;
-            return 1; // Default
+            return 1;
         };
 
         const homeInDefensiveThird = bx < 35;
@@ -96,6 +93,7 @@ export class TacticalManager {
             const isPossession = this.possessionTeam === team;
             const role = roles ? roles[i] : '';
             const style = team === 0 ? homeStyle : awayStyle;
+            const stats = playerStats ? playerStats[i] : { anticipation: 50, positioning: 50, marking: 50 };
 
             let tx = base.x;
             let ty = base.y;
@@ -108,13 +106,12 @@ export class TacticalManager {
                 continue;
             }
 
-            // 3. Pressing Logic
+            // 3. Pressing & Defending Logic
             let isPressing = (team === 0 && homePressers.has(i)) || (team === 1 && awayPressers.has(i));
             
-            // Ball-Winning Midfielder (BWM) has an increased pressing range
             if (role === 'BWM' && !isPossession && !isPressing) {
                 const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
-                if (distToBallSq < 400) { // Within 20m, BWM joins the press
+                if (distToBallSq < 400) { 
                     isPressing = true;
                 }
             }
@@ -124,56 +121,98 @@ export class TacticalManager {
                 const distToBallSq = (base.x - bx) * (base.x - bx) + (base.y - by) * (base.y - by);
                 const distToBall = Math.sqrt(distToBallSq);
                 
-                // Estimate time to reach ball assuming ~8m/s sprint. Cap at 1.5 seconds.
-                const lookaheadTime = Math.min(distToBall / 8.0, 1.5);
+                // Anticipation affects pursuit tracking
+                const pursuitAggression = 1.0 + (stats.anticipation / 100) * 0.5;
+                const lookaheadTime = Math.min(distToBall / (8.0 * pursuitAggression), 1.5);
                 
                 tx = bx + (bvx * lookaheadTime);
                 ty = by + (bvy * lookaheadTime);
             } else if (isPossession) {
-                // Possession: Offensive push + better spacing (Expansion)
+                // Possession: Penetration, Support, and Overlaps
                 const attackDir = team === 0 ? 1 : -1;
                 const progress = team === 0 ? bx / 105 : (105 - bx) / 105;
                 const inFinalThird = team === 0 ? bx > 70 : bx < 35;
                 
-                // Shift formation based on ball progress
                 let forwardPushMultiplier = 40;
-                if (style === 'Route One') forwardPushMultiplier = 60; // Push extremely high immediately
-                if (style === 'Park the Bus') forwardPushMultiplier = 20; // Hesitant to commit forward
+                if (style === 'Route One') forwardPushMultiplier = 60;
+                if (style === 'Park the Bus') forwardPushMultiplier = 20;
                 
                 let forwardPush = forwardPushMultiplier * progress;
-                
-                // BWM stays deeper in attack
-                if (role === 'BWM') forwardPush *= 0.3;
-                
                 tx = base.x + (attackDir * forwardPush);
                 
-                // Spread out vertically
                 const centerY = 34;
                 let verticalExpansion = 1.2;
                 
                 if (style === 'Tiki-Taka' || style === 'Fluid Counter') {
-                    // Fluidity: Allow players to drift towards the ball's Y to offer short passes
                     verticalExpansion = 1.0; 
                     ty = base.y + (by - base.y) * 0.4;
                 } else {
                     ty = centerY + (base.y - centerY) * verticalExpansion;
                 }
+
+                // DYNAMIC ROLES & INTUITION
+                const activeOffsideLine = team === 0 ? offsideLineTeam1 : offsideLineTeam0;
                 
+                // PENETRATION RUNS (Runners)
+                if (['W', 'IF', 'ST', 'AF'].includes(role)) {
+                    // Push the offside line based on Anticipation and Positioning
+                    const offsideBuffer = 1.0 + (1.0 - stats.anticipation / 100) * 2.0; // High ant = run closer to line
+                    const potentialRunX = activeOffsideLine - (attackDir * offsideBuffer);
+                    
+                    // Only make the run if we are in the opponent's half
+                    const inOpponentHalf = team === 0 ? bx > 52.5 : bx < 52.5;
+                    
+                    if (inOpponentHalf && Math.random() < (stats.positioning / 100)) {
+                        // Blend between base position and the deep run
+                        const runCommitment = 0.5 + (stats.anticipation / 200);
+                        tx = tx + (potentialRunX - tx) * runCommitment;
+                    }
+                }
+
+                // WING & INVERTED FORWARD SPECIFICS
                 if (role === 'W') {
                     verticalExpansion = 1.5;
-                    ty = centerY + (base.y - centerY) * verticalExpansion; // Wingers always stay wide
+                    ty = centerY + (base.y - centerY) * verticalExpansion; 
+                } else if (role === 'IF' && inFinalThird) {
+                    ty = centerY + (ty - centerY) * 0.4; 
+                    tx += attackDir * 5; 
+                } 
+
+                // OVERLAPS (Fullbacks / Box-to-Box)
+                if (['FB', 'WB'].includes(role) && inFinalThird) {
+                    // Overlap if winger cuts inside or ball is central
+                    ty = centerY + (base.y - centerY) * 1.6; // Hug touchline
+                    tx += attackDir * 15; // Push past midfield
+                } else if (role === 'B2B' && inFinalThird) {
+                    // Late box arrival
+                    if (Math.abs(by - 34) > 15) { // If ball is wide
+                        tx += attackDir * 10;
+                        ty = centerY + (by - centerY) * 0.2; // Move central
+                    }
+                }
+
+                // SUPPORT DROPS (Connectors)
+                if (['AM', 'DLP', 'B2B', 'WM'].includes(role)) {
+                    // Move towards the ball Y to offer a passing lane
+                    const supportDrift = (stats.positioning / 100) * 0.8;
+                    ty = ty + (by - ty) * supportDrift;
+
+                    // Drop into pocket if too close to defenders
+                    const distToLine = Math.abs(activeOffsideLine - tx);
+                    if (distToLine < 15) {
+                        tx -= attackDir * 5; // Drop back slightly to find space
+                    }
+                }
+
+                // COVER (Rest-Defense)
+                if (role === 'BWM' || role === 'CB') {
+                    forwardPush *= 0.3; // Barely move up
+                    tx = base.x + (attackDir * forwardPush);
+                    if (role === 'BWM') {
+                        ty = centerY + (by - centerY) * 0.5; // Shift centrally to cover
+                    }
                 }
                 
-                if (role === 'IF' && inFinalThird) {
-                    // Inverted Forwards cut inside in the final third
-                    ty = centerY + (ty - centerY) * 0.4; // Squeeze towards center
-                    tx += attackDir * 5; // Push a bit further up into the box
-                } else if (role !== 'W' && style !== 'Tiki-Taka' && style !== 'Fluid Counter') {
-                    // Standard players pull slightly towards ball Y to stay involved
-                    ty = ty + (by - ty) * 0.2;
-                }
-                
-                // Target Man pushes high and central
                 if (role === 'TM') {
                     ty = centerY + (by - centerY) * 0.3;
                 }
@@ -184,15 +223,14 @@ export class TacticalManager {
                 let contractY = (by - base.y) * 0.2;
 
                 if (style === 'Park the Bus') {
-                    dropBack = (team === 0 ? -15 : 15); // Drop deep rigidly
-                    contractY = 0; // Maintain rigid horizontal lines
+                    dropBack = (team === 0 ? -15 : 15);
+                    contractY = 0;
                 }
 
                 tx = base.x + dropBack + (team === 0 ? -5 : 5);
                 ty = base.y + contractY;
                 
                 if (role === 'BWM') {
-                    // BWM drops back slightly more to protect backline
                     tx += (team === 0 ? -3 : 3);
                 }
             }
