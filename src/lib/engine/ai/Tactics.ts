@@ -127,7 +127,7 @@ export class TacticalManager {
                 const inFinalThird = team === 0 ? bx > 70 : bx < 35;
                 
                 // Shift formation based on ball progress
-                let forwardPush = 15 * progress;
+                let forwardPush = 40 * progress;
                 
                 // BWM stays deeper in attack
                 if (role === 'BWM') forwardPush *= 0.3;
