@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { matchState } from '../lib/game/matchState.svelte';
 import { resetMatch } from '../lib/game/rules';
 import { tick } from '../lib/game/engine.svelte';
@@ -59,6 +59,14 @@ describe('Headless Batch Simulator', () => {
       totals.away.shots += res.away.shots;
       totals.away.passesA += res.away.passesAttempted;
       totals.away.passesC += res.away.passesCompleted;
+
+      // Per-match sanity checks
+      expect(res.home.goals).toBeGreaterThanOrEqual(0);
+      expect(res.away.goals).toBeGreaterThanOrEqual(0);
+      expect(res.home.shots).toBeGreaterThanOrEqual(res.home.goals);
+      expect(res.away.shots).toBeGreaterThanOrEqual(res.away.goals);
+      expect(res.home.passesAttempted).toBeGreaterThanOrEqual(res.home.passesCompleted);
+      expect(res.away.passesAttempted).toBeGreaterThanOrEqual(res.away.passesCompleted);
     });
     
     const avg = (val: number) => (val / NUM_MATCHES).toFixed(2);
@@ -82,6 +90,21 @@ describe('Headless Batch Simulator', () => {
     ]);
     
     console.log(`\n✅ Large-Scale Simulation Complete in ${((endTime - startTime) / 1000).toFixed(2)}s\n`);
+
+    // Aggregate sanity checks
+    expect(totals.home.goals).toBeGreaterThanOrEqual(0);
+    expect(totals.away.goals).toBeGreaterThanOrEqual(0);
+    expect(totals.home.shots).toBeGreaterThanOrEqual(totals.home.goals);
+    expect(totals.away.shots).toBeGreaterThanOrEqual(totals.away.goals);
+    expect(totals.home.passesA).toBeGreaterThanOrEqual(totals.home.passesC);
+    expect(totals.away.passesA).toBeGreaterThanOrEqual(totals.away.passesC);
+
+    const homePassPct = totals.home.passesA === 0 ? 0 : totals.home.passesC / totals.home.passesA;
+    const awayPassPct = totals.away.passesA === 0 ? 0 : totals.away.passesC / totals.away.passesA;
+    expect(homePassPct).toBeGreaterThanOrEqual(0);
+    expect(homePassPct).toBeLessThanOrEqual(1);
+    expect(awayPassPct).toBeGreaterThanOrEqual(0);
+    expect(awayPassPct).toBeLessThanOrEqual(1);
   }, 1200000); // 20 minute timeout
 
 });

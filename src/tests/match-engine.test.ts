@@ -164,9 +164,9 @@ describe('Match Engine Integration', () => {
       m.currentTime = 61 * 60;
       // call CPU subs directly (tick normally would also invoke it)
       (m as any).lastSubCheckMinute = -1;
-      // debug values before
+      // verify preconditions used by substitution logic
       const minute = Math.floor(m.currentTime / 60);
-      console.log('minute', minute, 'lastSubCheck', (m as any).lastSubCheckMinute);
+      expect(minute).toBe(61);
       const team = 0;
       const startIdx = team === 0 ? 0 : 11;
       const endIdx = team === 0 ? 11 : 22;
@@ -176,9 +176,10 @@ describe('Match Engine Integration', () => {
         const stam = m.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
         if (stam < minStam) { minStam = stam; tiredIdx = i; }
       }
-      console.log('tiredIdx', tiredIdx, 'minStam', minStam, 'benchStats', m.benchStats.length, 'role', m.playerRoles[tiredIdx]);
+      expect(tiredIdx).toBe(0);
+      expect(minStam).toBeCloseTo(0.1);
       const benchIdx = m.benchRoles.findIndex(r => r === m.playerRoles[tiredIdx]);
-      console.log('benchIdx', benchIdx);
+      expect(benchIdx).toBe(0);
       
       (m as any).handleCPUSubs();
       

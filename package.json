@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "pretest": "svelte-kit sync",
-    "test": "vitest src/tests/match-engine.test.ts src/tests/monte-carlo.test.ts src/tests/bdd-tactics.test.ts --run",
+    "test": "vitest src/tests/match-engine.test.ts src/tests/monte-carlo.test.ts src/tests/bdd-tactics.test.ts src/tests/realism-layer.test.ts src/tests/generation-realism.test.ts --run",
     "sim": "vitest run src/tests/batch-simulator.sim.test.ts",
     "smoke": "vitest run src/tests/smoke.stb.test.ts",
     "bdd": "vitest run src/tests/bdd-tactics.test.ts"
