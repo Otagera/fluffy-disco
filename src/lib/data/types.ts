@@ -105,22 +105,40 @@ export interface Standing {
   points: number;
 }
 
+export interface GoalEvent {
+  playerId: string;
+  minute: number;
+  teamId: string;
+}
+
+export interface NewsItem {
+  id: string;
+  week: number;
+  headline: string;
+  type: 'BIG_RESULT' | 'HAT_TRICK' | 'GOLDEN_BOOT' | 'TOP_CLASH';
+  relatedPlayerId?: string;
+  relatedTeamId?: string;
+}
+
 export interface League {
   id: string;
   name: string;
   level: number;
   teams: string[]; // Array of TeamProfile IDs
   standings: Standing[];
+  news?: NewsItem[];
 }
 
 export interface Fixture {
   id: string;
+  leagueId: string;
   week: number;
   homeTeamId: string;
   awayTeamId: string;
   played: boolean;
   homeScore?: number;
   awayScore?: number;
+  goalEvents?: GoalEvent[];
 }
 
 export interface SaveGame {

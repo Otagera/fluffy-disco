@@ -9,6 +9,9 @@
   let currentPlayers = $state([...data.players]);
   let currentPositions = $state(data.team.customPositions || {});
   let currentRoles = $state(data.team.customRoles || {});
+  
+  let isDirty = $state(false);
+  let showToast = $state(false);
 
   function handleSwap(id1: string, id2: string) {
     const idx1 = currentPlayers.findIndex(p => p.id === id1);
@@ -20,47 +23,82 @@
       newPlayers[idx1] = newPlayers[idx2];
       newPlayers[idx2] = temp;
       currentPlayers = newPlayers;
+      isDirty = true;
     }
   }
 
   function handleFormationChange(name: string) {
     currentTeam.formation = name;
-    // Clearing overrides when base formation changes is handled by the board component
-    // but we should sync it here if we want to save the cleared state.
+    isDirty = true;
   }
 
-  function handleOverridesChange(positions: Record<number, {x: number, y: number}>, roles: Record<number, string>) {
+  function handleOverridesChange(positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) {
     currentPositions = positions;
     currentRoles = roles;
+    currentTeam.tacticalStyle = style;
+    currentTeam.mentality = mentality;
+
+    const styleChanged = style !== data.team.tacticalStyle;
+    const mentalityChanged = mentality !== data.team.mentality;
+    const posChanged = JSON.stringify(positions) !== JSON.stringify(data.team.customPositions || {});
+    const rolesChanged = JSON.stringify(roles) !== JSON.stringify(data.team.customRoles || {});
+
+    if (styleChanged || mentalityChanged || posChanged || rolesChanged) {
+        isDirty = true;
+    }
   }
 
   function resetPositions() {
-    currentTeam.formation = data.team.formation;
+    currentTeam = { ...data.team };
     currentPlayers = [...data.players];
     currentPositions = data.team.customPositions || {};
     currentRoles = data.team.customRoles || {};
+    isDirty = false;
   }
 </script>
 
-<div class="max-w-6xl mx-auto p-4 sm:p-8">
+{#if showToast}
+  <div class="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-green-500 text-white px-8 py-3 rounded-full shadow-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 animate-[pulse_1.5s_ease-in-out_infinite] border border-green-400">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    Tactics Saved Successfully
+  </div>
+{/if}
+
+<div class="max-w-6xl mx-auto p-4 sm:p-8 relative">
   <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
     <div>
       <a href="/" class="text-[0.6rem] font-black text-primary hover:underline mb-2 flex items-center gap-1 uppercase tracking-tighter">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         Back to Hub
       </a>
-      <h1 class="mb-1 text-4xl font-black tracking-tighter">Club Tactics</h1>
+      <h1 class="mb-1 text-4xl font-black tracking-tighter flex items-center gap-3">
+        Club Tactics
+        {#if isDirty}
+          <span class="text-[0.5rem] bg-amber-500 text-white px-2 py-0.5 rounded uppercase tracking-widest align-middle shadow-sm">Unsaved Changes</span>
+        {/if}
+      </h1>
       <p class="subtle font-bold text-sm">Define your default tactical shape and starting XI for {data.team.name}.</p>
     </div>
     
     <div class="flex gap-3">
-      <button class="btn-secondary px-6" onclick={resetPositions}>Discard Changes</button>
-      <form method="POST" action="?/saveTactics" use:enhance>
+      {#if isDirty}
+        <button class="btn-secondary px-6" onclick={resetPositions}>Discard</button>
+      {/if}
+      <form method="POST" action="?/saveTactics" use:enhance={() => {
+        return async ({ update }) => {
+          await update({ reset: false }); // Prevent clearing other reactive state
+          isDirty = false;
+          showToast = true;
+          setTimeout(() => showToast = false, 3000);
+        };
+      }}>
         <input type="hidden" name="formation" value={currentTeam.formation} />
+        <input type="hidden" name="tacticalStyle" value={currentTeam.tacticalStyle} />
+        <input type="hidden" name="mentality" value={currentTeam.mentality} />
         <input type="hidden" name="playerIds" value={JSON.stringify(currentPlayers.map(p => p.id))} />
         <input type="hidden" name="customPositions" value={JSON.stringify(currentPositions)} />
         <input type="hidden" name="customRoles" value={JSON.stringify(currentRoles)} />
-        <button type="submit" class="btn-primary px-8 shadow-lg ring-4 ring-primary/10 font-black">SAVE TACTICS</button>
+        <button type="submit" class="btn-primary px-8 shadow-lg ring-4 ring-primary/10 font-black {isDirty ? 'animate-pulse' : ''}">SAVE TACTICS</button>
       </form>
     </div>
   </div>

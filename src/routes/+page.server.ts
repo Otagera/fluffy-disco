@@ -1,6 +1,6 @@
 import { loadSaveGame, writeSaveGame, processWeekResults, saveNewGameToDB } from '$lib/data/store';
 import { generateSaveGame } from '$lib/data/generator';
-import { db } from '$lib/data/db';
+import { db, sqlite } from '$lib/data/db';
 import { fail, redirect } from '@sveltejs/kit';
 import fs from 'fs';
 import path from 'path';
@@ -67,7 +67,7 @@ export const actions: Actions = {
   },
   deleteCareer: async () => {
     try {
-      db.exec('DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;');
+      sqlite.exec('DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixture_goals; DELETE FROM league_news; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;');
       throw redirect(303, '/');
     } catch (e) {
       if ((e as any).status === 303) throw e;

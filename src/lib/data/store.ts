@@ -1,154 +1,347 @@
-import fs from 'fs';
-import path from 'path';
-import type { SaveGame, Standing, Fixture, PlayerProfile, TeamProfile, League } from './types';
+import { eq, sql } from 'drizzle-orm';
+import { db } from './db';
+import * as schema from './schema';
+import type { SaveGame, PlayerProfile, TeamProfile, League, Fixture, Standing } from './types';
 import { generateFixtures } from './generator';
 import { calculatePlayerOverall, calculateTeamOverall } from './ratings';
-import { db, initializeDatabase } from './db';
-
-// Ensure DB is initialized
-initializeDatabase();
+import { getTacticalCompatibility } from '../engine/ai/Compatibility';
 
 export function saveNewGameToDB(save: SaveGame) {
-    const insertLeague = db.prepare('INSERT INTO leagues (id, name, level) VALUES (?, ?, ?)');
-    const insertTeam = db.prepare('INSERT INTO teams (id, name, leagueId, reputation, overall, tacticalStyle, mentality, formation, stadiumName, stadiumCapacity, primaryColor, secondaryColor, transferBudget, wageBudget, managerConfidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insertPlayer = db.prepare('INSERT INTO players (id, teamId, name, squadNumber, age, role, potential, overall, condition, matchSharpness, morale, preferredFoot, wage, contractExpires, injuryType, injuryWeeksRemaining, passing, finishing, tackling, dribbling, crossing, marking, vision, composure, decisions, positioning, concentration, aggression, anticipation, workRate, pace, acceleration, stamina, strength, reflexes, handling, injuryProneness, consistency, dirtiness, importantMatches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insertPlayerStats = db.prepare('INSERT INTO player_stats (playerId) VALUES (?)');
-    const insertFixture = db.prepare('INSERT INTO fixtures (id, leagueId, week, homeTeamId, awayTeamId, played) VALUES (?, ?, ?, ?, ?, ?)');
-    const insertStanding = db.prepare('INSERT INTO standings (leagueId, teamId) VALUES (?, ?)');
-    const insertGameState = db.prepare('INSERT OR REPLACE INTO gamestate (id, managerName, managerTeamId, currentSeason, currentDate, currentWeek) VALUES (1, ?, ?, ?, ?, ?)');
+  db.transaction((tx) => {
+    // 1. Clear existing data
+    tx.delete(schema.gamestate).run();
+    tx.delete(schema.standings).run();
+    tx.delete(schema.fixtureGoals).run();
+    tx.delete(schema.leagueNews).run();
+    tx.delete(schema.fixtures).run();
+    tx.delete(schema.players).run();
+    tx.delete(schema.teams).run();
+    tx.delete(schema.leagues).run();
 
-    db.transaction(() => {
-        db.exec('PRAGMA foreign_keys = OFF;');
-        db.exec('DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;');
-        db.exec('PRAGMA foreign_keys = ON;');
+    // 2. Insert Leagues
+    for (const l of save.leagues) {
+      tx.insert(schema.leagues).values({
+        id: l.id,
+        name: l.name,
+        level: l.level,
+      }).run();
+    }
 
-        insertGameState.run(save.manager.name, save.manager.teamId, save.currentSeason, save.currentDate, save.currentWeek);
+    // 3. Insert Teams
+    for (const t of Object.values(save.teams)) {
+      const league = save.leagues.find(l => l.teams.includes(t.id));
+      tx.insert(schema.teams).values({
+        id: t.id,
+        leagueId: league?.id || '',
+        name: t.name,
+        reputation: t.reputation,
+        overall: t.overall || 50,
+        tacticalStyle: t.tacticalStyle,
+        mentality: t.mentality,
+        formation: t.formation,
+        stadiumName: t.stadiumName || null,
+        stadiumCapacity: t.stadiumCapacity || null,
+        primaryColor: t.primaryColor || null,
+        secondaryColor: t.secondaryColor || null,
+        transferBudget: t.transferBudget || 0,
+        wageBudget: t.wageBudget || 0,
+        managerConfidence: t.managerConfidence || 50,
+        playerIds: t.players,
+        customPositions: t.customPositions || null,
+        customRoles: t.customRoles || null,
+      }).run();
+    }
 
-        for (const l of save.leagues) {
-            insertLeague.run(l.id, l.name, l.level);
+    // 4. Initialize Standings (Now safe because teams exist)
+    for (const l of save.leagues) {
+      for (const teamId of l.teams) {
+        tx.insert(schema.standings).values({
+          leagueId: l.id,
+          teamId: teamId,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        }).run();
+      }
+    }
+
+    // 5. Insert Players
+    for (const p of Object.values(save.players)) {
+      const team = Object.values(save.teams).find(t => t.players.includes(p.id));
+      
+      tx.insert(schema.players).values({
+        id: p.id,
+        teamId: team?.id || null,
+        name: p.name,
+        number: p.number || null,
+        age: p.age,
+        role: p.role,
+        potential: p.potential,
+        overall: p.overall || 50,
+        condition: p.condition,
+        matchSharpness: p.matchSharpness || 50,
+        morale: p.morale || 50,
+        preferredFoot: p.preferredFoot || 'Right',
+        wage: p.wage || 0,
+        contractExpires: p.contractExpires || null,
+        injury: p.injury,
+        attributes: p.attributes,
+        hiddenTraits: p.hiddenTraits,
+        seasonStats: p.seasonStats,
+      }).run();
+    }
+
+    // 6. Insert Fixtures
+    for (const f of save.fixtures) {
+      tx.insert(schema.fixtures).values({
+        id: f.id,
+        leagueId: f.leagueId,
+        week: f.week,
+        homeTeamId: f.homeTeamId,
+        awayTeamId: f.awayTeamId,
+        played: f.played,
+        homeScore: f.homeScore,
+        awayScore: f.awayScore,
+      }).run();
+
+      if (f.goalEvents) {
+        for (const g of f.goalEvents) {
+          tx.insert(schema.fixtureGoals).values({
+            fixtureId: f.id,
+            playerId: g.playerId,
+            teamId: g.teamId,
+            minute: g.minute,
+          }).run();
         }
+      }
+    }
 
-        for (const t of Object.values(save.teams)) {
-            const league = save.leagues.find(l => l.teams.includes(t.id));
-            insertTeam.run(t.id, t.name, league?.id || '', t.reputation, t.overall || 50, t.tacticalStyle, t.mentality, t.formation, t.stadiumName ?? null, t.stadiumCapacity ?? null, t.primaryColor ?? null, t.secondaryColor ?? null, t.transferBudget ?? 0, t.wageBudget ?? 0, t.managerConfidence ?? 50);
-        }
-
-        const playerToTeam = new Map();
-        for (const t of Object.values(save.teams)) {
-            for (const pId of t.players) playerToTeam.set(pId, t.id);
-        }
-
-        for (const p of Object.values(save.players)) {
-            const teamId = playerToTeam.get(p.id) || null;
-            insertPlayer.run(p.id, teamId, p.name, p.number || null, p.age, p.role, p.potential, p.overall || 50, p.condition, p.matchSharpness ?? 50, p.morale ?? 50, p.preferredFoot ?? 'Right', p.wage ?? 0, p.contractExpires ?? null, p.injury?.type || null, p.injury?.weeksRemaining || 0, p.attributes.passing, p.attributes.finishing, p.attributes.tackling, p.attributes.dribbling, p.attributes.crossing, p.attributes.marking, p.attributes.vision, p.attributes.composure, p.attributes.decisions, p.attributes.positioning, p.attributes.concentration, p.attributes.aggression, p.attributes.anticipation, p.attributes.workRate, p.attributes.pace, p.attributes.acceleration, p.attributes.stamina, p.attributes.strength, p.attributes.reflexes, p.attributes.handling, p.hiddenTraits?.injuryProneness ?? 50, p.hiddenTraits?.consistency ?? 50, p.hiddenTraits?.dirtiness ?? 50, p.hiddenTraits?.importantMatches ?? 50);
-            insertPlayerStats.run(p.id);
-        }
-
-        for (const l of save.leagues) {
-            for (const s of l.standings) {
-                insertStanding.run(l.id, s.teamId);
-            }
-        }
-
-        for (const f of save.fixtures) {
-            const league = save.leagues.find(l => l.teams.includes(f.homeTeamId));
-            insertFixture.run(f.id, league?.id || '', f.week, f.homeTeamId, f.awayTeamId, f.played ? 1 : 0);
-        }
-    })();
+    // 7. Insert GameState
+    tx.insert(schema.gamestate).values({
+      id: 1,
+      managerName: save.manager.name,
+      managerTeamId: save.manager.teamId,
+      currentSeason: save.currentSeason,
+      currentDate: save.currentDate,
+      currentWeek: save.currentWeek,
+    }).run();
+  });
 }
 
 export function loadSaveGame(): SaveGame | null {
-    try {
-        const gs = db.prepare('SELECT * FROM gamestate WHERE id = 1').get();
-        if (!gs) return null;
+  try {
+    const gs = db.select().from(schema.gamestate).where(eq(schema.gamestate.id, 1)).get();
+    if (!gs) return null;
 
-        const save = {
-            manager: { name: gs.managerName, teamId: gs.managerTeamId },
-            currentSeason: gs.currentSeason,
-            currentDate: gs.currentDate,
-            currentWeek: gs.currentWeek,
-            leagues: [],
-            teams: {},
-            players: {},
-            fixtures: []
-        };
+    const save: SaveGame = {
+      manager: { name: gs.managerName, teamId: gs.managerTeamId },
+      currentSeason: gs.currentSeason,
+      currentDate: gs.currentDate,
+      currentWeek: gs.currentWeek,
+      leagues: [],
+      teams: {},
+      players: {},
+      fixtures: []
+    };
 
-        const leaguesRaw = db.prepare('SELECT * FROM leagues ORDER BY level').all();
-        for (const l of leaguesRaw) {
-            save.leagues.push({ id: l.id, name: l.name, level: l.level, teams: [], standings: [] });
-        }
+    const leagues = db.select().from(schema.leagues).all();
+    for (const l of leagues) {
+      const news = db.select().from(schema.leagueNews).where(eq(schema.leagueNews.leagueId, l.id)).all();
+      const leagueStandings = db.select().from(schema.standings).where(eq(schema.standings.leagueId, l.id)).all();
+      const leagueTeams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, l.id)).all();
 
-        const teamsRaw = db.prepare('SELECT * FROM teams').all();
-        for (const t of teamsRaw) {
-            save.teams[t.id] = { id: t.id, name: t.name, reputation: t.reputation, overall: t.overall, tacticalStyle: t.tacticalStyle, mentality: t.mentality, formation: t.formation, stadiumName: t.stadiumName, stadiumCapacity: t.stadiumCapacity, primaryColor: t.primaryColor, secondaryColor: t.secondaryColor, transferBudget: t.transferBudget, wageBudget: t.wageBudget, managerConfidence: t.managerConfidence, players: [] };
-            const league = save.leagues.find(l => l.id === t.leagueId);
-            if (league) league.teams.push(t.id);
-        }
-
-        const playersRaw = db.prepare('SELECT * FROM players').all();
-        for (const p of playersRaw) {
-            const player = { id: p.id, name: p.name, number: p.squadNumber, age: p.age, role: p.role, potential: p.potential, overall: p.overall, condition: p.condition, matchSharpness: p.matchSharpness, morale: p.morale, preferredFoot: p.preferredFoot, wage: p.wage, contractExpires: p.contractExpires, injury: p.injuryType ? { type: p.injuryType, weeksRemaining: p.injuryWeeksRemaining } : null, attributes: { passing: p.passing, finishing: p.finishing, tackling: p.tackling, dribbling: p.dribbling, crossing: p.crossing, marking: p.marking, vision: p.vision, composure: p.composure, decisions: p.decisions, positioning: p.positioning, concentration: p.concentration, aggression: p.aggression, anticipation: p.anticipation, workRate: p.workRate, pace: p.pace, acceleration: p.acceleration, stamina: p.stamina, strength: p.strength, reflexes: p.reflexes, handling: p.handling }, hiddenTraits: { injuryProneness: p.injuryProneness, consistency: p.consistency, dirtiness: p.dirtiness, importantMatches: p.importantMatches } };
-            const stats = db.prepare('SELECT * FROM player_stats WHERE playerId = ?').get(p.id);
-            if (stats) player.seasonStats = { apps: stats.apps, goals: stats.goals, assists: stats.assists, cleanSheets: stats.cleanSheets, yellowCards: stats.yellowCards, redCards: stats.redCards, averageRating: stats.averageRating };
-            save.players[p.id] = player;
-            if (p.teamId && save.teams[p.teamId]) save.teams[p.teamId].players.push(p.id);
-        }
-
-        const standingsRaw = db.prepare('SELECT * FROM standings').all();
-        for (const s of standingsRaw) {
-            const league = save.leagues.find(l => l.id === s.leagueId);
-            if (league) league.standings.push({ teamId: s.teamId, played: s.played, won: s.won, drawn: s.drawn, lost: s.lost, goalsFor: s.goalsFor, goalsAgainst: s.goalsAgainst, points: s.points });
-        }
-
-        const fixturesRaw = db.prepare('SELECT * FROM fixtures ORDER BY week').all();
-        for (const f of fixturesRaw) {
-            save.fixtures.push({ id: f.id, week: f.week, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, played: f.played === 1, homeScore: f.homeScore, awayScore: f.awayScore });
-        }
-
-        recalculateOverallRatings(save);
-        return save;
-    } catch (error) {
-        console.error("Error loading save game from DB:", error);
-        return null;
+      save.leagues.push({
+        id: l.id,
+        name: l.name,
+        level: l.level,
+        teams: leagueTeams.map(t => t.id),
+        standings: leagueStandings as any,
+        news: news as any[],
+      });
     }
+
+    const teams = db.select().from(schema.teams).all();
+    for (const t of teams) {
+      save.teams[t.id] = { 
+        ...t, 
+        players: t.playerIds || [], // Use persisted order
+        stadiumName: t.stadiumName || undefined,
+        stadiumCapacity: t.stadiumCapacity || undefined,
+        primaryColor: t.primaryColor || undefined,
+        secondaryColor: t.secondaryColor || undefined,
+        overall: t.overall || 50,
+        customPositions: t.customPositions as any,
+        customRoles: t.customRoles as any
+      } as any;
+    }
+
+    const players = db.select().from(schema.players).all();
+    for (const p of players) {
+      const player: PlayerProfile = {
+        ...p,
+        attributes: p.attributes as any,
+        hiddenTraits: p.hiddenTraits as any,
+        seasonStats: p.seasonStats as any,
+        injury: p.injury as any,
+      };
+      save.players[p.id] = player;
+      
+      // If team doesn't have persisted playerIds (legacy), populate it
+      if (p.teamId && save.teams[p.teamId]) {
+        if (!teams.find(t => t.id === p.teamId)?.playerIds) {
+            save.teams[p.teamId].players.push(p.id);
+        }
+      }
+    }
+
+    const fixtures = db.select().from(schema.fixtures).all();
+    for (const f of fixtures) {
+      const goalEvents = db.select().from(schema.fixtureGoals).where(eq(schema.fixtureGoals.fixtureId, f.id)).all();
+      save.fixtures.push({
+        ...f,
+        goalEvents: goalEvents.map(g => ({ playerId: g.playerId, minute: g.minute, teamId: g.teamId })),
+      });
+    }
+
+    recalculateOverallRatings(save);
+    return save;
+  } catch (error) {
+    console.error("Error loading save game from DB:", error);
+    return null;
+  }
 }
 
-export function writeSaveGame(saveData) {
-    try {
-        const updateGameState = db.prepare('UPDATE gamestate SET currentSeason = ?, currentDate = ?, currentWeek = ? WHERE id = 1');
-        const updateTeam = db.prepare('UPDATE teams SET tacticalStyle = ?, mentality = ?, formation = ?, overall = ?, transferBudget = ?, wageBudget = ?, managerConfidence = ? WHERE id = ?');
-        const updatePlayer = db.prepare('UPDATE players SET condition = ?, overall = ?, matchSharpness = ?, morale = ?, injuryType = ?, injuryWeeksRemaining = ? WHERE id = ?');
-        const updatePlayerStats = db.prepare('UPDATE player_stats SET apps = ?, goals = ?, assists = ?, cleanSheets = ?, yellowCards = ?, redCards = ?, averageRating = ? WHERE playerId = ?');
-        const updateFixture = db.prepare('UPDATE fixtures SET played = ?, homeScore = ?, awayScore = ? WHERE id = ?');
-        const updateStanding = db.prepare('UPDATE standings SET played = ?, won = ?, drawn = ?, lost = ?, goalsFor = ?, goalsAgainst = ?, points = ? WHERE leagueId = ? AND teamId = ?');
-        
-        db.transaction(() => {
-            updateGameState.run(saveData.currentSeason, saveData.currentDate, saveData.currentWeek);
-            for (const t of Object.values(saveData.teams)) updateTeam.run(t.tacticalStyle, t.mentality, t.formation, t.overall || 50, t.transferBudget || 0, t.wageBudget || 0, t.managerConfidence || 50, t.id);
-            for (const p of Object.values(saveData.players)) {
-                updatePlayer.run(p.condition, p.overall || 50, p.matchSharpness || 50, p.morale || 50, p.injury?.type || null, p.injury?.weeksRemaining || 0, p.id);
-                if (p.seasonStats) updatePlayerStats.run(p.seasonStats.apps, p.seasonStats.goals, p.seasonStats.assists, p.seasonStats.cleanSheets, p.seasonStats.yellowCards, p.seasonStats.redCards, p.seasonStats.averageRating, p.id);
-            }
-            for (const f of saveData.fixtures) updateFixture.run(f.played ? 1 : 0, f.homeScore ?? null, f.awayScore ?? null, f.id);
-            for (const l of saveData.leagues) {
-                for (const s of l.standings) updateStanding.run(s.played, s.won, s.drawn, s.lost, s.goalsFor, s.goalsAgainst, s.points, l.id, s.teamId);
-            }
-        })();
-        return true;
-    } catch (error) {
-        console.error("Error writing save game to DB:", error);
-        return false;
-    }
+export function writeSaveGame(saveData: SaveGame) {
+  try {
+    db.transaction((tx) => {
+      tx.update(schema.gamestate)
+        .set({
+          currentSeason: saveData.currentSeason,
+          currentDate: saveData.currentDate,
+          currentWeek: saveData.currentWeek,
+        })
+        .where(eq(schema.gamestate.id, 1))
+        .run();
+
+      for (const t of Object.values(saveData.teams)) {
+        tx.update(schema.teams)
+          .set({
+            tacticalStyle: t.tacticalStyle,
+            mentality: t.mentality,
+            formation: t.formation,
+            overall: t.overall || 50,
+            transferBudget: t.transferBudget || 0,
+            wageBudget: t.wageBudget || 0,
+            managerConfidence: t.managerConfidence || 50,
+            playerIds: t.players,
+            customPositions: t.customPositions || null,
+            customRoles: t.customRoles || null,
+          })
+          .where(eq(schema.teams.id, t.id))
+          .run();
+      }
+
+      for (const p of Object.values(saveData.players)) {
+        tx.update(schema.players)
+          .set({
+            condition: p.condition,
+            overall: p.overall || 50,
+            matchSharpness: p.matchSharpness || 50,
+            morale: p.morale || 50,
+            injury: p.injury,
+            seasonStats: p.seasonStats,
+          })
+          .where(eq(schema.players.id, p.id))
+          .run();
+      }
+
+      for (const f of saveData.fixtures) {
+        tx.update(schema.fixtures)
+          .set({
+            played: f.played,
+            homeScore: f.homeScore ?? null,
+            awayScore: f.awayScore ?? null,
+          })
+          .where(eq(schema.fixtures.id, f.id))
+          .run();
+
+        if (f.played && f.goalEvents) {
+          tx.delete(schema.fixtureGoals).where(eq(schema.fixtureGoals.fixtureId, f.id)).run();
+          for (const g of f.goalEvents) {
+            tx.insert(schema.fixtureGoals).values({
+              fixtureId: f.id,
+              playerId: g.playerId,
+              teamId: g.teamId,
+              minute: g.minute,
+            }).run();
+          }
+        }
+      }
+
+      for (const l of saveData.leagues) {
+        if (l.news) {
+          tx.delete(schema.leagueNews).where(eq(schema.leagueNews.leagueId, l.id)).run();
+          for (const n of l.news) {
+            tx.insert(schema.leagueNews).values({
+              id: n.id,
+              leagueId: l.id,
+              week: n.week,
+              headline: n.headline,
+              type: n.type,
+              relatedPlayerId: n.relatedPlayerId ?? null,
+              relatedTeamId: n.relatedTeamId ?? null,
+            }).run();
+          }
+        }
+
+        for (const s of l.standings) {
+          tx.insert(schema.standings)
+            .values({
+              leagueId: l.id,
+              teamId: s.teamId,
+              played: s.played,
+              won: s.won,
+              drawn: s.drawn,
+              lost: s.lost,
+              goalsFor: s.goalsFor,
+              goalsAgainst: s.goalsAgainst,
+              points: s.points,
+            })
+            .onConflictDoUpdate({
+              target: [schema.standings.leagueId, schema.standings.teamId],
+              set: {
+                played: s.played,
+                won: s.won,
+                drawn: s.drawn,
+                lost: s.lost,
+                goalsFor: s.goalsFor,
+                goalsAgainst: s.goalsAgainst,
+                points: s.points,
+              },
+            })
+            .run();
+        }
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error("Error writing save game to DB:", error);
+    return false;
+  }
 }
 
-function recalculateOverallRatings(save) {
+function recalculateOverallRatings(save: SaveGame) {
   for (const player of Object.values(save.players)) player.overall = calculatePlayerOverall(player);
   for (const team of Object.values(save.teams)) team.overall = calculateTeamOverall(team, save.players);
 }
 
 export function processWeekResults(save: any, playerMatchResult: any) {
   try {
-    const teamsPlayed = new Set();
+    const teamsPlayed = new Set<string>();
     if (playerMatchResult) {
       const playerFixture = save.fixtures.find((f: any) => f.id === playerMatchResult.fixtureId);
       if (playerFixture) {
@@ -158,11 +351,9 @@ export function processWeekResults(save: any, playerMatchResult: any) {
         teamsPlayed.add(playerFixture.homeTeamId);
         teamsPlayed.add(playerFixture.awayTeamId);
 
-        // Process High-Fidelity Stats for played match
         const homeTeam = save.teams[playerFixture.homeTeamId];
         const awayTeam = save.teams[playerFixture.awayTeamId];
         
-        // 1. Appearances & Clean Sheets
         const processPlayedTeamStats = (team: any, isHome: boolean, opponentScore: number) => {
           const players = team.players.slice(0, 11).map((id: string) => save.players[id]).filter(Boolean);
           players.forEach((p: any) => {
@@ -171,6 +362,7 @@ export function processWeekResults(save: any, playerMatchResult: any) {
           });
           const gk = players.find((p: any) => p.role === 'GK');
           if (opponentScore === 0 && gk) {
+            if (!gk.seasonStats) gk.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
             gk.seasonStats.cleanSheets++;
           }
         };
@@ -180,14 +372,13 @@ export function processWeekResults(save: any, playerMatchResult: any) {
             processPlayedTeamStats(awayTeam, false, playerMatchResult.homeScore);
         }
 
-        // 2. Map Goals and Assists from Analytics
         if (playerMatchResult.matchAnalytics && playerMatchResult.matchAnalytics.events) {
             const events = playerMatchResult.matchAnalytics.events;
             
-            // Reconstruct squads to map 0-21 indices back to player IDs
             const homePlayers = homeTeam?.players.slice(0, 11).map((id: string) => save.players[id]) || [];
             const awayPlayers = awayTeam?.players.slice(0, 11).map((id: string) => save.players[id]) || [];
             const fullSquad = [...homePlayers, ...awayPlayers];
+            if (!playerFixture.goalEvents) playerFixture.goalEvents = [];
 
             for (let i = 0; i < events.length; i++) {
                 const event = events[i];
@@ -197,17 +388,24 @@ export function processWeekResults(save: any, playerMatchResult: any) {
                         if (!scorer.seasonStats) scorer.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
                         scorer.seasonStats.goals++;
 
-                        // Find assist: look for the last 'pass' event by the same team within 10 seconds before the goal
+                        const minute = Math.min(90, Math.ceil(event.time / 60) || 1);
+                        
+                        playerFixture.goalEvents.push({
+                            playerId: scorer.id,
+                            teamId: event.team === 0 ? playerFixture.homeTeamId : playerFixture.awayTeamId,
+                            minute: minute
+                        });
+
                         for (let j = i - 1; j >= 0; j--) {
                             const prevEvent = events[j];
-                            if (prevEvent.time < event.time - 10) break; // Too long ago
+                            if (prevEvent.time < event.time - 10) break;
                             if (prevEvent.type === 'pass' && prevEvent.team === event.team && prevEvent.playerId !== undefined && prevEvent.playerId !== event.playerId) {
                                 const assister = fullSquad[prevEvent.playerId];
                                 if (assister) {
                                     if (!assister.seasonStats) assister.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
                                     assister.seasonStats.assists++;
                                 }
-                                break; // Only one assist per goal
+                                break;
                             }
                         }
                     }
@@ -216,11 +414,13 @@ export function processWeekResults(save: any, playerMatchResult: any) {
         }
       }
       simFixtures(save, (f: any) => f.week === save.currentWeek && !f.played, teamsPlayed);
+      generateNews(save, save.currentWeek);
       save.currentWeek++;
     } else {
       simFixtures(save, f => !f.played, teamsPlayed);
+      generateNews(save, save.currentWeek);
     }
-    Object.values(save.players).forEach(p => {
+    Object.values(save.players).forEach((p: any) => {
       const recovery = 15 + (p.attributes.stamina / 2);
       p.condition = Math.min(100, (p.condition ?? 100) + recovery);
       if (p.injury && p.injury.weeksRemaining > 0) {
@@ -231,8 +431,8 @@ export function processWeekResults(save: any, playerMatchResult: any) {
     if (playerMatchResult?.playerStamina) {
       for (const [pId, stamina] of Object.entries(playerMatchResult.playerStamina)) {
         if (save.players[pId]) {
-          save.players[pId].condition = Math.max(1, stamina);
-          if (stamina < 40 && Math.random() < 0.05) save.players[pId].injury = { type: "Muscle Strain", weeksRemaining: Math.floor(Math.random() * 3) + 1 };
+          save.players[pId].condition = Math.max(1, stamina as number);
+          if ((stamina as number) < 40 && Math.random() < 0.05) save.players[pId].injury = { type: "Muscle Strain", weeksRemaining: Math.floor(Math.random() * 3) + 1 };
         }
       }
     }
@@ -252,7 +452,7 @@ export function processWeekResults(save: any, playerMatchResult: any) {
     });
     updateAllStandings(save);
     recalculateOverallRatings(save);
-    const allPlayed = save.fixtures.every(f => f.played);
+    const allPlayed = save.fixtures.every((f: any) => f.played);
     if (allPlayed && save.fixtures.length > 0) return advanceSeason(save);
   } catch (err) {
     console.error("Critical error in processWeekResults:", err);
@@ -260,7 +460,7 @@ export function processWeekResults(save: any, playerMatchResult: any) {
   return save;
 }
 
-function getStyleAttackModifier(style) {
+function getStyleAttackModifier(style: string) {
   switch (style) {
     case 'Tiki-Taka': return 0.08;
     case 'Gegenpress': return 0.12;
@@ -271,7 +471,7 @@ function getStyleAttackModifier(style) {
   }
 }
 
-function getMentalityModifier(mentality) {
+function getMentalityModifier(mentality: string) {
   switch (mentality) {
     case 'ULTRA_ATTACKING': return 0.22;
     case 'ATTACKING': return 0.12;
@@ -298,10 +498,9 @@ function simFixtures(save: any, filter: (f: any) => boolean, teamsPlayed: Set<st
     return (Math.min(90, avgCondition) - 90) / 40; 
   };
 
-  const distributeStats = (scorersCount: number, teamPlayers: any[], opponentScore: number) => {
+  const distributeStats = (scorersCount: number, teamPlayers: any[], opponentScore: number, fixture: any, teamId: string) => {
     if (teamPlayers.length === 0) return;
 
-    // 1. Appearances & Clean Sheets
     const gk = teamPlayers.find(p => p.role === 'GK');
     teamPlayers.forEach(p => {
       if (!p.seasonStats) p.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
@@ -309,15 +508,16 @@ function simFixtures(save: any, filter: (f: any) => boolean, teamsPlayed: Set<st
     });
 
     if (opponentScore === 0 && gk) {
+      if (!gk.seasonStats) gk.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
       gk.seasonStats.cleanSheets++;
     }
 
-    // 2. Goal & Assist Distribution
     const outfielders = teamPlayers.filter(p => p.role !== 'GK');
     if (outfielders.length === 0) return;
 
+    if (!fixture.goalEvents) fixture.goalEvents = [];
+
     for (let i = 0; i < scorersCount; i++) {
-      // Roll for scorer
       const scorerWeights = outfielders.map(p => {
         let weight = p.attributes.finishing * 2 + p.attributes.positioning;
         if (p.role === 'FWD') weight *= 2.5;
@@ -331,12 +531,25 @@ function simFixtures(save: any, filter: (f: any) => boolean, teamsPlayed: Set<st
         scorerRoll -= scorerWeights[j];
         if (scorerRoll <= 0) { scorerIdx = j; break; }
       }
-      outfielders[scorerIdx].seasonStats.goals++;
+      const scorer = outfielders[scorerIdx];
+      scorer.seasonStats.goals++;
 
-      // 70% chance of an assist
+      let minute;
+      const roll = Math.random();
+      if (roll < 0.15) minute = getRandomInt(40, 45);
+      else if (roll < 0.4) minute = getRandomInt(80, 90);
+      else if (roll < 0.7) minute = getRandomInt(46, 80);
+      else minute = getRandomInt(1, 39);
+      
+      fixture.goalEvents.push({
+        playerId: scorer.id,
+        teamId: teamId,
+        minute: minute
+      });
+
       if (Math.random() < 0.7) {
         const assistWeights = outfielders.map((p, idx) => {
-          if (idx === scorerIdx) return 0; // Can't assist yourself
+          if (idx === scorerIdx) return 0;
           let weight = p.attributes.passing * 2 + p.attributes.vision;
           if (p.role === 'MID') weight *= 2.0;
           if (p.role === 'FWD') weight *= 1.5;
@@ -383,19 +596,100 @@ function simFixtures(save: any, filter: (f: any) => boolean, teamsPlayed: Set<st
     f.awayScore = poisson(lambdaAway);
     f.played = true;
 
-    distributeStats(f.homeScore, homeXI, f.awayScore);
-    distributeStats(f.awayScore, awayXI, f.homeScore);
+    distributeStats(f.homeScore, homeXI, f.awayScore, f, f.homeTeamId);
+    distributeStats(f.awayScore, awayXI, f.homeScore, f, f.awayTeamId);
 
     teamsPlayed.add(f.homeTeamId);
     teamsPlayed.add(f.awayTeamId);
   }
 }
 
-function updateAllStandings(save) {
+function generateNews(save: SaveGame, week: number) {
+    for (const league of save.leagues) {
+        if (!league.news) league.news = [];
+        
+        const weekFixtures = save.fixtures.filter(f => f.week === week && league.teams.includes(f.homeTeamId));
+        
+        for (const f of weekFixtures) {
+            const margin = Math.abs((f.homeScore || 0) - (f.awayScore || 0));
+            if (margin >= 4) {
+                const winner = f.homeScore! > f.awayScore! ? save.teams[f.homeTeamId] : save.teams[f.awayTeamId];
+                const loser = f.homeScore! > f.awayScore! ? save.teams[f.awayTeamId] : save.teams[f.homeTeamId];
+                const scoreStr = f.homeScore! > f.awayScore! ? `${f.homeScore}-${f.awayScore}` : `${f.awayScore}-${f.homeScore}`;
+                
+                league.news.push({
+                    id: `n_${Math.random().toString(36).slice(2, 11)}`,
+                    week,
+                    headline: `${winner.name} dominant in ${scoreStr} thrashing of ${loser.name}!`,
+                    type: 'BIG_RESULT',
+                    relatedTeamId: winner.id
+                });
+            }
+
+            if (f.goalEvents) {
+                const scorerCounts: Record<string, number> = {};
+                for (const g of f.goalEvents) {
+                    scorerCounts[g.playerId] = (scorerCounts[g.playerId] || 0) + 1;
+                }
+                for (const [pId, count] of Object.entries(scorerCounts)) {
+                    if (count >= 3) {
+                        const player = save.players[pId];
+                        league.news.push({
+                            id: `n_${Math.random().toString(36).slice(2, 11)}`,
+                            week,
+                            headline: `Hat-trick hero! ${player.name} hits ${count} in ${save.teams[f.homeTeamId].name} vs ${save.teams[f.awayTeamId].name}`,
+                            type: 'HAT_TRICK',
+                            relatedPlayerId: pId,
+                            relatedTeamId: player.teamId
+                        });
+                    }
+                }
+            }
+        }
+
+        const allPlayersInLeague = Object.values(save.players).filter(p => league.teams.includes(p.teamId!));
+        const topScorer = allPlayersInLeague.sort((a, b) => (b.seasonStats?.goals || 0) - (a.seasonStats?.goals || 0))[0];
+        
+        if (topScorer && (topScorer.seasonStats?.goals || 0) >= 5) {
+            const milestone = topScorer.seasonStats!.goals;
+            if (milestone % 5 === 0) {
+                const headline = `${topScorer.name} is on fire! Hits ${milestone} goals for the season.`;
+                if (!league.news.some(n => n.headline === headline)) {
+                    league.news.push({
+                        id: `n_${Math.random().toString(36).slice(2, 11)}`,
+                        week,
+                        headline,
+                        type: 'GOLDEN_BOOT',
+                        relatedPlayerId: topScorer.id
+                    });
+                }
+            }
+        }
+
+        const sorted = [...league.standings].sort((a, b) => b.points - a.points);
+        if (sorted.length >= 2) {
+            const first = sorted[0].teamId;
+            const second = sorted[1].teamId;
+            const clash = weekFixtures.find(f => (f.homeTeamId === first && f.awayTeamId === second) || (f.homeTeamId === second && f.awayTeamId === first));
+            if (clash) {
+                league.news.push({
+                    id: `n_${Math.random().toString(36).slice(2, 11)}`,
+                    week,
+                    headline: `TITLE CLASH: ${save.teams[first].name} and ${save.teams[second].name} face off in a massive week ${week} fixture.`,
+                    type: 'TOP_CLASH',
+                    relatedTeamId: first
+                });
+            }
+        }
+    }
+}
+
+function updateAllStandings(save: SaveGame) {
   for (const league of save.leagues) {
-    const standingsMap = {};
-    league.teams.forEach(tid => { standingsMap[tid] = { teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }; });
-    const leagueFixtures = save.fixtures.filter(f => f.played && standingsMap[f.homeTeamId]);
+    const standingsMap: Record<string, Standing> = {};
+    league.teams.forEach(tid => { standingsMap[tid] = { teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 } as any; });
+    
+    const leagueFixtures = save.fixtures.filter((f: any) => f.played && f.leagueId === league.id);
     for (const f of leagueFixtures) {
       const h = standingsMap[f.homeTeamId];
       const a = standingsMap[f.awayTeamId];
@@ -411,8 +705,8 @@ function updateAllStandings(save) {
   }
 }
 
-function advanceSeason(save) {
-  const sortStandings = (standings) => [...standings].sort((a, b) => { if (b.points !== a.points) return b.points - a.points; return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst); });
+function advanceSeason(save: SaveGame) {
+  const sortStandings = (standings: Standing[]) => [...standings].sort((a, b) => { if (b.points !== a.points) return b.points - a.points; return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst); });
   const L1 = save.leagues.find(l => l.level === 1);
   const L2 = save.leagues.find(l => l.level === 2);
   const L3 = save.leagues.find(l => l.level === 3);
@@ -422,18 +716,22 @@ function advanceSeason(save) {
   const s2 = sortStandings(L2.standings);
   const s3 = sortStandings(L3.standings);
   const s4 = sortStandings(L4.standings);
-  const resolvePlayoff = (teams) => { if (teams.length === 0) return ""; const totalPoints = teams.reduce((sum, t) => sum + t.points, 0); let roll = Math.random() * (totalPoints || 1); for (const t of teams) { roll -= t.points; if (roll <= 0) return t.teamId; } return teams[0].teamId; };
+  const resolvePlayoff = (teams: any[]) => { if (teams.length === 0) return ""; const totalPoints = teams.reduce((sum, t) => sum + t.points, 0); let roll = Math.random() * (totalPoints || 1); for (const t of teams) { roll -= t.points; if (roll <= 0) return t.teamId; } return teams[0].teamId; };
   const rel1 = s1.slice(-3).map(s => s.teamId);
   const pro2 = [...s2.slice(0, 2).map(s => s.teamId), resolvePlayoff(s2.slice(2, 6))];
   const rel2 = s2.slice(-3).map(s => s.teamId);
   const pro3 = [...s3.slice(0, 2).map(s => s.teamId), resolvePlayoff(s3.slice(2, 6))];
   const rel3 = s3.slice(-4).map(s => s.teamId);
   const pro4 = [...s4.slice(0, 3).map(s => s.teamId), resolvePlayoff(s4.slice(3, 7))];
-  const performSwap = (l, leave, enter) => { l.teams = l.teams.filter(t => !leave.includes(t)); l.teams.push(...enter.filter(t => t && t !== "")); };
+  const performSwap = (l: League, leave: string[], enter: string[]) => { l.teams = l.teams.filter(t => !leave.includes(t)); l.teams.push(...enter.filter(t => t && t !== "")); };
   performSwap(L1, rel1, pro2); performSwap(L2, [...pro2, ...rel2], [...rel1, ...pro3]); performSwap(L3, [...pro3, ...rel3], [...rel2, ...pro4]); performSwap(L4, pro4, rel3);
   save.currentSeason = (save.currentSeason || 1) + 1; save.currentWeek = 1; save.fixtures = [];
-  save.leagues.forEach(league => { league.standings = league.teams.map(tid => ({ teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 })); save.fixtures.push(...generateFixtures(league.teams)); });
+  save.leagues.forEach(league => { league.standings = league.teams.map(tid => ({ teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 })); save.fixtures.push(...generateFixtures(league.teams, league.id)); });
   return save;
 }
 
-function poisson(lambda) { let L = Math.exp(-lambda); let p = 1.0; let k = 0; do { k++; p *= Math.random(); } while (p > L); return k - 1; }
+function poisson(lambda: number) { let L = Math.exp(-lambda); let p = 1.0; let k = 0; do { k++; p *= Math.random(); } while (p > L); return k - 1; }
+
+function getRandomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}

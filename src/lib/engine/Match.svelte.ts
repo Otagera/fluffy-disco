@@ -4,6 +4,7 @@ import { SpatialMap } from './ai/SpatialMap';
 import { TacticalManager } from './ai/Tactics';
 import { MathUtils } from './core/MathUtils';
 import { MatchRecorder } from './MatchRecorder';
+import { getTacticalCompatibility } from './ai/Compatibility';
 import { 
     PLAYER_COUNT, PLAYER_STRIDE,
     PLAYER_OFFSET_X, PLAYER_OFFSET_Y, PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
@@ -56,6 +57,10 @@ export class Match {
     private playerStats: any[] = [];
     private playerRoles: string[] = [];           // corresponding roles for each stat index
     private tacticalStyles: string[] = ['Balanced', 'Balanced']; // [HomeStyle, AwayStyle]
+    private mentalities: string[] = ['BALANCED', 'BALANCED'];
+
+    // system bonuses based on compatibility
+    private systemBonuses: [number, number] = [1.0, 1.0]; // multipliers for error (1.0 = normal, 0.8 = 20% more accurate)
 
     // bench storage (also index-aligned)
     public benchStats: any[] = [];
@@ -94,7 +99,7 @@ export class Match {
      * Initializes the match with starting positions (e.g., Kick-off).
      * Optionally supply parallel roles array that aligns with stats.
      */
-    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[], styles?: string[]) {
+    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[], styles?: string[], mentalities?: string[]) {
         this.initialAnchors = startingPositions;
         if (stats && stats.length > 0) {
             this.playerStats = stats;
@@ -113,6 +118,12 @@ export class Match {
         if (styles && styles.length === 2) {
             this.tacticalStyles = styles;
         }
+        
+        if (mentalities && mentalities.length === 2) {
+            this.mentalities = mentalities;
+        }
+
+        this.updateSystemBonuses();
         
         this.memory.initialize(startingPositions);
         // Place ball at center
@@ -159,8 +170,6 @@ export class Match {
 
         this.offsideLineTeam0 = offsideLineTeam0;
         this.offsideLineTeam1 = offsideLineTeam1;
-
-        // continue CPU subs below
 
         // 1. Update AI Spatial Awareness (Influence Map)
         this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
@@ -379,8 +388,6 @@ export class Match {
             return;
         }
 
-        // kickoff transition is handled later in the normal flow below (possession check) – no early return here
-
         // 2. Identify Possession
         if (this.possessionCooldown > 0) {
             this.possessionCooldown -= dt;
@@ -467,7 +474,8 @@ export class Match {
                 const targetGoalY = 34; // Goal center
                 
                 // Add Gaussian error based on finishing rating
-                const errorSpread = MathUtils.clamp(2.0 * (1.0 - stats.finishing / 100), 0.1, 2.0);
+                const systemBonus = this.systemBonuses[team];
+                const errorSpread = MathUtils.clamp(2.0 * (1.0 - stats.finishing / 100) * systemBonus, 0.1, 2.5);
                 const ty = targetGoalY + MathUtils.nextGaussian(0, errorSpread);
                 
                 const dx = targetGoalX - px;
@@ -490,7 +498,8 @@ export class Match {
                 const passTarget = this.findPassTarget(possessionIdx, team);
                 if (passTarget) {
                     // Add Gaussian error based on passing rating
-                    const errorSpread = MathUtils.clamp(3.0 * (1.0 - stats.passing / 100), 0.2, 3.0);
+                    const systemBonus = this.systemBonuses[team];
+                    const errorSpread = MathUtils.clamp(3.0 * (1.0 - stats.passing / 100) * systemBonus, 0.2, 3.5);
                     const tx = passTarget.x + MathUtils.nextGaussian(0, errorSpread);
                     const ty = passTarget.y + MathUtils.nextGaussian(0, errorSpread);
 
@@ -559,6 +568,20 @@ export class Match {
         const p = 1 - Math.exp(-ratePerSecond * dt);
         return Math.random() < p;
     }
+
+    private updateSystemBonuses() {
+        const homeComp = getTacticalCompatibility(this.tacticalStyles[0], this.mentalities[0], '');
+        const awayComp = getTacticalCompatibility(this.tacticalStyles[1], this.mentalities[1], '');
+        
+        // Bonus: 1.0 (at 50% comp) to 0.8 (at 100% comp) or 1.2 (at 0% comp)
+        this.systemBonuses[0] = 1.2 - (homeComp * 0.4); 
+        this.systemBonuses[1] = 1.2 - (awayComp * 0.4);
+    }
+
+    public set homeStyle(s: string) { this.tacticalStyles[0] = s; this.updateSystemBonuses(); }
+    public set awayStyle(s: string) { this.tacticalStyles[1] = s; this.updateSystemBonuses(); }
+    public set homeMentality(m: string) { this.mentalities[0] = m; this.updateSystemBonuses(); }
+    public set awayMentality(m: string) { this.mentalities[1] = m; this.updateSystemBonuses(); }
 
     /**
      * Handles automatic CPU substitutions for both teams.

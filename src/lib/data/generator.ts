@@ -151,8 +151,13 @@ function generatePlayer(role: Role, baseAbility: number, level: number, youthWei
     role,
     potential: clamp(Math.round(baseAbility + potentialGrowth), 1, 20),
     condition: 100,
+    matchSharpness: getRandomInt(80, 100),
+    morale: getRandomInt(70, 100),
+    preferredFoot: Math.random() > 0.8 ? 'Left' : 'Right',
+    wage: Math.round((baseAbility * 1000) * (level === 1 ? 5 : level === 2 ? 2 : 1)),
     injury: null,
-    attributes
+    attributes,
+    seasonStats: { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 }
   };
 }
 
@@ -188,6 +193,8 @@ function orderSquadForMatchday(players: PlayerProfile[]) {
   return [...starters, ...bench, ...rest];
 }
 
+import { TACTICAL_COMPATIBILITY, type TacticalStyle, getTacticalCompatibility } from '../engine/ai/Compatibility';
+
 export function generateTeam(level: number, usedNames: Set<string>, style: string = 'Global'): { team: TeamProfile; players: PlayerProfile[] } {
   let name = '';
   const profile = LEAGUE_GENERATION[level] ?? LEAGUE_GENERATION[4];
@@ -219,13 +226,31 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
   const reputation = getRandomInt(profile.reputationMin, profile.reputationMax);
   const teamAbility = clamp(profile.abilityBase + randomFloat(-profile.abilityVariance, profile.abilityVariance), 4, 19);
 
+  // LOGICAL TACTICS GENERATION
+  const allStyles = Object.keys(TACTICAL_COMPATIBILITY);
+  const tacticalStyle = allStyles[getRandomInt(0, allStyles.length - 1)];
+  const config = TACTICAL_COMPATIBILITY[tacticalStyle as TacticalStyle];
+  
+  const mentality = config.preferredMentalities[getRandomInt(0, config.preferredMentalities.length - 1)];
+  
+  const formationNames = Object.keys(formations);
+  const compatibleFormations = formationNames.filter(f => config.formationKeywords.some(k => f.includes(k)));
+  const formation = (compatibleFormations.length > 0 && Math.random() > 0.3) 
+    ? compatibleFormations[getRandomInt(0, compatibleFormations.length - 1)] 
+    : formationNames[getRandomInt(0, formationNames.length - 1)];
+
   const team: TeamProfile = {
     id: `t_${Math.random().toString(36).slice(2, 11)}`,
     name,
     reputation,
-    tacticalStyle: ['Tiki-Taka', 'Gegenpress', 'Route One', 'Park the Bus', 'Fluid Counter'][getRandomInt(0, 4)],
-    mentality: Math.random() > 0.82 ? ['ULTRA_DEFENSIVE', 'DEFENSIVE', 'ATTACKING', 'ULTRA_ATTACKING'][getRandomInt(0, 3)] : 'BALANCED',
-    formation: ['4-4-2 Wide', '4-4-2 Diamond', '4-3-3 Wide', '4-3-3 Narrow', '3-5-2', '4-2-3-1', '3-4-3', '5-4-1'][getRandomInt(0, 7)],
+    tacticalStyle,
+    mentality,
+    formation,
+    stadiumName: `${name} Stadium`,
+    stadiumCapacity: getRandomInt(5000, 60000),
+    transferBudget: Math.round(reputation * 1000000),
+    wageBudget: Math.round(reputation * 50000),
+    managerConfidence: 70,
     players: []
   };
 
@@ -246,7 +271,7 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
   return { team, players: orderedPlayers };
 }
 
-export function generateFixtures(teams: string[]): Fixture[] {
+export function generateFixtures(teams: string[], leagueId: string): Fixture[] {
   const fixtures: Fixture[] = [];
   const n = teams.length;
   const tempTeams = [...teams];
@@ -270,6 +295,7 @@ export function generateFixtures(teams: string[]): Fixture[] {
       if (home !== 'BYE' && away !== 'BYE') {
         fixtures.push({
           id: `f_${Math.random().toString(36).slice(2, 11)}`,
+          leagueId,
           week,
           homeTeamId: home,
           awayTeamId: away,
@@ -284,6 +310,7 @@ export function generateFixtures(teams: string[]): Fixture[] {
   firstHalfFixtures.forEach((f) => {
     fixtures.push({
       id: `f_${Math.random().toString(36).slice(2, 11)}`,
+      leagueId,
       week: f.week + rounds,
       homeTeamId: f.awayTeamId,
       awayTeamId: f.homeTeamId,
@@ -321,7 +348,8 @@ export function generateSaveGame(managerName: string, style: string = 'Global', 
       name: lvl.name,
       level: levelIndex,
       teams: [],
-      standings: []
+      standings: [],
+      news: []
     };
 
     for (let j = 0; j < lvl.numTeams; j++) {
@@ -335,7 +363,7 @@ export function generateSaveGame(managerName: string, style: string = 'Global', 
       });
     }
 
-    saveGame.fixtures.push(...generateFixtures(league.teams));
+    saveGame.fixtures.push(...generateFixtures(league.teams, league.id));
     saveGame.leagues.push(league);
   });
 

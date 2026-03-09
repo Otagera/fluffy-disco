@@ -2,6 +2,7 @@
   import { formations } from '$lib/engine/ai/Formations';
   import type { PlayerProfile, TeamProfile } from '$lib/data/types';
   import PlayerModal from '$lib/components/PlayerModal.svelte';
+  import { TACTICAL_COMPATIBILITY, getTacticalCompatibility, type TacticalStyle, type Mentality } from '$lib/engine/ai/Compatibility';
 
   let { 
     team, 
@@ -22,7 +23,7 @@
     isHome?: boolean,
     onSwap?: (id1: string, id2: string) => void,
     onFormationChange?: (name: string) => void,
-    onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>) => void
+    onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
   } = $props();
 
   const startingXI = $derived(players.slice(0, 11));
@@ -30,8 +31,15 @@
 
   const baseFormationPositions = $derived(formations[team.formation] || formations['4-4-2 Wide']);
 
-  let customPositions = $state<Record<number, {x: number, y: number}>>({});
-  let customRoles = $state<Record<number, string>>({});
+  let customPositions = $state<Record<number, {x: number, y: number}>>(team.customPositions || {});
+  let customRoles = $state<Record<number, string>>(team.customRoles || {});
+  let currentStyle = $state(team.tacticalStyle || 'Balanced');
+  let currentMentality = $state(team.mentality || 'BALANCED');
+
+  const STYLES = Object.keys(TACTICAL_COMPATIBILITY);
+  const MENTALITIES: Mentality[] = ['ULTRA_ATTACKING', 'ATTACKING', 'BALANCED', 'DEFENSIVE', 'ULTRA_DEFENSIVE'];
+
+  const compatibilityScore = $derived(getTacticalCompatibility(currentStyle, currentMentality, team.formation));
 
   // Unified Pitch Player State for reactivity
   const pitchPlayers = $derived(baseFormationPositions.map((basePos, i) => ({
@@ -56,8 +64,20 @@
 
   let selectedPlayerForModal = $state<PlayerProfile | null>(null);
 
+  // Deep comparison helper to avoid unnecessary dirty triggers
+  function hasChanged(newPos: any, newRoles: any, newStyle: string, newMentality: string) {
+      if (newStyle !== team.tacticalStyle) return true;
+      if (newMentality !== team.mentality) return true;
+      if (JSON.stringify(newPos) !== JSON.stringify(team.customPositions || {})) return true;
+      if (JSON.stringify(newRoles) !== JSON.stringify(team.customRoles || {})) return true;
+      return false;
+  }
+
   $effect(() => {
-    onOverridesChange(customPositions, customRoles);
+    // Only emit if there's a meaningful delta from the team's base props
+    if (hasChanged(customPositions, customRoles, currentStyle, currentMentality)) {
+        onOverridesChange(customPositions, customRoles, currentStyle, currentMentality);
+    }
   });
 
   function getAvailableRoles(baseRole: string) {
@@ -96,6 +116,8 @@
   function resetOverrides() {
     customPositions = {};
     customRoles = {};
+    currentStyle = team.tacticalStyle || 'Balanced';
+    currentMentality = team.mentality || 'BALANCED';
   }
 
   // --- HTML5 Native Drag & Drop (Squad List <-> Pitch) ---
@@ -260,25 +282,76 @@
 
 <div class="flex flex-col gap-6">
   {#if editable}
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-      <div class="flex flex-wrap gap-2">
-        {#each Object.keys(formations) as fName}
-          <button 
-            class="px-3 py-1.5 rounded-lg text-xs font-black transition-all border {team.formation === fName ? 'bg-primary text-white border-primary shadow-md scale-105' : 'bg-white text-light-subtle border-light-border hover:bg-light-bg'}"
-            onclick={() => {
-              resetOverrides();
-              onFormationChange(fName);
-            }}
-          >
-            {fName}
-          </button>
-        {/each}
+    <div class="flex flex-col gap-4 mb-2 bg-white p-4 rounded-xl border border-light-border shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-col gap-1 w-full md:w-auto">
+            <span class="text-[0.65rem] font-black subtle uppercase tracking-widest">Formation</span>
+            <div class="flex flex-wrap gap-2">
+              {#each Object.keys(formations) as fName}
+                {@const isOptimal = TACTICAL_COMPATIBILITY[currentStyle as TacticalStyle]?.formationKeywords.some(k => fName.includes(k))}
+                <button 
+                  class="px-3 py-1.5 rounded-lg text-xs font-black transition-all border {team.formation === fName ? 'bg-primary text-white border-primary shadow-md scale-105' : 'bg-white text-light-subtle border-light-border hover:bg-light-bg'} {isOptimal && team.formation !== fName ? 'ring-2 ring-accent ring-inset' : ''}"
+                  onclick={() => {
+                    resetOverrides();
+                    onFormationChange(fName);
+                  }}
+                >
+                  {fName}
+                  {#if isOptimal}
+                    <span class="ml-1 text-[0.5rem] opacity-60">★</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+          
+          <div class="flex gap-4 w-full md:w-auto">
+              <div class="flex flex-col gap-1 flex-1">
+                  <span class="text-[0.65rem] font-black subtle uppercase tracking-widest">Tactical Style</span>
+                  <select 
+                      class="form-select text-sm font-bold bg-light-bg border-light-border rounded-lg py-1.5 px-3 w-full"
+                      bind:value={currentStyle}
+                  >
+                      {#each STYLES as style}
+                          <option value={style}>{style}</option>
+                      {/each}
+                  </select>
+              </div>
+              <div class="flex flex-col gap-1 flex-1">
+                  <span class="text-[0.65rem] font-black subtle uppercase tracking-widest">Mentality</span>
+                  <select 
+                      class="form-select text-sm font-bold bg-light-bg border-light-border rounded-lg py-1.5 px-3 w-full"
+                      bind:value={currentMentality}
+                  >
+                      {#each MENTALITIES as ment}
+                          {@const isOptimal = TACTICAL_COMPATIBILITY[currentStyle as TacticalStyle]?.preferredMentalities.includes(ment)}
+                          <option value={ment}>{ment.replace('_', ' ')} {isOptimal ? '★' : ''}</option>
+                      {/each}
+                  </select>
+              </div>
+          </div>
+        </div>
+
+      <div class="mt-3 flex items-center justify-between border-t border-light-border pt-3">
+          <div class="flex items-center gap-3">
+              <span class="text-[0.65rem] font-black subtle uppercase tracking-widest">System Compatibility:</span>
+              <div class="w-32 h-2 bg-light-bg rounded-full overflow-hidden border border-light-border">
+                  <div 
+                    class="h-full transition-all duration-500" 
+                    style="width: {compatibilityScore * 100}%; background-color: {compatibilityScore > 0.7 ? '#10b981' : compatibilityScore > 0.4 ? '#f59e0b' : '#ef4444'}"
+                  ></div>
+              </div>
+              <span class="text-[0.6rem] font-black" style="color: {compatibilityScore > 0.7 ? '#10b981' : compatibilityScore > 0.4 ? '#f59e0b' : '#ef4444'}">
+                {Math.round(compatibilityScore * 100)}%
+              </span>
+          </div>
+
+          {#if allowPositionOverrides || allowRoleOverrides || currentStyle !== team.tacticalStyle || currentMentality !== team.mentality}
+            <button class="text-[0.65rem] font-black text-danger hover:underline px-3 py-1 bg-red-50 rounded-lg uppercase tracking-tight" onclick={resetOverrides}>
+                Reset Overrides
+            </button>
+          {/if}
       </div>
-      {#if allowPositionOverrides || allowRoleOverrides}
-        <button class="text-xs font-black text-danger hover:underline px-3 py-1" onclick={resetOverrides}>
-          Reset Overrides
-        </button>
-      {/if}
     </div>
   {/if}
 
@@ -309,7 +382,7 @@
         </g>
 
         <!-- Player Dots -->
-        {#each pitchPlayers as { basePos, player, displayedRole }, i}
+        {#each pitchPlayers as { basePos, player, displayedRole }, i (player?.id || i)}
           {@const isDraggingThis = pitchDraggingIdx === i}
           {@const pos = isDraggingThis ? { x: dragX!, y: dragY! } : getPos(i)}
           {@const isHoveredSlot = hoveredSlotIndex === i}
@@ -357,7 +430,7 @@
       <div class="bg-white border border-light-border rounded-xl p-4 shadow-sm flex-1 flex flex-col max-h-[750px] overflow-hidden">
         <h3 class="text-xs font-black subtle uppercase tracking-widest border-b border-light-border pb-2 mb-3">Starting XI</h3>
         <div class="space-y-1.5 overflow-y-auto pr-1 flex-1">
-          {#each startingXI as player, i}
+          {#each startingXI as player, i (player.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
@@ -397,7 +470,7 @@
 
         <h3 class="text-xs font-black subtle uppercase tracking-widest border-b border-light-border pb-2 mt-6 mb-3">Bench</h3>
         <div class="space-y-1 overflow-y-auto pr-1 flex-1">
-          {#each bench as player, i}
+          {#each bench as player, i (player.id)}
             {@const benchIdx = i + 11}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->

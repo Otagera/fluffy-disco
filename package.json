@@ -20,6 +20,7 @@
     "@sveltejs/vite-plugin-svelte": "^4.0.4",
     "@types/better-sqlite3": "^7.6.13",
     "autoprefixer": "^10.4.27",
+    "drizzle-kit": "^0.31.9",
     "jsdom": "^28.1.0",
     "postcss": "^8.5.8",
     "svelte": "^5.0.0",
@@ -32,6 +33,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "dexie": "^4.3.0",
+    "drizzle-orm": "^0.45.1",
     "pixi.js": "^8.16.0"
   }
 }
