@@ -145,9 +145,12 @@ export class Match {
             awayDefendersX.push(this.memory.playerBuffer[(i + 11) * PLAYER_STRIDE + PLAYER_OFFSET_X]);
         }
         
-        // Sort to find the second last defender (including GK)
-        homeDefendersX.sort((a, b) => a - b);
-        awayDefendersX.sort((a, b) => b - a); // Reverse sort for away team defending right-to-left
+        const homeDir = this.getAttackDir(0); // 1 for right, -1 for left
+        const awayDir = this.getAttackDir(1);
+        
+        // Sort ascending if defending 0, descending if defending 105
+        homeDefendersX.sort((a, b) => homeDir === 1 ? a - b : b - a);
+        awayDefendersX.sort((a, b) => awayDir === 1 ? a - b : b - a);
         
         // Team 0 attacks 105 (checks against awayDefendersX[1])
         // Team 1 attacks 0 (checks against homeDefendersX[1])
@@ -184,6 +187,12 @@ export class Match {
         // Set Piece / Free Kick Logic
         if (this.status === MatchStatus.SET_PIECE || this.status === MatchStatus.FREE_KICK) {
             this.setPieceTimer -= dt;
+            
+            // --- FIXED: LET BALL SETTLE DURING DEAD BALL ---
+            // Unless the taker has actually arrived to snap it, let gravity and friction work
+            if (!this.setPieceTakerIdx || this.setPieceTimer > 0) {
+                 PhysicsEngine.updateBall(this.memory.ballBuffer, dt);
+            }
             
             // Calculate Tactical Anchors for everyone to settle
             this.tactics.updatePhase(this.memory.ballBuffer, this.setPieceTakerIdx);

@@ -205,6 +205,7 @@ export class PhysicsEngine {
             const airDrag = Math.pow(0.7, dt); // 30% velocity loss per second in air
             vx *= airDrag;
             vy *= airDrag;
+            vz *= airDrag;
         }
 
         // 5. Write back
