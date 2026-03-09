@@ -4,7 +4,6 @@
   let { data }: { data: PageData } = $props();
   
   let selectedLeagueId = $state(data.activeLeagueId);
-  let showExpandedTable = $state(false);
   let showTerminateModal = $state(false);
   
   let selectedLeague = $derived(data.leagues?.find((l: any) => l.id === selectedLeagueId));
@@ -65,6 +64,23 @@
           class="input-field mb-4"
           required
         />
+        
+        <label for="leagueStyle" class="block font-bold mb-1 text-sm uppercase tracking-wider">League Region</label>
+        <p class="text-xs subtle mb-3 italic">Determines the names of teams and the primary nationality of players.</p>
+        <select 
+          id="leagueStyle" 
+          name="leagueStyle" 
+          class="input-field mb-6 appearance-none"
+        >
+          <option value="Global">🌍 Global (Mixed)</option>
+          <option value="English">🏴󠁧󠁢󠁥󠁮󠁧󠁿 English</option>
+          <option value="Spanish">🇪🇸 Spanish</option>
+          <option value="German">🇩🇪 German</option>
+          <option value="Italian">🇮🇹 Italian</option>
+          <option value="French">🇫🇷 French</option>
+          <option value="Brazilian">🇧🇷 Brazilian</option>
+        </select>
+
         <button type="submit" class="btn-primary w-full py-4 uppercase tracking-widest text-sm">Create Career</button>
       </form>
     </div>
@@ -155,13 +171,13 @@
         <div class="flex justify-between items-center mb-6">
           <h2 class="text-xs font-black subtle uppercase tracking-widest mb-0">Live Standings</h2>
           <div class="flex gap-4 items-center">
-            <button 
+            <a 
+              href="/league?id={selectedLeagueId}"
               class="text-xs font-black text-primary hover:underline flex items-center gap-1"
-              onclick={() => showExpandedTable = true}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
               EXPAND
-            </button>
+            </a>
             <select bind:value={selectedLeagueId} class="text-xs font-black bg-light-bg border border-light-border rounded px-2 py-1 focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer pr-6 relative">
               {#each data.leagues as league}
                 <option value={league.id}>{league.name}</option>
@@ -229,66 +245,6 @@
         >
           STAY IN THE DUGOUT
         </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Expanded League Modal -->
-{#if showExpandedTable && selectedLeague}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-8" onclick={() => showExpandedTable = false}>
-    <div class="bg-white w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onclick={(e) => e.stopPropagation()}>
-      <div class="p-6 border-b border-light-border bg-light-bg flex justify-between items-center">
-        <div>
-          <h2 class="mb-0 text-2xl font-black">{selectedLeague.name}</h2>
-          <p class="text-xs font-black subtle uppercase tracking-widest mt-1">Full Season Standings • Week {data.week}</p>
-        </div>
-        <button class="w-12 h-12 rounded-full bg-white border border-light-border flex items-center justify-center font-bold hover:bg-gray-100 transition-colors shadow-sm" onclick={() => showExpandedTable = false}>&times;</button>
-      </div>
-
-      <div class="flex-1 overflow-auto p-4 sm:p-8">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead class="sticky top-0 bg-white z-10 shadow-sm">
-            <tr>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase">Pos</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase">Club</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">P</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">W</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">D</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">L</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GF</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GA</th>
-              <th class="p-4 text-xs font-black subtle border-b border-light-border uppercase text-center">GD</th>
-              <th class="p-4 text-sm font-black text-primary border-b border-light-border uppercase text-center">Pts</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {#each sortedStandings as row, i}
-              <tr class="hover:bg-light-bg {row.teamId === data.team.id ? 'bg-primary/5' : ''} {getZoneClass(selectedLeague?.level || 1, i)}">
-                <td class="p-4 font-black text-light-subtle">{i + 1}</td>
-                <td class="p-4 font-black">
-                  <a href="/teams/{row.teamId}" class="{row.teamId === data.team.id ? 'text-primary' : 'text-light-text'} hover:underline text-lg">{getTeamName(row.teamId)}</a>
-                </td>
-                <td class="p-4 text-center font-bold">{row.played}</td>
-                <td class="p-4 text-center">{row.won}</td>
-                <td class="p-4 text-center">{row.drawn}</td>
-                <td class="p-4 text-center">{row.lost}</td>
-                <td class="p-4 text-center">{row.goalsFor}</td>
-                <td class="p-4 text-center">{row.goalsAgainst}</td>
-                <td class="p-4 text-center font-black {row.goalsFor - row.goalsAgainst >= 0 ? 'text-green-600' : 'text-red-600'}">
-                  {(row.goalsFor - row.goalsAgainst) > 0 ? '+' : ''}{row.goalsFor - row.goalsAgainst}
-                </td>
-                <td class="p-4 text-center font-black text-primary text-xl">{row.points}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="p-6 bg-light-bg border-t border-light-border flex justify-end">
-        <button class="btn-secondary py-3 px-12 uppercase tracking-widest text-xs font-black" onclick={() => showExpandedTable = false}>Close Standings</button>
       </div>
     </div>
   </div>

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { formations } from '$lib/game/formations';
-  import { getTacticalRole } from '$lib/game/rules';
+  import { formations } from '$lib/engine/ai/Formations';
   import type { PlayerProfile, TeamProfile } from '$lib/data/types';
   import PlayerModal from '$lib/components/PlayerModal.svelte';
 
@@ -70,10 +69,23 @@
   }
 
   function getAutoRole(idx: number, baseRole: string) {
-    const pos = getPos(idx);
-    const isWide = pos.y < 0.3 || pos.y > 0.7;
-    const isAdvanced = isHome ? pos.x > 0.35 : (1 - pos.x) > 0.35;
-    return getTacticalRole(baseRole, idx, isWide, team.formation, isAdvanced);
+    if (baseRole === 'GK') return 'GK';
+    if (baseRole === 'DEF') {
+      const pos = getPos(idx);
+      const isWide = pos.y < 0.3 || pos.y > 0.7;
+      return isWide ? 'FB' : 'CB';
+    }
+    if (baseRole === 'MID') {
+      const pos = getPos(idx);
+      const isWide = pos.y < 0.3 || pos.y > 0.7;
+      return isWide ? 'WM' : 'B2B';
+    }
+    if (baseRole === 'FWD') {
+      const pos = getPos(idx);
+      const isWide = pos.y < 0.3 || pos.y > 0.7;
+      return isWide ? 'W' : 'ST';
+    }
+    return baseRole;
   }
 
   function getPos(idx: number) {

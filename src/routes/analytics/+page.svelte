@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
-  import { PITCH_W, PITCH_H } from '$lib/game/constants';
+  import { PITCH_W, PITCH_H } from '$lib/engine/core/match-constants';
 
   let { data }: { data: PageData } = $props();
 

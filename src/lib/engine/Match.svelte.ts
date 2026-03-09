@@ -3,7 +3,7 @@ import { PhysicsEngine } from './physics/Steering';
 import { SpatialMap } from './ai/SpatialMap';
 import { TacticalManager } from './ai/Tactics';
 import { MathUtils } from './core/MathUtils';
-import { MatchRecorder } from '../game/BinaryRecorder';
+import { MatchRecorder } from './MatchRecorder';
 import { 
     PLAYER_COUNT, PLAYER_STRIDE,
     PLAYER_OFFSET_X, PLAYER_OFFSET_Y, PLAYER_OFFSET_VX, PLAYER_OFFSET_VY,
@@ -512,11 +512,11 @@ export class Match {
         PhysicsEngine.updatePlayers(this.memory.playerBuffer, targets, dt);
         PhysicsEngine.updateBall(this.memory.ballBuffer, dt);
 
-        this.checkBoundariesAndGoals();
-
         if (this.recorder) {
             this.recorder.captureFrame(this.memory, this.currentTime);
         }
+
+        this.checkBoundariesAndGoals();
 
         this.currentTime += dt;
     }
@@ -526,13 +526,13 @@ export class Match {
         const dirX = speed > 0.1 ? vx / speed : attackDir;
         const dirY = speed > 0.1 ? vy / speed : 0.0;
 
-        this.memory.ballBuffer[BALL_OFFSET_X] = px + dirX * lead;
-        this.memory.ballBuffer[BALL_OFFSET_Y] = py + dirY * lead;
-        this.memory.ballBuffer[BALL_OFFSET_Z] = 0; // Stick to ground
+        // Constraint dribbling to pitch boundaries to prevent running out of stadium
+        this.memory.ballBuffer[BALL_OFFSET_X] = MathUtils.clamp(px + dirX * lead, -1.0, 106.0);
+        this.memory.ballBuffer[BALL_OFFSET_Y] = MathUtils.clamp(py + dirY * lead, -1.0, 69.0);
+        // Keep existing Z and VZ during dribble instead of flattening
         
         this.memory.ballBuffer[BALL_OFFSET_VX] = vx;
         this.memory.ballBuffer[BALL_OFFSET_VY] = vy;
-        this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
     }
 
     private getAttackDir(teamIdx: number): number {

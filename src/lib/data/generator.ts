@@ -60,13 +60,34 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function randomName() {
-  const rand = Math.random();
-  if (rand < 0.1) return `${anglicizedNames.chinese.first[getRandomInt(0, anglicizedNames.chinese.first.length - 1)]} ${anglicizedNames.chinese.last[getRandomInt(0, anglicizedNames.chinese.last.length - 1)]}`;
-  if (rand < 0.2) return `${anglicizedNames.japanese.first[getRandomInt(0, anglicizedNames.japanese.first.length - 1)]} ${anglicizedNames.japanese.last[getRandomInt(0, anglicizedNames.japanese.last.length - 1)]}`;
-  if (rand < 0.3) return `${anglicizedNames.arabic.first[getRandomInt(0, anglicizedNames.arabic.first.length - 1)]} ${anglicizedNames.arabic.last[getRandomInt(0, anglicizedNames.arabic.last.length - 1)]}`;
+const styleLocales: Record<string, any> = {
+  'Global': locales,
+  'English': [fakerEN_GB],
+  'Spanish': [fakerES],
+  'German': [fakerDE],
+  'Italian': [fakerIT],
+  'French': [fakerFR],
+  'Brazilian': [fakerPT_BR]
+};
 
-  const locale = locales[getRandomInt(0, locales.length - 1)];
+function randomName(style: string = 'Global') {
+  const activeLocales = styleLocales[style] || locales;
+  const isGlobal = style === 'Global';
+  
+  // If global, keep the old chaotic mix. If regional, 80% chance of local, 20% international
+  const rand = Math.random();
+  if (isGlobal || rand > 0.8) {
+    if (rand < (isGlobal ? 0.1 : 0.05)) return `${anglicizedNames.chinese.first[getRandomInt(0, anglicizedNames.chinese.first.length - 1)]} ${anglicizedNames.chinese.last[getRandomInt(0, anglicizedNames.chinese.last.length - 1)]}`;
+    if (rand < (isGlobal ? 0.2 : 0.1)) return `${anglicizedNames.japanese.first[getRandomInt(0, anglicizedNames.japanese.first.length - 1)]} ${anglicizedNames.japanese.last[getRandomInt(0, anglicizedNames.japanese.last.length - 1)]}`;
+    if (rand < (isGlobal ? 0.3 : 0.15)) return `${anglicizedNames.arabic.first[getRandomInt(0, anglicizedNames.arabic.first.length - 1)]} ${anglicizedNames.arabic.last[getRandomInt(0, anglicizedNames.arabic.last.length - 1)]}`;
+    
+    if (!isGlobal) {
+      const randomLocale = locales[getRandomInt(0, locales.length - 1)];
+      return `${randomLocale.person.firstName('male')} ${randomLocale.person.lastName()}`;
+    }
+  }
+
+  const locale = activeLocales[getRandomInt(0, activeLocales.length - 1)];
   return `${locale.person.firstName('male')} ${locale.person.lastName()}`;
 }
 
@@ -90,7 +111,7 @@ function generateAge(level: number, youthWeight: number) {
   return getRandomInt(level <= 2 ? 27 : 25, 35);
 }
 
-function generatePlayer(role: Role, baseAbility: number, level: number, youthWeight: number): PlayerProfile {
+function generatePlayer(role: Role, baseAbility: number, level: number, youthWeight: number, style: string = 'Global'): PlayerProfile {
   const age = generateAge(level, youthWeight);
 
   const attr = (key: keyof PlayerProfile['attributes'], spread = 2.2) => {
@@ -125,7 +146,7 @@ function generatePlayer(role: Role, baseAbility: number, level: number, youthWei
 
   return {
     id: `p_${Math.random().toString(36).slice(2, 11)}`,
-    name: randomName(),
+    name: randomName(style),
     age,
     role,
     potential: clamp(Math.round(baseAbility + potentialGrowth), 1, 20),
@@ -167,13 +188,31 @@ function orderSquadForMatchday(players: PlayerProfile[]) {
   return [...starters, ...bench, ...rest];
 }
 
-export function generateTeam(level: number, usedNames: Set<string>): { team: TeamProfile; players: PlayerProfile[] } {
+export function generateTeam(level: number, usedNames: Set<string>, style: string = 'Global'): { team: TeamProfile; players: PlayerProfile[] } {
   let name = '';
   const profile = LEAGUE_GENERATION[level] ?? LEAGUE_GENERATION[4];
-  const teamSuffixes = ['City', 'United', 'Rovers', 'Wanderers', 'Athletic', 'Town', 'FC', 'Sporting', 'Albion', 'Argyle', 'Alexandra', 'Thistle', 'Wednesday', 'Academicals', 'Rangers', 'Borough', 'County', 'Dons', 'Stanley', 'Orient'];
+  
+  const suffixesByStyle: Record<string, string[]> = {
+    'Global': ['City', 'United', 'Rovers', 'FC', 'Sporting', 'Athletic'],
+    'English': ['City', 'United', 'Rovers', 'Wanderers', 'Athletic', 'Town', 'FC', 'Albion', 'Argyle', 'Wednesday'],
+    'Spanish': ['CF', 'Real', 'Deportivo', 'Sporting', 'UD', 'CD'],
+    'German': ['FC', '04', 'SV', 'Borussia', 'Eintracht', 'VfL', 'TSG'],
+    'Italian': ['AC', 'FC', 'AS', 'SS', 'US', 'Calcio'],
+    'French': ['FC', 'Olympique', 'AS', 'RC', 'Stade'],
+    'Brazilian': ['FC', 'EC', 'FR', 'CR', 'SE']
+  };
+
+  const activeLocales = styleLocales[style] || locales;
+  const locale = activeLocales[getRandomInt(0, activeLocales.length - 1)];
+  const teamSuffixes = suffixesByStyle[style] || suffixesByStyle['Global'];
 
   do {
-    name = `${fakerEN_GB.location.city()} ${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]}`;
+    const cityName = locale.location.city();
+    if (['Spanish', 'Italian', 'French', 'German'].includes(style) && Math.random() > 0.5) {
+        name = `${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]} ${cityName}`;
+    } else {
+        name = `${cityName} ${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]}`;
+    }
   } while (usedNames.has(name));
   usedNames.add(name);
 
@@ -192,7 +231,7 @@ export function generateTeam(level: number, usedNames: Set<string>): { team: Tea
 
   const rolePool: Role[] = ['GK', 'GK', 'GK', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'MID', 'MID', 'MID', 'FWD', 'FWD', 'FWD', 'FWD', 'FWD'];
   const rawPlayers = rolePool.map((role) => {
-    const p = generatePlayer(role, teamAbility + randomFloat(-1.2, 1.2), level, profile.youthWeight);
+    const p = generatePlayer(role, teamAbility + randomFloat(-1.2, 1.2), level, profile.youthWeight, style);
     p.overall = calculatePlayerOverall(p);
     return p;
   });
@@ -255,7 +294,7 @@ export function generateFixtures(teams: string[]): Fixture[] {
   return fixtures;
 }
 
-export function generateSaveGame(managerName: string, selectedTeamId?: string): SaveGame {
+export function generateSaveGame(managerName: string, style: string = 'Global', selectedTeamId?: string): SaveGame {
   const saveGame: SaveGame = {
     manager: { name: managerName, teamId: selectedTeamId || '' },
     currentSeason: 1,
@@ -286,7 +325,7 @@ export function generateSaveGame(managerName: string, selectedTeamId?: string): 
     };
 
     for (let j = 0; j < lvl.numTeams; j++) {
-      const { team, players } = generateTeam(levelIndex, usedTeamNames);
+      const { team, players } = generateTeam(levelIndex, usedTeamNames, style);
       saveGame.teams[team.id] = team;
       league.teams.push(team.id);
 

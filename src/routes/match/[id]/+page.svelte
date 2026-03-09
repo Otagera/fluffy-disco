@@ -3,12 +3,12 @@
   import { page } from '$app/stores';
   import { enhance } from '$app/forms';
   import { Match, MatchStatus } from '$lib/engine/Match.svelte.ts';
-  import { formations } from '$lib/game/formations';
   import { PLAYER_STRIDE, PLAYER_OFFSET_STAMINA, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, BALL_OFFSET_X, BALL_OFFSET_Y } from '$lib/engine/core/constants';
   import PixiPitch from '$lib/components/PixiPitch.svelte';
   import HUD from '$lib/components/HUD.svelte';
   import FormationBoard from '$lib/components/FormationBoard.svelte';
-  import { MatchRecorder } from '$lib/game/BinaryRecorder';
+  import { MatchRecorder } from '$lib/engine/MatchRecorder';
+  import { formations } from '$lib/engine/ai/Formations';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -541,7 +541,7 @@
                 type="button"
                 class="btn-secondary py-3 text-xs font-black uppercase tracking-widest"
                 onclick={async () => {
-                  const { downloadReplay } = await import('$lib/game/BinaryRecorder');
+                  const { downloadReplay } = await import('$lib/engine/MatchRecorder');
                   downloadReplay(matchIdStr);
                 }}
               >

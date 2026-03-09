@@ -53,9 +53,10 @@ export const actions: Actions = {
   startCareer: async ({ request }) => {
     const data = await request.formData();
     const name = data.get('managerName')?.toString() || 'The Gaffer';
+    const style = data.get('leagueStyle')?.toString() || 'Global';
     
     try {
-      const newSave = generateSaveGame(name);
+      const newSave = generateSaveGame(name, style);
       saveNewGameToDB(newSave);
       throw redirect(303, '/');
     } catch (e) {

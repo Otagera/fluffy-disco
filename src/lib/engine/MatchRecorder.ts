@@ -1,5 +1,5 @@
-import { MatchMemory } from '../engine/core/MatchMemory';
-import { PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z } from '../engine/core/constants';
+import { MatchMemory } from './core/MatchMemory';
+import { PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z } from './core/constants';
 import { browserDB } from '../data/dexie';
 
 /**

@@ -262,26 +262,46 @@ export class TacticalManager {
                 
             } else {
                 // Defending: Contraction + shift towards ball
-                let dropBack = (bx - base.x) * 0.2;
-                let contractY = (by - base.y) * 0.2;
-
-                if (style === 'Park the Bus') {
-                    dropBack = (team === 0 ? -15 : 15);
-                    if (currentHalf === 2) dropBack *= -1;
-                    contractY = 0;
+                // We want to maintain a "Team Block" with staggered depth (Def -> Mid -> Fwd)
+                
+                const myGoalX = attackDir === 1 ? 0 : 105;
+                
+                // 1. Calculate the 'Base' of the block (the defensive line)
+                // Defensive line tracks ball but sits deeper
+                const ballXPercent = bx / 105;
+                let defLineX = myGoalX + (attackDir * (15 + (attackDir === 1 ? bx * 0.35 : (105-bx) * 0.35)));
+                
+                // 2. Assign depth based on Role Group
+                let depthFromDefLine = 0;
+                if (role === 'MID' || ['AM', 'DLP', 'B2B', 'WM', 'BWM', 'MEZ'].includes(role)) {
+                    depthFromDefLine = 15; // Midfield block sits 15m ahead of defenders
+                } else if (role === 'FWD' || ['ST', 'IF', 'W', 'AF', 'TM'].includes(role)) {
+                    depthFromDefLine = 35; // Forwards sit 35m ahead of defenders (ready for counter)
                 }
 
-                tx = base.x + dropBack + (attackDir === 1 ? -5 : 5);
-                ty = base.y + contractY;
+                // Apply style modifiers to depth
+                if (style === 'Park the Bus') {
+                    defLineX = myGoalX + (attackDir * 8); // Sit very deep
+                    depthFromDefLine *= 0.6; // Compress the blocks closer together
+                } else if (style === 'Gegenpress') {
+                    defLineX += attackDir * 10; // Push line higher
+                    depthFromDefLine *= 1.2; // Stretch blocks further apart
+                }
+
+                tx = defLineX + (attackDir * depthFromDefLine);
+                
+                // Subtle horizontal shift towards ball
+                ty = base.y + (by - 34) * 0.25; 
                 
                 if (role === 'BWM') {
-                    tx += (attackDir === 1 ? -3 : 3);
+                    tx += (attackDir * 5); // BWM sits between Def and Mid
                 }
             }
 
-            // Keep within pitch bounds
-            tx = Math.max(0.5, Math.min(104.5, tx));
-            ty = Math.max(0.5, Math.min(67.5, ty));
+            // Keep within pitch bounds with a safety margin for defenders
+            // Outfield players should stay at least 2m inside the goal lines
+            tx = Math.max(2.0, Math.min(103.0, tx));
+            ty = Math.max(1.0, Math.min(67.0, ty));
 
             anchors.push({ x: tx, y: ty });
         }

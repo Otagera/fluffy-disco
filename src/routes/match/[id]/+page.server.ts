@@ -57,7 +57,8 @@ export const actions: Actions = {
       fixtureId: params.id || '',
       homeScore,
       awayScore,
-      playerStamina
+      playerStamina,
+      matchAnalytics
     });
 
     if (matchAnalytics) {

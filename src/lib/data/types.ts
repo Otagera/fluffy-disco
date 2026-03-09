@@ -1,4 +1,20 @@
-import type { MatchAnalytics } from '../game/types';
+export interface MatchEvent {
+    type: 'pass' | 'shot' | 'foul' | 'goal';
+    team: number;
+    playerId?: number;
+    x: number;
+    y: number;
+    endX?: number;
+    endY?: number;
+    result?: string;
+    time: number;
+}
+
+export interface MatchAnalytics {
+    possessionTime: [number, number];
+    events: MatchEvent[];
+    heatmapSamples: { x: number, y: number, team: number }[];
+}
 
 export interface PlayerProfile {
   id: string;

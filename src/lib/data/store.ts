@@ -146,19 +146,76 @@ function recalculateOverallRatings(save) {
   for (const team of Object.values(save.teams)) team.overall = calculateTeamOverall(team, save.players);
 }
 
-export function processWeekResults(save, playerMatchResult) {
+export function processWeekResults(save: any, playerMatchResult: any) {
   try {
     const teamsPlayed = new Set();
     if (playerMatchResult) {
-      const playerFixture = save.fixtures.find(f => f.id === playerMatchResult.fixtureId);
+      const playerFixture = save.fixtures.find((f: any) => f.id === playerMatchResult.fixtureId);
       if (playerFixture) {
         playerFixture.played = true;
         playerFixture.homeScore = playerMatchResult.homeScore;
         playerFixture.awayScore = playerMatchResult.awayScore;
         teamsPlayed.add(playerFixture.homeTeamId);
         teamsPlayed.add(playerFixture.awayTeamId);
+
+        // Process High-Fidelity Stats for played match
+        const homeTeam = save.teams[playerFixture.homeTeamId];
+        const awayTeam = save.teams[playerFixture.awayTeamId];
+        
+        // 1. Appearances & Clean Sheets
+        const processPlayedTeamStats = (team: any, isHome: boolean, opponentScore: number) => {
+          const players = team.players.slice(0, 11).map((id: string) => save.players[id]).filter(Boolean);
+          players.forEach((p: any) => {
+            if (!p.seasonStats) p.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
+            p.seasonStats.apps++;
+          });
+          const gk = players.find((p: any) => p.role === 'GK');
+          if (opponentScore === 0 && gk) {
+            gk.seasonStats.cleanSheets++;
+          }
+        };
+
+        if (homeTeam && awayTeam) {
+            processPlayedTeamStats(homeTeam, true, playerMatchResult.awayScore);
+            processPlayedTeamStats(awayTeam, false, playerMatchResult.homeScore);
+        }
+
+        // 2. Map Goals and Assists from Analytics
+        if (playerMatchResult.matchAnalytics && playerMatchResult.matchAnalytics.events) {
+            const events = playerMatchResult.matchAnalytics.events;
+            
+            // Reconstruct squads to map 0-21 indices back to player IDs
+            const homePlayers = homeTeam?.players.slice(0, 11).map((id: string) => save.players[id]) || [];
+            const awayPlayers = awayTeam?.players.slice(0, 11).map((id: string) => save.players[id]) || [];
+            const fullSquad = [...homePlayers, ...awayPlayers];
+
+            for (let i = 0; i < events.length; i++) {
+                const event = events[i];
+                if (event.type === 'goal' && event.playerId !== undefined) {
+                    const scorer = fullSquad[event.playerId];
+                    if (scorer) {
+                        if (!scorer.seasonStats) scorer.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
+                        scorer.seasonStats.goals++;
+
+                        // Find assist: look for the last 'pass' event by the same team within 10 seconds before the goal
+                        for (let j = i - 1; j >= 0; j--) {
+                            const prevEvent = events[j];
+                            if (prevEvent.time < event.time - 10) break; // Too long ago
+                            if (prevEvent.type === 'pass' && prevEvent.team === event.team && prevEvent.playerId !== undefined && prevEvent.playerId !== event.playerId) {
+                                const assister = fullSquad[prevEvent.playerId];
+                                if (assister) {
+                                    if (!assister.seasonStats) assister.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
+                                    assister.seasonStats.assists++;
+                                }
+                                break; // Only one assist per goal
+                            }
+                        }
+                    }
+                }
+            }
+        }
       }
-      simFixtures(save, f => f.week === save.currentWeek && !f.played, teamsPlayed);
+      simFixtures(save, (f: any) => f.week === save.currentWeek && !f.played, teamsPlayed);
       save.currentWeek++;
     } else {
       simFixtures(save, f => !f.played, teamsPlayed);
@@ -224,32 +281,111 @@ function getMentalityModifier(mentality) {
   }
 }
 
-function simFixtures(save, filter, teamsPlayed) {
+function simFixtures(save: any, filter: (f: any) => boolean, teamsPlayed: Set<string>) {
   const fixturesToSim = save.fixtures.filter(filter);
-  const getTeamConditionMod = (team) => {
-    const topPlayers = team.players.map(id => save.players[id]).filter(p => !!p && !p.injury).sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)).slice(0, 11);
+  
+  const getStartingXI = (team: any) => {
+    return team.players
+      .map((id: string) => save.players[id])
+      .filter((p: any) => !!p && !p.injury)
+      .sort((a: any, b: any) => (b.overall ?? 0) - (a.overall ?? 0))
+      .slice(0, 11);
+  };
+
+  const getTeamConditionMod = (topPlayers: any[]) => {
     if (topPlayers.length === 0) return -0.5;
-    const avgCondition = topPlayers.reduce((sum, p) => sum + (p.condition ?? 100), 0) / topPlayers.length;
+    const avgCondition = topPlayers.reduce((sum: number, p: any) => sum + (p.condition ?? 100), 0) / topPlayers.length;
     return (Math.min(90, avgCondition) - 90) / 40; 
   };
+
+  const distributeStats = (scorersCount: number, teamPlayers: any[], opponentScore: number) => {
+    if (teamPlayers.length === 0) return;
+
+    // 1. Appearances & Clean Sheets
+    const gk = teamPlayers.find(p => p.role === 'GK');
+    teamPlayers.forEach(p => {
+      if (!p.seasonStats) p.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
+      p.seasonStats.apps++;
+    });
+
+    if (opponentScore === 0 && gk) {
+      gk.seasonStats.cleanSheets++;
+    }
+
+    // 2. Goal & Assist Distribution
+    const outfielders = teamPlayers.filter(p => p.role !== 'GK');
+    if (outfielders.length === 0) return;
+
+    for (let i = 0; i < scorersCount; i++) {
+      // Roll for scorer
+      const scorerWeights = outfielders.map(p => {
+        let weight = p.attributes.finishing * 2 + p.attributes.positioning;
+        if (p.role === 'FWD') weight *= 2.5;
+        if (p.role === 'MID') weight *= 1.2;
+        return weight;
+      });
+      const totalScorerWeight = scorerWeights.reduce((a, b) => a + b, 0);
+      let scorerRoll = Math.random() * totalScorerWeight;
+      let scorerIdx = 0;
+      for (let j = 0; j < scorerWeights.length; j++) {
+        scorerRoll -= scorerWeights[j];
+        if (scorerRoll <= 0) { scorerIdx = j; break; }
+      }
+      outfielders[scorerIdx].seasonStats.goals++;
+
+      // 70% chance of an assist
+      if (Math.random() < 0.7) {
+        const assistWeights = outfielders.map((p, idx) => {
+          if (idx === scorerIdx) return 0; // Can't assist yourself
+          let weight = p.attributes.passing * 2 + p.attributes.vision;
+          if (p.role === 'MID') weight *= 2.0;
+          if (p.role === 'FWD') weight *= 1.5;
+          if (p.role === 'DEF') weight *= 0.5;
+          return weight;
+        });
+        const totalAssistWeight = assistWeights.reduce((a, b) => a + b, 0);
+        if (totalAssistWeight > 0) {
+          let assistRoll = Math.random() * totalAssistWeight;
+          for (let j = 0; j < assistWeights.length; j++) {
+            assistRoll -= assistWeights[j];
+            if (assistRoll <= 0) { 
+              outfielders[j].seasonStats.assists++; 
+              break; 
+            }
+          }
+        }
+      }
+    }
+  };
+
   for (const f of fixturesToSim) {
     const homeTeam = save.teams[f.homeTeamId];
     const awayTeam = save.teams[f.awayTeamId];
     if (!homeTeam || !awayTeam) { f.played = true; f.homeScore = 0; f.awayScore = 0; continue; }
+    
+    const homeXI = getStartingXI(homeTeam);
+    const awayXI = getStartingXI(awayTeam);
+
     const homeAdv = 0.24;
     const reputationDiff = (homeTeam.reputation - awayTeam.reputation) / 28;
     const overallDiff = ((homeTeam.overall ?? 1) - (awayTeam.overall ?? 1)) / 5;
-    const homeConditionMod = getTeamConditionMod(homeTeam);
-    const awayConditionMod = getTeamConditionMod(awayTeam);
+    const homeConditionMod = getTeamConditionMod(homeXI);
+    const awayConditionMod = getTeamConditionMod(awayXI);
     const homeStyle = getStyleAttackModifier(homeTeam.tacticalStyle);
     const awayStyle = getStyleAttackModifier(awayTeam.tacticalStyle);
     const homeMentality = getMentalityModifier(homeTeam.mentality);
     const awayMentality = getMentalityModifier(awayTeam.mentality);
+    
     const lambdaHome = Math.max(0.1, 1.2 + homeAdv + reputationDiff + overallDiff + homeConditionMod + homeStyle + homeMentality - awayMentality * 0.4);
     const lambdaAway = Math.max(0.1, 1.1 - reputationDiff - overallDiff + awayConditionMod + awayStyle + awayMentality - homeMentality * 0.4);
+    
     f.homeScore = poisson(lambdaHome);
     f.awayScore = poisson(lambdaAway);
     f.played = true;
+
+    distributeStats(f.homeScore, homeXI, f.awayScore);
+    distributeStats(f.awayScore, awayXI, f.homeScore);
+
     teamsPlayed.add(f.homeTeamId);
     teamsPlayed.add(f.awayTeamId);
   }

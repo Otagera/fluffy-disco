@@ -100,11 +100,11 @@ export class PhysicsEngine {
             const mass = buffer[offset + PLAYER_OFFSET_MASS];
 
             // 1. Calculate Force (Arrive instead of Seek to prevent orbiting)
-            const slowingRadius = 5.0; // Start braking 5 meters away
+            const slowingRadius = 8.0; // Start braking earlier (8 meters away instead of 5)
             const force = this.calculateArrive(px, py, vx, vy, target.x, target.y, maxS, slowingRadius);
 
             // Amplify the steering force so players actually accelerate quickly
-            const steeringGain = 400.0;
+            const steeringGain = 350.0; // Slightly reduced from 400 to prevent overshooting at high FPS
             force.fx *= steeringGain;
             force.fy *= steeringGain;
 
@@ -135,7 +135,12 @@ export class PhysicsEngine {
             px += dx;
             py += dy;
 
-            // 5. Stamina Drain
+            // 5. Boundary Constraints
+            // Clamp strictly to the field of play [0, 105] and [0, 68]
+            px = Math.max(0.1, Math.min(104.9, px));
+            py = Math.max(0.1, Math.min(67.9, py));
+
+            // 6. Stamina Drain
             const distanceMoved = Math.sqrt(dx * dx + dy * dy);
             // Example drain: 0.0001 per meter moved. Sprinting drains more because distance is higher per tick.
             if (stamina > 0.1) {
@@ -143,7 +148,7 @@ export class PhysicsEngine {
                 buffer[offset + PLAYER_OFFSET_STAMINA] = Math.max(0.1, stamina); // Don't let it hit absolute 0
             }
 
-            // 6. Write back
+            // 7. Write back
             buffer[offset + PLAYER_OFFSET_X] = px;
             buffer[offset + PLAYER_OFFSET_Y] = py;
             buffer[offset + PLAYER_OFFSET_VX] = vx;

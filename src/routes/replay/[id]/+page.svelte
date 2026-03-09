@@ -48,26 +48,29 @@
     });
 
     let animationId: number;
-    let lastTick = 0;
+    let startTime = 0;
     
     function loop(time: number) {
         if (!isPlaying) return;
+        if (!startTime) startTime = time - (currentFrame / fps) * 1000;
         
-        if (time - lastTick > 1000 / fps) {
-            if (currentFrame < totalFrames - 1) {
-                currentFrame++;
-                applyFrame(currentFrame);
-            } else {
-                isPlaying = false;
-            }
-            lastTick = time;
+        const elapsed = time - startTime;
+        const exactFrame = (elapsed / 1000) * fps;
+        
+        if (exactFrame < totalFrames - 1) {
+            currentFrame = exactFrame;
+            applyInterpolatedFrame(currentFrame);
+            animationId = requestAnimationFrame(loop);
+        } else {
+            currentFrame = totalFrames - 1;
+            applyFrame(totalFrames - 1);
+            isPlaying = false;
         }
-        animationId = requestAnimationFrame(loop);
     }
 
     $effect(() => {
         if (isPlaying) {
-            lastTick = performance.now();
+            startTime = 0; // will be set in loop
             animationId = requestAnimationFrame(loop);
         } else {
             if (animationId) cancelAnimationFrame(animationId);
@@ -80,7 +83,8 @@
 
     function applyFrame(idx: number) {
         if (!combined) return;
-        const offset = idx * 48;
+        const i = Math.floor(idx);
+        const offset = i * 48;
         
         memory.ballBuffer[BALL_OFFSET_X] = combined[offset + 1];
         memory.ballBuffer[BALL_OFFSET_Y] = combined[offset + 2];
@@ -94,10 +98,35 @@
         }
     }
 
+    function applyInterpolatedFrame(exactIdx: number) {
+        if (!combined) return;
+        const i1 = Math.floor(exactIdx);
+        const i2 = Math.min(i1 + 1, totalFrames - 1);
+        const t = exactIdx - i1;
+
+        const off1 = i1 * 48;
+        const off2 = i2 * 48;
+
+        // Ball Interpolation
+        memory.ballBuffer[BALL_OFFSET_X] = combined[off1 + 1] + (combined[off2 + 1] - combined[off1 + 1]) * t;
+        memory.ballBuffer[BALL_OFFSET_Y] = combined[off1 + 2] + (combined[off2 + 2] - combined[off1 + 2]) * t;
+        memory.ballBuffer[BALL_OFFSET_Z] = combined[off1 + 3] + (combined[off2 + 3] - combined[off1 + 3]) * t;
+
+        // Player Interpolation
+        for (let p = 0; p < PLAYER_COUNT; p++) {
+            const memOffset = p * PLAYER_STRIDE;
+            const fOff1 = off1 + 4 + (p * 2);
+            const fOff2 = off2 + 4 + (p * 2);
+            memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOff1] + (combined[fOff2] - combined[fOff1]) * t;
+            memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOff1 + 1] + (combined[fOff2 + 1] - combined[fOff1 + 1]) * t;
+        }
+    }
+
     function handleSeek(e: Event) {
-        const val = parseInt((e.target as HTMLInputElement).value, 10);
+        const val = parseFloat((e.target as HTMLInputElement).value);
         currentFrame = val;
-        applyFrame(currentFrame);
+        isPlaying = false;
+        applyInterpolatedFrame(currentFrame);
     }
 </script>
 
@@ -139,13 +168,14 @@
 
                     <div class="flex-1 flex flex-col">
                         <div class="flex justify-between text-xs font-black subtle uppercase tracking-widest mb-2">
-                            <span>Frame {currentFrame}</span>
+                            <span>Frame {Math.floor(currentFrame)}</span>
                             <span>{Math.floor((currentFrame / fps) / 60)}:{(Math.floor(currentFrame / fps) % 60).toString().padStart(2, '0')}</span>
                         </div>
                         <input 
                             type="range" 
                             min="0" 
                             max={totalFrames - 1} 
+                            step="0.01"
                             value={currentFrame} 
                             oninput={handleSeek}
                             class="w-full accent-primary"
