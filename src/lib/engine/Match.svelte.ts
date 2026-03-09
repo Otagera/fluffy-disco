@@ -99,7 +99,7 @@ export class Match {
      * Initializes the match with starting positions (e.g., Kick-off).
      * Optionally supply parallel roles array that aligns with stats.
      */
-    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[], styles?: string[], mentalities?: string[]) {
+    public setup(startingPositions: { x: number, y: number }[], stats?: any[], roles?: string[], styles?: string[], mentalities?: string[], resetStamina: boolean = false) {
         this.initialAnchors = startingPositions;
         if (stats && stats.length > 0) {
             this.playerStats = stats;
@@ -125,7 +125,7 @@ export class Match {
 
         this.updateSystemBonuses();
         
-        this.memory.initialize(startingPositions);
+        this.memory.initialize(startingPositions, resetStamina);
         // Place ball at center
         this.memory.ballBuffer[BALL_OFFSET_X] = 52.5;
         this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
@@ -371,6 +371,9 @@ export class Match {
                         const passPower = 12.0;
                         this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * passPower;
                         this.memory.ballBuffer[BALL_OFFSET_VY] = (dy / dist) * passPower;
+                        
+                        const loft = dist > 15.0 ? Math.min((dist - 15.0) * 0.15, 6.0) : 0;
+                        this.memory.ballBuffer[BALL_OFFSET_VZ] = loft;
                     } else {
                         // Just kick it slightly into the pitch if no target
                         this.memory.ballBuffer[BALL_OFFSET_VX] = attackDir * 5.0;
@@ -511,6 +514,10 @@ export class Match {
                     const passPower = 10.0 + (stats.passing / 100) * 10.0;
                     this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * passPower;
                     this.memory.ballBuffer[BALL_OFFSET_VY] = (dy / dist) * passPower;
+                    
+                    // If the pass is longer than 15 meters, apply some loft so it clears the grass friction
+                    const loft = dist > 15.0 ? Math.min((dist - 15.0) * 0.15, 6.0) : 0;
+                    this.memory.ballBuffer[BALL_OFFSET_VZ] = loft;
                     
                     this.analytics.events.push({ type: 'pass', team, playerId: possessionIdx, x: px, y: py, endX: tx, endY: ty, time: this.currentTime });
                     
@@ -753,7 +760,7 @@ export class Match {
                 });
 
                 // Reset positions
-                this.setup(this.initialAnchors, this.playerStats);
+                this.setup(this.initialAnchors, this.playerStats, undefined, undefined, undefined, false);
                 this.status = MatchStatus.KICKOFF;
             } else {
                 // Out of bounds - Goal Kick / Corner

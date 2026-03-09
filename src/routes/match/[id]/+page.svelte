@@ -77,10 +77,20 @@
 
     // Pulse the new engine
     if (hasKickedOff && !isPaused && !showTacticsModal && match.status !== MatchStatus.PAUSED && match.status !== MatchStatus.HALF_TIME) {
-      match.tick(dt * gameSpeed);
+      
+      // Sub-step the physics to prevent Euler integration overshoot at high game speeds
+      let simulatedTime = 0;
+      const targetTime = dt * gameSpeed;
+      const fixedDt = 0.05; // 50ms per step max
+      
+      while (simulatedTime < targetTime) {
+          const step = Math.min(fixedDt, targetTime - simulatedTime);
+          match.tick(step);
+          simulatedTime += step;
+      }
       
       // Periodically sync engine stamina back to the UI squad array
-      syncTimer += dt * gameSpeed;
+      syncTimer += targetTime;
       if (syncTimer > 2) { // Sync every 2 engine seconds
         syncTimer = 0;
         const teamNum = isHome ? 0 : 1;
@@ -214,7 +224,7 @@
     const homeMentality = (overrides && overrides.isHome) ? (overrides.mentality || data.homeTeam.mentality) : data.homeTeam.mentality;
     const awayMentality = (overrides && !overrides.isHome) ? (overrides.mentality || data.awayTeam.mentality) : data.awayTeam.mentality;
 
-    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles, [homeStyle, awayStyle], [homeMentality, awayMentality]);
+    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles, [homeStyle, awayStyle], [homeMentality, awayMentality], true);
     
     // attach bench if provided
     match.benchStats = benchStatsArr;
@@ -228,9 +238,16 @@
     const swappedHome = homeStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
     const swappedAway = awayStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
     
+    // Half-time Stamina Recovery (approx +15%)
+    for (let i = 0; i < 22; i++) {
+        const offset = i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA;
+        const currentStamina = match.memory.playerBuffer[offset];
+        match.memory.playerBuffer[offset] = Math.min(1.0, currentStamina + 0.15);
+    }
+
     match.currentHalf = 2;
     // We pass empty arrays for styles/mentalities during half time so they don't overwrite current live states
-    match.setup([...swappedHome, ...swappedAway], playerStats, starterRoles);
+    match.setup([...swappedHome, ...swappedAway], playerStats, starterRoles, undefined, undefined, false);
     match.status = MatchStatus.KICKOFF;
   }
 
@@ -497,17 +514,21 @@
   {#if showTacticsModal}
     <div class="fixed inset-0 bg-black/80 backdrop-blur-xl z-[300] flex flex-col p-8">
       <div class="flex justify-between items-center mb-8">
-        <h2 class="text-3xl font-black text-white uppercase tracking-tighter">In-Match Tactics</h2>
-        <button 
+        <div class="flex items-center gap-6">
+          <h2 class="text-3xl font-black text-white uppercase tracking-tighter">In-Match Tactics</h2>
+          <div class="bg-primary/20 border border-primary text-primary px-3 py-1 rounded-lg text-sm font-black tracking-widest uppercase flex items-center gap-2">
+            Subs Made: <span class="bg-primary text-white px-2 rounded">{match.subsUsed[isHome ? 0 : 1]} / 5</span>
+          </div>
+        </div>
+        <button
           class="btn-primary px-8 py-3 uppercase tracking-widest text-sm font-black"
           onclick={() => showTacticsModal = false}
         >
           Resume Match
         </button>
-      </div>
-      
-      <div class="flex-1 bg-white rounded-3xl overflow-hidden shadow-2xl">
-        <div class="w-full h-full max-w-4xl mx-auto py-8">
+      </div>      
+      <div class="flex-1 bg-white rounded-3xl overflow-y-auto shadow-2xl">
+        <div class="w-full max-w-4xl mx-auto py-8 px-4">
           <FormationBoard 
             team={isHome ? data.homeTeam : data.awayTeam} 
             players={squad} 

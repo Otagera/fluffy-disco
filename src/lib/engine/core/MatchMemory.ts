@@ -25,7 +25,7 @@ export class MatchMemory {
     /**
      * Utility to reset player positions to a center point or formation.
      */
-    public initialize(startingPositions: { x: number, y: number }[]) {
+    public initialize(startingPositions: { x: number, y: number }[], resetStamina: boolean = false) {
         for (let i = 0; i < PLAYER_COUNT; i++) {
             const offset = i * PLAYER_STRIDE;
             const pos = startingPositions[i] || { x: 0, y: 0 };
@@ -35,7 +35,9 @@ export class MatchMemory {
             this.playerBuffer[offset + 4] = 10.5;   // Max Speed 10.5m/s (~38km/h)
             this.playerBuffer[offset + 5] = 850.0;  // High acceleration force (increased for maneuverability/braking)
             this.playerBuffer[offset + 6] = 75.0;   // Mass
-            this.playerBuffer[offset + 7] = 1.0;   // 100% stamina
+            if (resetStamina) {
+                this.playerBuffer[offset + 7] = 1.0;   // 100% stamina
+            }
         }
     }
 }

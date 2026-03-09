@@ -142,9 +142,9 @@ export class PhysicsEngine {
 
             // 6. Stamina Drain
             const distanceMoved = Math.sqrt(dx * dx + dy * dy);
-            // Example drain: 0.0001 per meter moved. Sprinting drains more because distance is higher per tick.
+            // Example drain: 0.00008 per meter moved.
             if (stamina > 0.1) {
-                stamina -= distanceMoved * 0.00005; // Adjust drain rate as needed
+                stamina -= distanceMoved * 0.00008; // Increased drain rate
                 buffer[offset + PLAYER_OFFSET_STAMINA] = Math.max(0.1, stamina); // Don't let it hit absolute 0
             }
 
