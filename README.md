@@ -13,10 +13,31 @@ A high-performance, statistically driven 2D football management and match simula
 
 ## UI & Management Features
 
--   **Dashboard Hub:** Interactive standings with expanded modal views, fixture management, and career lifecycle control.
+-   **League Hub:** A dedicated control center for the entire league featuring detailed standings, browsable fixtures by matchweek, and high-fidelity player stats (Top Scorers, Assists, Clean Sheets).
+-   **Dashboard Hub:** At-a-glance standings, fixture management, and career lifecycle control.
 -   **Tactical Sandbox:** Free-form position dragging and role assignments saved as permanent club defaults or match-specific overrides.
 -   **Squad Hub:** Deep-dive into every club's roster with color-coded ratings, starting XI projections, and detailed player attribute radars.
 -   **Career Control:** High-fidelity managerial actions including a professional "Terminate Career" confirmation system.
+
+## Developer Tools
+
+### Replay Data Converter
+A standalone Node.js utility to convert binary match data (`.bin`) into more accessible formats for debugging or external AI analysis.
+
+**Usage:**
+```bash
+node scripts/convert-replay.js <input-file.bin> [options]
+```
+
+**Options:**
+- `--format <json|base64>`: Output format (default: `json`).
+- `--output <file>`: Write results to a file instead of `stdout`.
+- `--minify`: Minify the JSON output.
+
+**Example:**
+```bash
+node scripts/convert-replay.js replay-f_u33s74h7h.bin --format json --output match_data.json
+```
 
 ## Architecture
 
@@ -24,13 +45,15 @@ A high-performance, statistically driven 2D football management and match simula
 src/
 ├── lib/
 │   ├── components/       # Shared UI (FormationBoard, PlayerModal, HUD)
-│   ├── engine/           # Pure TS Simulation (No Svelte Runes)
-│   │   ├── ai/           # Spatial Maps, Tactics, Decision Making
+│   ├── engine/           # High-Performance Match Engine
+│   │   ├── Match.svelte.ts # Main simulation entry point
+│   │   ├── MatchRecorder.ts # Binary replay capture
+│   │   ├── ai/           # Spatial Maps, Tactics (Formations, Decision Making)
 │   │   ├── core/         # RNG, Memory Buffers, Constants
-│   │   └── physics/      # Steering, Kinematics, Collisions
+│   │   └── physics/      # Steering behaviors & kinematics
 │   ├── data/             # Save Game Store, Realism Generator, Rating Models
 │   └── renderer/         # PixiJS WebGL View Layer
-└── routes/               # SvelteKit App Pages (Home, Teams, Tactics, Formation)
+└── routes/               # SvelteKit App Pages (Home, League, Teams, Match, Replay)
 ```
 
 ## Tech Stack
