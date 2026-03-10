@@ -8,49 +8,60 @@
     } from '$lib/engine/core/constants';
     import PixiPitch from '$lib/components/PixiPitch.svelte';
     import type { PageData } from './$types';
+let { data }: { data: PageData } = $props();
 
-    let { data }: { data: PageData } = $props();
+let memory = new MatchMemory();
+memory.initialize([]); // setup buffers
 
-    let memory = new MatchMemory();
-    memory.initialize([]); // setup buffers
-    
-    let combined: Float32Array | null = null;
-    let totalFrames = $state(0);
-    let currentFrame = $state(0);
-    let isPlaying = $state(false);
-    let fps = 10;
-    
-    let loading = $state(true);
-    let errorMsg = $state('');
+let combined: Float32Array | null = null;
+let totalFrames = $state(0);
+let currentFrame = $state(0);
+let isPlaying = $state(false);
+let fps = 10;
 
-    let labels = Array.from({length: 22}, (_, i) => ((i%11)+1).toString());
+let loading = $state(true);
+let errorMsg = $state('');
 
-    onMount(async () => {
-        try {
-            const replay = await browserDB.replays.where({ matchId: data.id }).first();
-            if (!replay) {
-                errorMsg = 'Replay not found in local database.';
-                loading = false;
-                return;
-            }
-            
-            fps = replay.fps;
-            const arrayBuffer = await replay.blob.arrayBuffer();
-            combined = new Float32Array(arrayBuffer);
-            totalFrames = replay.frameCount;
-            
-            applyFrame(0);
+let labels = Array.from({length: 22}, (_, i) => ((i%11)+1).toString());
+let currentLabels = [...labels]; // To track what is currently rendered
+let analytics: any = null;
+let pitchComponent: any = $state(null);
+
+onMount(async () => {
+    try {
+        const replay = await browserDB.replays.where({ matchId: data.id }).first();
+        if (!replay) {
+            errorMsg = 'Replay not found in local database.';
             loading = false;
-        } catch (e: any) {
-            errorMsg = e.message;
-            loading = false;
+            return;
         }
-    });
 
-    let animationId: number;
-    let startTime = 0;
-    
-    function loop(time: number) {
+        fps = replay.fps;
+        const arrayBuffer = await replay.blob.arrayBuffer();
+        combined = new Float32Array(arrayBuffer);
+        totalFrames = replay.frameCount;
+
+        if (replay.startingLabels) {
+            labels = [...replay.startingLabels];
+            currentLabels = [...labels];
+        }
+        if (replay.analytics) {
+            analytics = replay.analytics;
+        }
+
+        applyFrame(0);
+        loading = false;
+    } catch (e: any) {
+        errorMsg = e.message;
+        loading = false;
+    }
+});
+
+let animationId: number;
+let lastTime = 0;
+let startTime = 0;
+
+function loop(time: number) {
         if (!isPlaying) return;
         if (!startTime) startTime = time - (currentFrame / fps) * 1000;
         
@@ -86,6 +97,9 @@
         const i = Math.floor(idx);
         const offset = i * 48;
         
+        const time = combined[offset];
+        syncLabels(time);
+
         memory.ballBuffer[BALL_OFFSET_X] = combined[offset + 1];
         memory.ballBuffer[BALL_OFFSET_Y] = combined[offset + 2];
         memory.ballBuffer[BALL_OFFSET_Z] = combined[offset + 3];
@@ -107,6 +121,9 @@
         const off1 = i1 * 48;
         const off2 = i2 * 48;
 
+        const time = combined[off1];
+        syncLabels(time);
+
         // Ball Interpolation
         memory.ballBuffer[BALL_OFFSET_X] = combined[off1 + 1] + (combined[off2 + 1] - combined[off1 + 1]) * t;
         memory.ballBuffer[BALL_OFFSET_Y] = combined[off1 + 2] + (combined[off2 + 2] - combined[off1 + 2]) * t;
@@ -119,6 +136,28 @@
             const fOff2 = off2 + 4 + (p * 2);
             memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOff1] + (combined[fOff2] - combined[fOff1]) * t;
             memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOff1 + 1] + (combined[fOff2 + 1] - combined[fOff1 + 1]) * t;
+        }
+    }
+
+    function syncLabels(time: number) {
+        if (!analytics || !analytics.events || !pitchComponent) return;
+
+        // Start from base labels
+        const calculatedLabels = [...labels];
+
+        // Apply all sub events that happened before or exactly at current time
+        for (const event of analytics.events) {
+            if (event.type === 'sub' && event.time <= time && event.playerId !== undefined && event.incomingPlayerNumber !== undefined) {
+                calculatedLabels[event.playerId] = event.incomingPlayerNumber.toString();
+            }
+        }
+
+        // Apply changes to renderer
+        for (let i = 0; i < calculatedLabels.length; i++) {
+            if (calculatedLabels[i] !== currentLabels[i]) {
+                currentLabels[i] = calculatedLabels[i];
+                pitchComponent.updateLabel(i, currentLabels[i]);
+            }
         }
     }
 
@@ -149,7 +188,7 @@
         <div class="w-full flex-1 flex flex-col">
             <!-- Pitch -->
             <div class="flex-1 w-full flex items-center justify-center">
-                <PixiPitch {memory} {labels} />
+                <PixiPitch bind:this={pitchComponent} {memory} {labels} />
             </div>
 
             <!-- Controls -->

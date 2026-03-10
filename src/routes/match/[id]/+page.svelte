@@ -130,7 +130,7 @@
         
         // Save Replay
         if (match.recorder) {
-            match.recorder.saveToIndexedDB();
+            match.recorder.saveToIndexedDB(match.analytics, playerLabels);
         }
     }
 
@@ -332,7 +332,7 @@
     
     // Save Replay
     if (match.recorder) {
-        match.recorder.saveToIndexedDB();
+        match.recorder.saveToIndexedDB(match.analytics, playerLabels);
     }
     
     isSimulating = false;

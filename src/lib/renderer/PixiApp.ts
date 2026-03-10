@@ -95,6 +95,15 @@ export class MatchRenderer {
         }
     }
 
+    public updateLabel(index: number, newLabel: string) {
+        if (this.playerContainers[index]) {
+            const textEl = this.playerContainers[index].children[1] as PIXI.Text;
+            if (textEl && textEl.text !== undefined) {
+                textEl.text = newLabel;
+            }
+        }
+    }
+
     private drawPitchMarkings(layer: PIXI.Container) {
         const g = new PIXI.Graphics();
         const lineStyle = { color: 0xffffff, width: 2, alpha: 0.4 };

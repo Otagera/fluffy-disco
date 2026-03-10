@@ -10,6 +10,8 @@ export interface ReplayData {
   frameCount: number;
   fps: number;
   blob: Blob;
+  analytics?: any;
+  startingLabels?: string[];
 }
 
 export class FootballSimDB extends Dexie {

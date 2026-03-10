@@ -4,12 +4,15 @@
     import type { MatchMemory } from '$lib/engine/core/MatchMemory';
 
     let { memory, labels }: { memory: MatchMemory, labels: string[] } = $props();
-    
+
     let canvas: HTMLCanvasElement;
     let renderer: MatchRenderer;
 
-    onMount(() => {
-        if (canvas && memory) {
+    export function updateLabel(index: number, newLabel: string) {
+        if (renderer) renderer.updateLabel(index, newLabel);
+    }
+
+    onMount(() => {        if (canvas && memory) {
             renderer = new MatchRenderer(canvas, memory, labels);
         }
     });

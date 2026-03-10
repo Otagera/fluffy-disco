@@ -52,7 +52,7 @@ export class MatchRecorder {
         this.frames.push(frameData);
     }
 
-    public async saveToIndexedDB() {
+    public async saveToIndexedDB(analytics?: any, startingLabels?: string[]) {
         if (this.frames.length === 0) return;
 
         // Concatenate all frames into one giant ArrayBuffer
@@ -75,7 +75,9 @@ export class MatchRecorder {
                 timestamp: new Date().toISOString(),
                 frameCount: this.frames.length,
                 fps: FPS_TARGET,
-                blob: blob
+                blob: blob,
+                analytics,
+                startingLabels
             });
             console.log(`Saved replay for match ${this.matchId} (${this.frames.length} frames, ${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
         } catch (e) {

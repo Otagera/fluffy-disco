@@ -1,7 +1,12 @@
 export interface MatchEvent {
-    type: 'pass' | 'shot' | 'foul' | 'goal';
+    type: 'pass' | 'shot' | 'foul' | 'goal' | 'save' | 'sub';
     team: number;
     playerId?: number;
+    foulerId?: number;
+    incomingPlayerId?: string;
+    incomingPlayerNumber?: number;
+    yellowCard?: boolean;
+    redCard?: boolean;
     x: number;
     y: number;
     endX?: number;

@@ -525,18 +525,15 @@ export class Match {
                 const targetGoalX = attackDir === 1 ? 105 : 0;
                 const targetGoalY = 34; // Goal center
                 
+                const dx = targetGoalX - px;
+                const approximateDist = Math.abs(dx);
+                
                 // Add Gaussian error based on finishing rating
                 const systemBonus = this.systemBonuses[team];
                 const shotComposure = ((stats.finishing || 50) * 0.8 + (stats.composure || 50) * 0.2) / 100;
-                const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 0.9;
-                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError, 0.08, 2.8);
-                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
-                const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
-                
-                const dx = targetGoalX - px;
-                const approximateDist = Math.abs(dx);
                 const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 1.2;
                 const longShotPenalty = MathUtils.clamp((approximateDist - 20) / 28, 0, 1);
+                
                 const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError + longShotPenalty * 1.15, 0.12, 3.8);
                 const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
                 const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
@@ -754,6 +751,18 @@ export class Match {
         this.memory.playerBuffer[globalIdx * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA] = 1.0;
 
         this.subsUsed[team]++;
+        
+        this.analytics.events.push({
+            type: 'sub',
+            team,
+            playerId: globalIdx,
+            incomingPlayerId: incomingStats.id, // Assuming stats has id, or we just rely on index
+            incomingPlayerNumber: incomingStats.number,
+            x: 0,
+            y: 0,
+            time: this.currentTime
+        });
+
         return true;
     }
 
