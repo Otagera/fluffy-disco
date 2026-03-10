@@ -792,9 +792,17 @@ export class Match {
                 const speedSq = this.memory.ballBuffer[BALL_OFFSET_VX]**2 + this.memory.ballBuffer[BALL_OFFSET_VY]**2;
                 const ballSpeed = Math.sqrt(speedSq);
                 
-                // Base save chance of 70%. Faster shots reduce the save chance (down to ~30%).
+                const defendingGkIdx = bx < 0 ? 0 : 11;
+                const gkStats = this.playerStats[defendingGkIdx] || { reflexes: 50, handling: 50 };
+                
+                // Calculate dynamic save chance based on GK stats
+                // Example: A GK with 90 Reflexes and 80 Handling = (0.6 * 0.9) + (0.4 * 0.8) = 0.54 + 0.32 = 0.86 (86% base save chance)
+                const reflexesFactor = (gkStats.reflexes || 50) / 100;
+                const handlingFactor = (gkStats.handling || 50) / 100;
+                let saveChance = (reflexesFactor * 0.6) + (handlingFactor * 0.4);
+
+                // Faster shots reduce the save chance (down to ~30%).
                 // If the ball is moving at 30 m/s, it's very hard to save. If it's moving at 10 m/s, it's an easy catch.
-                let saveChance = 0.70;
                 if (ballSpeed > 15) saveChance -= 0.20;
                 if (ballSpeed > 25) saveChance -= 0.15;
                 

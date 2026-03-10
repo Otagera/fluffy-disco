@@ -62,7 +62,9 @@
       dribbling: normalizeEngineStat(attributes?.dribbling),
       vision: normalizeEngineStat(attributes?.vision),
       composure: normalizeEngineStat(attributes?.composure),
-      aggression: normalizeEngineStat(attributes?.aggression, 40)
+      aggression: normalizeEngineStat(attributes?.aggression, 40),
+      reflexes: normalizeEngineStat(attributes?.reflexes, 50),
+      handling: normalizeEngineStat(attributes?.handling, 50)
     };
   }
 
