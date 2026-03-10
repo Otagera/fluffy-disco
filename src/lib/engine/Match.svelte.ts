@@ -47,6 +47,10 @@ export class Match {
     public currentHalf: number = $state(1);
     public managedTeam: number | null = null; // 0 for Home, 1 for Away, null for sim
     
+    // Card Tracking
+    public yellowCards: number[] = new Array(22).fill(0);
+    public redCards: number[] = new Array(22).fill(0);
+
     // Analytics
     public analytics = {
         possessionTime: [0, 0], // [Home, Away]
@@ -712,6 +716,7 @@ export class Match {
             let tiredIdx = -1;
             let minStam = 999;
             for (let i = startIdx; i < endIdx; i++) {
+                if (this.redCards[i] > 0) continue;
                 const stam = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
                 const role = this.playerRoles[i] || '';
                 if (role === 'GK') continue;
@@ -738,6 +743,7 @@ export class Match {
         const globalIdx = team * 11 + outIdx;
         if (team < 0 || team > 1) return false;
         if (outIdx < 0 || outIdx > 10) return false;
+        if (this.redCards[globalIdx] > 0) return false; // Cannot sub off a sent-off player
         if (this.subsUsed[team] >= 5) return false;
         if (benchIdx < 0 || benchIdx >= this.benchStats.length) return false;
         const incomingStats = this.benchStats.splice(benchIdx, 1)[0];
@@ -808,7 +814,7 @@ export class Match {
         else if (style === 'Gegenpress') { progressionWeight *= 1.2; }
 
         for (let i = startIdx; i < endIdx; i++) {
-            if (i === possessorIdx) continue;
+            if (i === possessorIdx || this.redCards[i] > 0) continue;
 
             const targetX = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_X];
             const targetY = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_Y];
@@ -1081,6 +1087,8 @@ export class Match {
         let contenders: { idx: number, distSq: number }[] = [];
 
         for (let i = 0; i < PLAYER_COUNT; i++) {
+            if (this.redCards[i] > 0) continue; // Skip ejected players
+
             const offset = i * PLAYER_STRIDE;
             const px = this.memory.playerBuffer[offset + PLAYER_OFFSET_X];
             const py = this.memory.playerBuffer[offset + PLAYER_OFFSET_Y];
@@ -1119,7 +1127,7 @@ export class Match {
                     if (tackleScore < dribbleScore) {
                         // Check for Foul (Critical Failure + High Aggression)
                         if (dribbleScore - tackleScore > 25 && Math.random() < (defenderStats.aggression / 100)) {
-                            this.triggerFoul(this.lastPossessorIdx);
+                            this.triggerFoul(this.lastPossessorIdx, closest);
                             return null;
                         }
                         return this.lastPossessorIdx; // Failed tackle, attacker keeps it
@@ -1134,7 +1142,7 @@ export class Match {
         return closest;
     }
 
-    private triggerFoul(fouledIdx: number) {
+    private triggerFoul(fouledIdx: number, foulerIdx: number) {
         this.status = MatchStatus.FREE_KICK;
         this.setPieceTimer = 3.0;
         this.setPieceTakerIdx = fouledIdx;
@@ -1143,10 +1151,40 @@ export class Match {
         const fx = this.memory.playerBuffer[fouledIdx * PLAYER_STRIDE + PLAYER_OFFSET_X];
         const fy = this.memory.playerBuffer[fouledIdx * PLAYER_STRIDE + PLAYER_OFFSET_Y];
         
+        const foulerStats = this.playerStats[foulerIdx] || { aggression: 50 };
+        let yellowCard = false;
+        let redCard = false;
+
+        // Base 30% chance of yellow for a foul, scaling up with aggression
+        if (Math.random() < 0.3 + (foulerStats.aggression / 200)) {
+            this.yellowCards[foulerIdx]++;
+            yellowCard = true;
+            
+            // Second yellow = Red
+            if (this.yellowCards[foulerIdx] >= 2) {
+                redCard = true;
+            }
+        } 
+        // Straight red for extremely aggressive fouls (rare)
+        else if (Math.random() < 0.02 + (foulerStats.aggression / 1000)) {
+            redCard = true;
+        }
+
+        if (redCard) {
+            this.redCards[foulerIdx] = 1;
+            // Eject player from pitch
+            this.memory.playerBuffer[foulerIdx * PLAYER_STRIDE + 4] = 0; // Set MAX_SPEED to 0
+            this.memory.playerBuffer[foulerIdx * PLAYER_STRIDE + 0] = 500; // Move off pitch X
+            this.memory.playerBuffer[foulerIdx * PLAYER_STRIDE + 1] = 500; // Move off pitch Y
+        }
+
         this.analytics.events.push({
             type: 'foul',
             team: fouledTeam,
             playerId: fouledIdx,
+            foulerId: foulerIdx,
+            yellowCard,
+            redCard,
             x: fx,
             y: fy,
             time: this.currentTime

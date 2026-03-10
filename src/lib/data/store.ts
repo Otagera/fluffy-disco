@@ -409,6 +409,13 @@ export function processWeekResults(save: any, playerMatchResult: any) {
                             }
                         }
                     }
+                } else if (event.type === 'foul' && event.foulerId !== undefined) {
+                    const fouler = fullSquad[event.foulerId];
+                    if (fouler) {
+                        if (!fouler.seasonStats) fouler.seasonStats = { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 };
+                        if (event.yellowCard) fouler.seasonStats.yellowCards++;
+                        if (event.redCard) fouler.seasonStats.redCards++;
+                    }
                 }
             }
         }
