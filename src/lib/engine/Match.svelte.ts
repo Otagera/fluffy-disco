@@ -446,8 +446,8 @@ export class Match {
             const attackDir = this.getAttackDir(team);
             const inShootingRange = attackDir === 1 ? px > 70 : px < 35; // Expand from 20m to 35m out
 
-            let basePassChance = 0.9;
-            let baseShotChance = 0.55;
+            let basePassChance = 0.65;
+            let baseShotChance = 0.18;
 
             const mentality = this.mentalities[team];
             const style = this.tacticalStyles[team];
@@ -481,14 +481,32 @@ export class Match {
                 baseShotChance *= 0.4;
             }
 
+            const nearestOppDist = this.getNearestOpponentDistance(possessionIdx, team);
+            const pressureFactor = MathUtils.clamp(1.0 - (nearestOppDist / 8.0), 0.0, 1.0);
+            const dribbleSkill = ((stats.dribbling || 50) * 0.7 + (stats.composure || 50) * 0.3) / 100;
+
             // Through on Goal Check
             const activeOffsideLine = team === 0 ? this.offsideLineTeam1 : this.offsideLineTeam0;
             const isThroughOnGoal = attackDir === 1 ? px > activeOffsideLine : px < activeOffsideLine;
+            const shotQuality = this.evaluateShotQuality(px, py, team);
+
+            // Pressure-aware behavior: pressed players release quickly unless elite dribblers.
+            basePassChance *= 0.9 + pressureFactor * 0.9;
+            baseShotChance *= 0.85 + shotQuality * 1.8;
+
+            // Comfortable + technically gifted players dribble more often to break lines.
+            const dribbleBias = MathUtils.clamp((1.0 - pressureFactor) * dribbleSkill, 0.0, 0.5);
+            basePassChance *= 1.0 - dribbleBias;
+
+            // Under heavy pressure and in poor shooting positions, avoid wasteful shots.
+            if (pressureFactor > 0.65 && shotQuality < 0.35) {
+                baseShotChance *= 0.55;
+            }
 
             if (isThroughOnGoal) {
                 // Ignore passing, focus entirely on attacking the net
                 basePassChance = 0.0;
-                baseShotChance = inShootingRange ? 5.0 : 0.0; // Shoot immediately if in range, otherwise force dribble
+                baseShotChance = inShootingRange ? 3.6 : 0.0; // Shoot immediately if in range, otherwise force dribble
             }
 
             // Use dt-scaled probabilities so decisions remain stable across render speeds.
@@ -501,19 +519,22 @@ export class Match {
                 
                 // Add Gaussian error based on finishing rating
                 const systemBonus = this.systemBonuses[team];
-                const errorSpread = MathUtils.clamp(2.0 * (1.0 - stats.finishing / 100) * systemBonus, 0.1, 2.5);
-                const ty = targetGoalY + MathUtils.nextGaussian(0, errorSpread);
+                const shotComposure = ((stats.finishing || 50) * 0.8 + (stats.composure || 50) * 0.2) / 100;
+                const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 0.9;
+                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError, 0.08, 2.8);
+                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
+                const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
                 
                 const dx = targetGoalX - px;
                 const dy = ty - py;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 
-                // Variable shot power based on finishing rating (15.0 to 30.0)
-                const shotPower = 15.0 + (stats.finishing / 100) * 15.0;
+                // Variable shot power based on finishing + distance context.
+                const shotPower = 13.0 + (stats.finishing / 100) * 12.0 + MathUtils.clamp(dist / 30.0, 0, 0.45) * 8.0;
                 this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * shotPower;
                 this.memory.ballBuffer[BALL_OFFSET_VY] = (dy / dist) * shotPower;
                 // Add some height to shots
-                this.memory.ballBuffer[BALL_OFFSET_VZ] = 2.0 + Math.random() * 4.0;
+                this.memory.ballBuffer[BALL_OFFSET_VZ] = MathUtils.clamp(1.0 + (dist / 24.0) + Math.random() * 2.2, 0.8, 4.8);
                 
                 this.analytics.events.push({ type: 'shot', team, playerId: possessionIdx, x: px, y: py, time: this.currentTime });
                 
@@ -525,7 +546,9 @@ export class Match {
                 if (passTarget) {
                     // Add Gaussian error based on passing rating
                     const systemBonus = this.systemBonuses[team];
-                    const errorSpread = MathUtils.clamp(3.0 * (1.0 - stats.passing / 100) * systemBonus, 0.2, 3.5);
+                    const passCalm = ((stats.passing || 50) * 0.75 + (stats.composure || 50) * 0.25) / 100;
+                    const pressurePassError = 1.0 + pressureFactor * (1.0 - passCalm) * 1.1;
+                    const errorSpread = MathUtils.clamp(2.5 * (1.0 - stats.passing / 100) * systemBonus * pressurePassError, 0.15, 4.0);
                     const tx = passTarget.x + MathUtils.nextGaussian(0, errorSpread);
                     const ty = passTarget.y + MathUtils.nextGaussian(0, errorSpread);
 
@@ -544,15 +567,15 @@ export class Match {
                     
                     this.analytics.events.push({ type: 'pass', team, playerId: possessionIdx, x: px, y: py, endX: tx, endY: ty, time: this.currentTime });
                     
-                    this.possessionCooldown = 0.5; // Short cooldown for passes
+                    this.possessionCooldown = 0.35 + pressureFactor * 0.25; // quick recycle when pressed
                     this.lastPossessorIdx = possessionIdx;
                 } else {
                     // Dribble if no pass available
-                    this.dribbleBall(px, py, vx, vy, speed, lead, team);
+                    this.dribbleBall(px, py, vx, vy, speed, lead, team, pressureFactor, stats.dribbling || 50);
                 }
             } else {
                 // Dribble
-                this.dribbleBall(px, py, vx, vy, speed, lead, team);
+                this.dribbleBall(px, py, vx, vy, speed, lead, team, pressureFactor, stats.dribbling || 50);
             }
         }
 
@@ -569,18 +592,62 @@ export class Match {
         this.currentTime += dt;
     }
 
-    private dribbleBall(px: number, py: number, vx: number, vy: number, speed: number, lead: number, team: number) {
+    private dribbleBall(px: number, py: number, vx: number, vy: number, speed: number, lead: number, team: number, pressureFactor: number = 0, dribbling: number = 50) {
         const attackDir = this.getAttackDir(team);
         const dirX = speed > 0.1 ? vx / speed : attackDir;
         const dirY = speed > 0.1 ? vy / speed : 0.0;
 
+        // Find lower-pressure side channel so dribbles look like intentional carries.
+        const lateralProbe = 3.5;
+        const rightControl = this.spatialMap.getControlAt(px + attackDir * 2.5, py + lateralProbe);
+        const leftControl = this.spatialMap.getControlAt(px + attackDir * 2.5, py - lateralProbe);
+        const teamAdjustedRight = team === 0 ? rightControl : -rightControl;
+        const teamAdjustedLeft = team === 0 ? leftControl : -leftControl;
+        const evadeSide = teamAdjustedRight > teamAdjustedLeft ? 1 : -1;
+
+        const sideBias = pressureFactor > 0.25 ? evadeSide * (0.15 + (dribbling / 100) * 0.35) : 0;
+        const blendedX = dirX * 0.85 + attackDir * 0.15;
+        const blendedY = dirY * 0.7 + sideBias;
+        const blendedMag = Math.sqrt(blendedX * blendedX + blendedY * blendedY) || 1.0;
+
         // Constraint dribbling to pitch boundaries to prevent running out of stadium
-        this.memory.ballBuffer[BALL_OFFSET_X] = MathUtils.clamp(px + dirX * lead, -1.0, 106.0);
-        this.memory.ballBuffer[BALL_OFFSET_Y] = MathUtils.clamp(py + dirY * lead, -1.0, 69.0);
+        this.memory.ballBuffer[BALL_OFFSET_X] = MathUtils.clamp(px + (blendedX / blendedMag) * lead, -1.0, 106.0);
+        this.memory.ballBuffer[BALL_OFFSET_Y] = MathUtils.clamp(py + (blendedY / blendedMag) * lead, -1.0, 69.0);
         // Keep existing Z and VZ during dribble instead of flattening
         
-        this.memory.ballBuffer[BALL_OFFSET_VX] = vx;
-        this.memory.ballBuffer[BALL_OFFSET_VY] = vy;
+        this.memory.ballBuffer[BALL_OFFSET_VX] = (blendedX / blendedMag) * Math.max(speed, 3.0);
+        this.memory.ballBuffer[BALL_OFFSET_VY] = (blendedY / blendedMag) * Math.max(speed * 0.9, 2.5);
+    }
+
+    private getNearestOpponentDistance(playerIdx: number, team: number): number {
+        const oppStart = team === 0 ? 11 : 0;
+        const oppEnd = team === 0 ? 22 : 11;
+        const px = this.memory.playerBuffer[playerIdx * PLAYER_STRIDE + PLAYER_OFFSET_X];
+        const py = this.memory.playerBuffer[playerIdx * PLAYER_STRIDE + PLAYER_OFFSET_Y];
+        let minDistSq = Infinity;
+
+        for (let i = oppStart; i < oppEnd; i++) {
+            const ox = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_X];
+            const oy = this.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_Y];
+            const dx = ox - px;
+            const dy = oy - py;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) minDistSq = distSq;
+        }
+
+        return Math.sqrt(minDistSq);
+    }
+
+    private evaluateShotQuality(px: number, py: number, team: number): number {
+        const attackDir = this.getAttackDir(team);
+        const goalX = attackDir === 1 ? 105 : 0;
+        const distToGoal = Math.sqrt((goalX - px) ** 2 + (34 - py) ** 2);
+        const centrality = 1.0 - Math.min(1.0, Math.abs(py - 34) / 24);
+        const distanceScore = 1.0 - Math.min(1.0, distToGoal / 32);
+        const localControl = this.spatialMap.getControlAt(px, py);
+        const teamControl = team === 0 ? localControl : -localControl;
+        const pressureScore = MathUtils.clamp((teamControl + 1.5) / 3.0, 0, 1);
+        return MathUtils.clamp(distanceScore * 0.55 + centrality * 0.25 + pressureScore * 0.2, 0, 1);
     }
 
     private getAttackDir(teamIdx: number): number {
