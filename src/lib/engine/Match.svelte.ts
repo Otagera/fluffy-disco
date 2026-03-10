@@ -81,6 +81,7 @@ export class Match {
     
     private offsideLineTeam0: number = 52.5;
     private offsideLineTeam1: number = 52.5;
+    private lastShotTimeByTeam: [number, number] = [-10, -10];
     
     public recorder: MatchRecorder | null = null;
 
@@ -125,6 +126,9 @@ export class Match {
         }
 
         this.updateSystemBonuses();
+        this.lastShotTimeByTeam = [-10, -10];
+        this.possessionCooldown = 4.0;
+        this.lastPossessorIdx = null;
         
         this.memory.initialize(startingPositions, resetStamina);
         // Place ball at center
@@ -444,7 +448,7 @@ export class Match {
             
             // AI Action Decisions
             const attackDir = this.getAttackDir(team);
-            const inShootingRange = attackDir === 1 ? px > 70 : px < 35; // Expand from 20m to 35m out
+            const inShootingRange = attackDir === 1 ? px > 80 : px < 25; // Restrict to more realistic shot zones
 
             let basePassChance = 0.65;
             let baseShotChance = 0.18;
@@ -509,9 +513,13 @@ export class Match {
                 baseShotChance = inShootingRange ? 3.6 : 0.0; // Shoot immediately if in range, otherwise force dribble
             }
 
+            const minShotInterval = 9.0;
+            const canTeamShootNow = (this.currentTime - this.lastShotTimeByTeam[team]) >= minShotInterval;
+            const canTakeShot = canTeamShootNow || shotQuality > 0.78 || isThroughOnGoal;
+
             // Use dt-scaled probabilities so decisions remain stable across render speeds.
             const randomPassChance = this.rollChancePerSecond(basePassChance, dt);
-            const randomShotChance = this.rollChancePerSecond(baseShotChance, dt);
+            const randomShotChance = canTakeShot ? this.rollChancePerSecond(baseShotChance, dt) : false;
 
             if (inShootingRange && randomShotChance) {                // Shooting
                 const targetGoalX = attackDir === 1 ? 105 : 0;
@@ -526,6 +534,13 @@ export class Match {
                 const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
                 
                 const dx = targetGoalX - px;
+                const approximateDist = Math.abs(dx);
+                const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 1.2;
+                const longShotPenalty = MathUtils.clamp((approximateDist - 20) / 28, 0, 1);
+                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError + longShotPenalty * 1.15, 0.12, 3.8);
+                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
+                const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
+                
                 const dy = ty - py;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 
@@ -538,7 +553,8 @@ export class Match {
                 
                 this.analytics.events.push({ type: 'shot', team, playerId: possessionIdx, x: px, y: py, time: this.currentTime });
                 
-                this.possessionCooldown = 1.0;
+                this.possessionCooldown = 2.0;
+                this.lastShotTimeByTeam[team] = this.currentTime;
                 this.lastPossessorIdx = possessionIdx;
             } else if (randomPassChance) {
                 // Passing
@@ -849,8 +865,10 @@ export class Match {
         // Check Goal Lines
         if (bx < 0 || bx > 105) {
             // Goal posts Y range roughly 30.34 to 37.66
-            // Must also be below crossbar height (roughly 2.44m)
-            const isGoal = by > 30.34 && by < 37.66 && bz < 2.44;
+            // Must also be below crossbar height (roughly 2.44m) and moving toward that goal line.
+            const vx = this.memory.ballBuffer[BALL_OFFSET_VX];
+            const movingTowardGoal = bx < 0 ? vx < 0 : vx > 0;
+            const isGoal = by > 30.34 && by < 37.66 && bz < 2.44 && movingTowardGoal;
             
             if (isGoal) {
                 // Virtual Goalkeeper Save Mechanic
@@ -866,12 +884,13 @@ export class Match {
                 // Example: A GK with 90 Reflexes and 80 Handling = (0.6 * 0.9) + (0.4 * 0.8) = 0.54 + 0.32 = 0.86 (86% base save chance)
                 const reflexesFactor = (gkStats.reflexes || 50) / 100;
                 const handlingFactor = (gkStats.handling || 50) / 100;
-                let saveChance = (reflexesFactor * 0.6) + (handlingFactor * 0.4);
+                let saveChance = (reflexesFactor * 0.92) + (handlingFactor * 0.08);
 
-                // Faster shots reduce the save chance (down to ~30%).
-                // If the ball is moving at 30 m/s, it's very hard to save. If it's moving at 10 m/s, it's an easy catch.
-                if (ballSpeed > 15) saveChance -= 0.20;
-                if (ballSpeed > 25) saveChance -= 0.15;
+                // Faster shots reduce the save chance, but keep realistic floor/ceiling.
+                if (ballSpeed > 14) saveChance -= 0.01;
+                if (ballSpeed > 22) saveChance -= 0.02;
+                if (ballSpeed > 29) saveChance -= 0.04;
+                saveChance = MathUtils.clamp(saveChance, 0.92, 0.999);
                 
                 if (Math.random() < saveChance) {
                     // SAVE!
