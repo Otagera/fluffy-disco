@@ -451,7 +451,7 @@ export class Match {
             const inShootingRange = attackDir === 1 ? px > 80 : px < 25; // Restrict to more realistic shot zones
 
             let basePassChance = 0.65;
-            let baseShotChance = 0.03;
+            let baseShotChance = 0.18;
 
             const mentality = this.mentalities[team];
             const style = this.tacticalStyles[team];
@@ -496,8 +496,7 @@ export class Match {
 
             // Pressure-aware behavior: pressed players release quickly unless elite dribblers.
             basePassChance *= 0.9 + pressureFactor * 0.9;
-            // Strongly gate shooting by chance quality to avoid arcade shot volume.
-            baseShotChance *= MathUtils.clamp(0.2 + shotQuality * shotQuality * 1.0, 0.05, 0.9);
+            baseShotChance *= 0.85 + shotQuality * 1.8;
 
             // Comfortable + technically gifted players dribble more often to break lines.
             const dribbleBias = MathUtils.clamp((1.0 - pressureFactor) * dribbleSkill, 0.0, 0.5);
@@ -511,7 +510,7 @@ export class Match {
             if (isThroughOnGoal) {
                 // Ignore passing, focus entirely on attacking the net
                 basePassChance = 0.0;
-                baseShotChance = inShootingRange ? 0.7 : 0.0; // Prioritize 1v1 finishes without instant long-range spam
+                baseShotChance = inShootingRange ? 3.6 : 0.0; // Shoot immediately if in range, otherwise force dribble
             }
 
             const minShotInterval = 9.0;
@@ -529,6 +528,11 @@ export class Match {
                 // Add Gaussian error based on finishing rating
                 const systemBonus = this.systemBonuses[team];
                 const shotComposure = ((stats.finishing || 50) * 0.8 + (stats.composure || 50) * 0.2) / 100;
+                const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 0.9;
+                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError, 0.08, 2.8);
+                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
+                const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
+                
                 const dx = targetGoalX - px;
                 const approximateDist = Math.abs(dx);
                 const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 1.2;
@@ -541,11 +545,11 @@ export class Match {
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 
                 // Variable shot power based on finishing + distance context.
-                const shotPower = 11.5 + (stats.finishing / 100) * 10.0 + MathUtils.clamp(dist / 32.0, 0, 0.38) * 6.5;
+                const shotPower = 13.0 + (stats.finishing / 100) * 12.0 + MathUtils.clamp(dist / 30.0, 0, 0.45) * 8.0;
                 this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * shotPower;
                 this.memory.ballBuffer[BALL_OFFSET_VY] = (dy / dist) * shotPower;
                 // Add some height to shots
-                this.memory.ballBuffer[BALL_OFFSET_VZ] = MathUtils.clamp(0.7 + (dist / 28.0) + Math.random() * 1.7, 0.4, 3.8);
+                this.memory.ballBuffer[BALL_OFFSET_VZ] = MathUtils.clamp(1.0 + (dist / 24.0) + Math.random() * 2.2, 0.8, 4.8);
                 
                 this.analytics.events.push({ type: 'shot', team, playerId: possessionIdx, x: px, y: py, time: this.currentTime });
                 
