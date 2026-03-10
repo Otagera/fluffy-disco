@@ -29,7 +29,8 @@ export const load: PageServerLoad = async ({ params }) => {
     homeTeam,
     awayTeam,
     homePlayers,
-    awayPlayers
+    awayPlayers,
+    managerTeamId: save.manager.teamId
   };
 };
 

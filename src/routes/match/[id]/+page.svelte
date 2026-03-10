@@ -226,6 +226,9 @@
 
     match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles, [homeStyle, awayStyle], [homeMentality, awayMentality], true);
     
+    // Assign managed team so the engine can skip AI auto-subs for the user
+    match.managedTeam = isHome ? 0 : 1;
+
     // attach bench if provided
     match.benchStats = benchStatsArr;
     match.benchRoles = benchRolesArr;
@@ -255,11 +258,8 @@
     // user pressed kickoff – enable ticking and force PLAYING state
     hasKickedOff = true;
     match.status = MatchStatus.PLAYING;
-    // give ball to first forward to get things moving
-    const homeStartIdx = isHome ? 0 : 11;
-    match.lastPossessorIdx = homeStartIdx + 2; // centre forward by default
-    match.memory.ballBuffer[BALL_OFFSET_X] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_X];
-    match.memory.ballBuffer[BALL_OFFSET_Y] = match.memory.playerBuffer[(homeStartIdx + 2) * PLAYER_STRIDE + PLAYER_OFFSET_Y];
+    // The ball is already placed at the center (52.5, 34.0) by match.setup()
+    // The closest player (usually the forward) will automatically pick it up.
   }
 
   function handleTacticsOverrides(o: any, roles: any, style: string, mentality: string) {

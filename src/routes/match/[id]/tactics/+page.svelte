@@ -81,8 +81,10 @@
       <p class="text-xs font-black subtle uppercase tracking-widest mb-1">HOME TEAM</p>
       <h1 class="text-3xl font-black mb-3">{data.homeTeam.name}</h1>
       {#if isHome}
-        <div class="flex flex-col items-center md:items-start gap-2">
-          <p class="text-xs text-light-subtle italic">{styleDescriptions[currentTeam.tacticalStyle] || 'Dynamic philosophy'}</p>
+        <div class="flex flex-col items-center md:items-start gap-1">
+          <div class="text-sm font-black text-primary">{currentTeam.tacticalStyle} • {currentTeam.formation}</div>
+          <div class="text-[0.65rem] font-bold uppercase tracking-widest">{currentTeam.mentality.replace('_', ' ')}</div>
+          <p class="text-xs text-light-subtle italic mt-1">{styleDescriptions[currentTeam.tacticalStyle] || 'Dynamic philosophy'}</p>
         </div>
       {:else}
         <div class="text-sm font-bold mb-1">{data.homeTeam.tacticalStyle} • {data.homeTeam.formation}</div>
@@ -96,8 +98,10 @@
       <p class="text-xs font-black subtle uppercase tracking-widest mb-1">AWAY TEAM</p>
       <h1 class="text-3xl font-black mb-3">{data.awayTeam.name}</h1>
       {#if !isHome}
-        <div class="flex flex-col items-center md:items-end gap-2">
-          <p class="text-xs text-light-subtle italic">{styleDescriptions[currentTeam.tacticalStyle] || 'Dynamic philosophy'}</p>
+        <div class="flex flex-col items-center md:items-end gap-1">
+          <div class="text-sm font-black text-primary">{currentTeam.tacticalStyle} • {currentTeam.formation}</div>
+          <div class="text-[0.65rem] font-bold uppercase tracking-widest">{currentTeam.mentality.replace('_', ' ')}</div>
+          <p class="text-xs text-light-subtle italic mt-1">{styleDescriptions[currentTeam.tacticalStyle] || 'Dynamic philosophy'}</p>
         </div>
       {:else}
         <div class="text-sm font-bold mb-1">{data.awayTeam.tacticalStyle} • {data.awayTeam.formation}</div>

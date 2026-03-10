@@ -45,6 +45,7 @@ export class Match {
     public awayScore: number = $state(0);
     public status: MatchStatus = $state(MatchStatus.KICKOFF);
     public currentHalf: number = $state(1);
+    public managedTeam: number | null = null; // 0 for Home, 1 for Away, null for sim
     
     // Analytics
     public analytics = {
@@ -443,15 +444,28 @@ export class Match {
             
             // AI Action Decisions
             const attackDir = this.getAttackDir(team);
-            const inFinalThird = attackDir === 1 ? px > 85 : px < 20;
-            
+            const inShootingRange = attackDir === 1 ? px > 70 : px < 35; // Expand from 20m to 35m out
+
             let basePassChance = 0.9;
             let baseShotChance = 0.55;
-            
+
+            const mentality = this.mentalities[team];
+            const style = this.tacticalStyles[team];
+
+            // Apply Team Mentality Modifiers
+            if (mentality === 'ULTRA_ATTACKING') { baseShotChance *= 1.5; basePassChance *= 0.8; }
+            else if (mentality === 'ATTACKING') { baseShotChance *= 1.2; basePassChance *= 0.9; }
+            else if (mentality === 'DEFENSIVE') { baseShotChance *= 0.8; basePassChance *= 1.1; }
+            else if (mentality === 'ULTRA_DEFENSIVE') { baseShotChance *= 0.6; basePassChance *= 1.3; }
+
+            // Apply Team Style Modifiers
+            if (style === 'Tiki-Taka') { basePassChance *= 1.5; }
+            else if (style === 'Route One') { basePassChance *= 0.7; baseShotChance *= 1.2; }
+
             // Apply Tactical Role Intent Modifiers
             if (role === 'TM') {
                 // Target Man: Wait for support (hold up ball)
-                basePassChance *= 0.3; 
+                basePassChance *= 0.3;
                 baseShotChance *= 0.6;
             } else if (role === 'IF') {
                 // Inverted Forward: Selfish, looking to shoot
@@ -467,12 +481,21 @@ export class Match {
                 baseShotChance *= 0.4;
             }
 
+            // Through on Goal Check
+            const activeOffsideLine = team === 0 ? this.offsideLineTeam1 : this.offsideLineTeam0;
+            const isThroughOnGoal = attackDir === 1 ? px > activeOffsideLine : px < activeOffsideLine;
+
+            if (isThroughOnGoal) {
+                // Ignore passing, focus entirely on attacking the net
+                basePassChance = 0.0;
+                baseShotChance = inShootingRange ? 5.0 : 0.0; // Shoot immediately if in range, otherwise force dribble
+            }
+
             // Use dt-scaled probabilities so decisions remain stable across render speeds.
             const randomPassChance = this.rollChancePerSecond(basePassChance, dt);
             const randomShotChance = this.rollChancePerSecond(baseShotChance, dt);
 
-            if (inFinalThird && randomShotChance) {
-                // Shooting
+            if (inShootingRange && randomShotChance) {                // Shooting
                 const targetGoalX = attackDir === 1 ? 105 : 0;
                 const targetGoalY = 34; // Goal center
                 
@@ -600,6 +623,7 @@ export class Match {
         this.lastSubCheckMinute = minute;
 
         for (let team = 0; team < 2; team++) {
+            if (team === this.managedTeam) continue; // Skip auto-subs for the user
             if (this.subsUsed[team] >= 5) continue;
             const startIdx = team === 0 ? 0 : 11;
             const endIdx = team === 0 ? 11 : 22;
@@ -665,7 +689,7 @@ export class Match {
         const visionRange = 10.0 + (vision / 100) * 40.0; // 10m to 50m
 
         let bestTarget = null;
-        let bestScore = -Infinity;
+        let bestScore = 0; // Floor score to prevent passing if all options are terrible
 
         // Use appropriate offside line depending on team and half direction
         let activeOffsideLine: number | null = null;
@@ -674,6 +698,22 @@ export class Match {
         } else {
             activeOffsideLine = team === 0 ? this.offsideLineTeam1 : this.offsideLineTeam0;
         }
+
+        const mentality = this.mentalities[team];
+        const style = this.tacticalStyles[team];
+        
+        let progressionWeight = 2.0;
+        let safetyWeight = 10.0;
+        let distancePenalty = 0.1;
+
+        if (mentality === 'ULTRA_ATTACKING') { progressionWeight = 5.0; safetyWeight = 4.0; }
+        else if (mentality === 'ATTACKING') { progressionWeight = 3.5; safetyWeight = 7.0; }
+        else if (mentality === 'DEFENSIVE') { progressionWeight = 1.0; safetyWeight = 12.0; }
+        else if (mentality === 'ULTRA_DEFENSIVE') { progressionWeight = 0.5; safetyWeight = 15.0; }
+
+        if (style === 'Route One') { progressionWeight *= 1.5; distancePenalty = 0.01; }
+        else if (style === 'Tiki-Taka') { distancePenalty = 0.4; safetyWeight *= 1.2; }
+        else if (style === 'Gegenpress') { progressionWeight *= 1.2; }
 
         for (let i = startIdx; i < endIdx; i++) {
             if (i === possessorIdx) continue;
@@ -719,7 +759,7 @@ export class Match {
                 score = -dist; // Just prefer closest
             } else {
                 // Heuristic: Weighted progression, lane safety, and distance penalty
-                score = (progression * 2.0) + (laneSafety * 10.0) - (dist * 0.1);
+                score = (progression * progressionWeight) + (laneSafety * safetyWeight) - (dist * distancePenalty);
             }
 
             if (score > bestScore) {
@@ -746,12 +786,18 @@ export class Match {
             const isGoal = by > 30.34 && by < 37.66 && bz < 2.44;
             
             if (isGoal) {
-                const scoringTeam = bx < 0 ? 1 : 0;
-                if (bx < 0) this.awayScore++; // Ball crossed left line
-                else this.homeScore++;        // Ball crossed right line
-                
-                this.analytics.events.push({ 
-                    type: 'goal', 
+                let scoringTeam;
+                if (this.currentHalf === 1) {
+                    scoringTeam = bx < 0 ? 1 : 0;
+                    if (bx < 0) this.awayScore++;
+                    else this.homeScore++;
+                } else {
+                    scoringTeam = bx < 0 ? 0 : 1;
+                    if (bx < 0) this.homeScore++;
+                    else this.awayScore++;
+                }
+
+                this.analytics.events.push({                    type: 'goal', 
                     team: scoringTeam, 
                     playerId: this.lastPossessorIdx !== null ? this.lastPossessorIdx : undefined,
                     x: bx, 
@@ -765,11 +811,14 @@ export class Match {
             } else {
                 // Out of bounds - Goal Kick / Corner
                 const lastTeam = this.lastPossessorIdx !== null ? (this.lastPossessorIdx < 11 ? 0 : 1) : 0;
-                const defendingSide = bx < 0 ? 0 : 1; // 0 = Home side, 1 = Away side
+
+                const leftDefendingTeam = this.currentHalf === 1 ? 0 : 1;
+                const rightDefendingTeam = this.currentHalf === 1 ? 1 : 0;
+                const defendingSide = bx < 0 ? leftDefendingTeam : rightDefendingTeam;
+
                 const attackingTeam = lastTeam === 0 ? 1 : 0;
-                
-                if (lastTeam === defendingSide) {
-                    // Defender kicked it out of their own backline -> Corner
+
+                if (lastTeam === defendingSide) {                    // Defender kicked it out of their own backline -> Corner
                     this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 0.5 : 104.5;
                     this.memory.ballBuffer[BALL_OFFSET_Y] = by < 34 ? 0.5 : 67.5; // nearest corner
                 } else {
