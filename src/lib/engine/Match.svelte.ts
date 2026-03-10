@@ -127,6 +127,8 @@ export class Match {
 
         this.updateSystemBonuses();
         this.lastShotTimeByTeam = [-10, -10];
+        this.possessionCooldown = 4.0;
+        this.lastPossessorIdx = null;
         
         this.memory.initialize(startingPositions, resetStamina);
         // Place ball at center
@@ -446,10 +448,10 @@ export class Match {
             
             // AI Action Decisions
             const attackDir = this.getAttackDir(team);
-            const inShootingRange = attackDir === 1 ? px > 76 : px < 29; // Bias toward realistic shot zones
+            const inShootingRange = attackDir === 1 ? px > 80 : px < 25; // Restrict to more realistic shot zones
 
             let basePassChance = 0.65;
-            let baseShotChance = 0.11;
+            let baseShotChance = 0.03;
 
             const mentality = this.mentalities[team];
             const style = this.tacticalStyles[team];
@@ -495,7 +497,7 @@ export class Match {
             // Pressure-aware behavior: pressed players release quickly unless elite dribblers.
             basePassChance *= 0.9 + pressureFactor * 0.9;
             // Strongly gate shooting by chance quality to avoid arcade shot volume.
-            baseShotChance *= MathUtils.clamp(0.35 + shotQuality * shotQuality * 1.45, 0.1, 1.15);
+            baseShotChance *= MathUtils.clamp(0.2 + shotQuality * shotQuality * 1.0, 0.05, 0.9);
 
             // Comfortable + technically gifted players dribble more often to break lines.
             const dribbleBias = MathUtils.clamp((1.0 - pressureFactor) * dribbleSkill, 0.0, 0.5);
@@ -509,10 +511,10 @@ export class Match {
             if (isThroughOnGoal) {
                 // Ignore passing, focus entirely on attacking the net
                 basePassChance = 0.0;
-                baseShotChance = inShootingRange ? 2.4 : 0.0; // Shoot quickly if in range, otherwise force dribble
+                baseShotChance = inShootingRange ? 0.7 : 0.0; // Prioritize 1v1 finishes without instant long-range spam
             }
 
-            const minShotInterval = 2.8;
+            const minShotInterval = 9.0;
             const canTeamShootNow = (this.currentTime - this.lastShotTimeByTeam[team]) >= minShotInterval;
             const canTakeShot = canTeamShootNow || shotQuality > 0.78 || isThroughOnGoal;
 
@@ -547,7 +549,7 @@ export class Match {
                 
                 this.analytics.events.push({ type: 'shot', team, playerId: possessionIdx, x: px, y: py, time: this.currentTime });
                 
-                this.possessionCooldown = 1.15;
+                this.possessionCooldown = 2.0;
                 this.lastShotTimeByTeam[team] = this.currentTime;
                 this.lastPossessorIdx = possessionIdx;
             } else if (randomPassChance) {
@@ -859,8 +861,10 @@ export class Match {
         // Check Goal Lines
         if (bx < 0 || bx > 105) {
             // Goal posts Y range roughly 30.34 to 37.66
-            // Must also be below crossbar height (roughly 2.44m)
-            const isGoal = by > 30.34 && by < 37.66 && bz < 2.44;
+            // Must also be below crossbar height (roughly 2.44m) and moving toward that goal line.
+            const vx = this.memory.ballBuffer[BALL_OFFSET_VX];
+            const movingTowardGoal = bx < 0 ? vx < 0 : vx > 0;
+            const isGoal = by > 30.34 && by < 37.66 && bz < 2.44 && movingTowardGoal;
             
             if (isGoal) {
                 // Virtual Goalkeeper Save Mechanic
@@ -876,13 +880,13 @@ export class Match {
                 // Example: A GK with 90 Reflexes and 80 Handling = (0.6 * 0.9) + (0.4 * 0.8) = 0.54 + 0.32 = 0.86 (86% base save chance)
                 const reflexesFactor = (gkStats.reflexes || 50) / 100;
                 const handlingFactor = (gkStats.handling || 50) / 100;
-                let saveChance = (reflexesFactor * 0.62) + (handlingFactor * 0.38);
+                let saveChance = (reflexesFactor * 0.92) + (handlingFactor * 0.08);
 
                 // Faster shots reduce the save chance, but keep realistic floor/ceiling.
-                if (ballSpeed > 14) saveChance -= 0.14;
-                if (ballSpeed > 22) saveChance -= 0.10;
-                if (ballSpeed > 29) saveChance -= 0.08;
-                saveChance = MathUtils.clamp(saveChance, 0.18, 0.9);
+                if (ballSpeed > 14) saveChance -= 0.01;
+                if (ballSpeed > 22) saveChance -= 0.02;
+                if (ballSpeed > 29) saveChance -= 0.04;
+                saveChance = MathUtils.clamp(saveChance, 0.92, 0.999);
                 
                 if (Math.random() < saveChance) {
                     // SAVE!
