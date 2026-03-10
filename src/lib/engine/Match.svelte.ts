@@ -786,6 +786,44 @@ export class Match {
             const isGoal = by > 30.34 && by < 37.66 && bz < 2.44;
             
             if (isGoal) {
+                // Virtual Goalkeeper Save Mechanic
+                // Because we shoot from 35m out and have no physical IK for goalkeepers, 
+                // we roll a virtual save chance so the match doesn't end 200-0.
+                const speedSq = this.memory.ballBuffer[BALL_OFFSET_VX]**2 + this.memory.ballBuffer[BALL_OFFSET_VY]**2;
+                const ballSpeed = Math.sqrt(speedSq);
+                
+                // Base save chance of 70%. Faster shots reduce the save chance (down to ~30%).
+                // If the ball is moving at 30 m/s, it's very hard to save. If it's moving at 10 m/s, it's an easy catch.
+                let saveChance = 0.70;
+                if (ballSpeed > 15) saveChance -= 0.20;
+                if (ballSpeed > 25) saveChance -= 0.15;
+                
+                if (Math.random() < saveChance) {
+                    // SAVE!
+                    const defendingGkIdx = bx < 0 ? 0 : 11;
+                    
+                    this.analytics.events.push({
+                        type: 'save', 
+                        team: bx < 0 ? 0 : 1, // team that saved it
+                        playerId: defendingGkIdx,
+                        x: bx, 
+                        y: by, 
+                        time: this.currentTime 
+                    });
+
+                    // GK catches the ball
+                    this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 2.0 : 103.0;
+                    this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
+                    this.memory.ballBuffer[BALL_OFFSET_Z] = 0;
+                    this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
+                    this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
+                    this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
+                    this.lastPossessorIdx = defendingGkIdx;
+                    this.possessionCooldown = 2.0; // Give GK time to clear it
+                    
+                    return; // Abort the goal sequence
+                }
+
                 let scoringTeam;
                 if (this.currentHalf === 1) {
                     scoringTeam = bx < 0 ? 1 : 0;
@@ -891,6 +929,31 @@ export class Match {
         const totalSteps = this.maxDuration / step;
 
         for (let i = 0; i < totalSteps; i++) {
+            if (this.status === MatchStatus.HALF_TIME) {
+                // Auto-start second half in simulation
+                this.currentHalf = 2;
+                
+                // Swap sides
+                for(let p = 0; p < PLAYER_COUNT; p++) {
+                    const offset = p * PLAYER_STRIDE;
+                    this.memory.playerBuffer[offset + PLAYER_OFFSET_X] = 105 - this.memory.playerBuffer[offset + PLAYER_OFFSET_X];
+                    this.memory.playerBuffer[offset + PLAYER_OFFSET_Y] = 68 - this.memory.playerBuffer[offset + PLAYER_OFFSET_Y];
+                }
+                
+                // Half-time Stamina Recovery
+                for (let p = 0; p < PLAYER_COUNT; p++) {
+                    const offset = p * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA;
+                    this.memory.playerBuffer[offset] = Math.min(1.0, this.memory.playerBuffer[offset] + 0.15);
+                }
+
+                this.status = MatchStatus.KICKOFF;
+                this.memory.ballBuffer[BALL_OFFSET_X] = 52.5;
+                this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
+                this.memory.ballBuffer[BALL_OFFSET_Z] = 0;
+                this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
+                this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
+                this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
+            }
             this.tick(step);
         }
 
