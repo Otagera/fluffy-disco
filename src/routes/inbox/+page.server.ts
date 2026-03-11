@@ -95,5 +95,70 @@ export const actions: Actions = {
       .run();
 
     return { success: true };
+  },
+  acceptCpuOffer: async ({ request }) => {
+    const data = await request.formData();
+    const messageId = data.get('messageId')?.toString();
+    const relatedEntityId = data.get('relatedEntityId')?.toString();
+
+    if (!messageId || !relatedEntityId || !relatedEntityId.startsWith('cpuoffer_')) {
+      return fail(400, { message: 'Invalid transfer data' });
+    }
+
+    const save = loadSaveGame();
+    if (!save) return fail(500, { message: 'No save found' });
+
+    // Format: cpuoffer_playerId_amount_buyingTeamId
+    const parts = relatedEntityId.split('_');
+    const playerId = parts[1];
+    const amount = Number(parts[2]);
+    const buyingTeamId = parts[3];
+    
+    const player = save.players[playerId];
+    if (!player) return fail(404, { message: 'Player not found' });
+
+    const sellingTeam = save.teams[save.manager.teamId];
+    const buyingTeam = save.teams[buyingTeamId];
+
+    if (!buyingTeam || !sellingTeam) return fail(500, { message: 'Teams not found' });
+
+    // Financials
+    buyingTeam.transferBudget = (buyingTeam.transferBudget || 0) - amount;
+    sellingTeam.transferBudget = (sellingTeam.transferBudget || 0) + amount;
+
+    // Move Player
+    sellingTeam.players = sellingTeam.players.filter(id => id !== playerId);
+    buyingTeam.players.push(playerId);
+    player.teamId = buyingTeam.id;
+
+    // Persist
+    writeSaveGame(save);
+
+    // Update message
+    db.update(schema.inboxMessages)
+      .set({ 
+        relatedEntityId: `completed_${playerId}`,
+        body: `You have accepted the offer from ${buyingTeam.name}. The transfer of ${player.name} has been completed.` 
+      })
+      .where(eq(schema.inboxMessages.id, messageId))
+      .run();
+
+    return { success: true };
+  },
+  rejectCpuOffer: async ({ request }) => {
+    const data = await request.formData();
+    const messageId = data.get('messageId')?.toString();
+
+    if (!messageId) return fail(400, { message: 'Missing message ID' });
+
+    db.update(schema.inboxMessages)
+      .set({ 
+        relatedEntityId: `rejected`,
+        body: `You rejected the offer.` 
+      })
+      .where(eq(schema.inboxMessages.id, messageId))
+      .run();
+
+    return { success: true };
   }
 };

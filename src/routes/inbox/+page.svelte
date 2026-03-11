@@ -131,6 +131,39 @@
               </form>
             </div>
           {/if}
+
+          {#if selectedMessage.type === 'TRANSFER' && selectedMessage.relatedEntityId?.startsWith('cpuoffer_')}
+            <div class="mt-12 p-6 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl">💰</div>
+                <div>
+                  <div class="font-black text-blue-700 uppercase tracking-widest text-xs mb-1">Incoming Bid</div>
+                  <div class="font-bold text-blue-900">Do you accept this offer?</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <form method="POST" action="?/acceptCpuOffer" use:enhance={() => {
+                  return async ({ update }) => {
+                    await update();
+                    window.location.reload();
+                  };
+                }}>
+                  <input type="hidden" name="messageId" value={selectedMessage.id} />
+                  <input type="hidden" name="relatedEntityId" value={selectedMessage.relatedEntityId} />
+                  <button class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest shadow-md transition-all active:scale-95">Accept</button>
+                </form>
+                <form method="POST" action="?/rejectCpuOffer" use:enhance={() => {
+                  return async ({ update }) => {
+                    await update();
+                    window.location.reload();
+                  };
+                }}>
+                  <input type="hidden" name="messageId" value={selectedMessage.id} />
+                  <button class="bg-white border-2 border-red-200 text-red-600 hover:bg-red-50 py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest transition-all active:scale-95">Reject</button>
+                </form>
+              </div>
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="flex-1 flex flex-col items-center justify-center subtle opacity-50 p-12 text-center">

@@ -372,6 +372,121 @@ export function addInboxMessage(save: SaveGame, message: Omit<InboxMessage, 'id'
   return msg;
 }
 
+export function isTransferWindowOpen(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const month = d.getMonth() + 1; // 1-12
+  // Summer Window: July 1 - August 31 (7, 8)
+  // Winter Window: Jan 1 - Jan 31 (1)
+  return month === 1 || month === 7 || month === 8;
+}
+
+function processAITransfers(save: SaveGame) {
+  if (!isTransferWindowOpen(save.currentDate)) return;
+
+  // To prevent the game from freezing, only evaluate ~2 random CPU teams per day
+  const allTeams = Object.values(save.teams).filter(t => t.id !== save.manager.teamId);
+  if (allTeams.length === 0) return;
+
+  const teamsToEvaluate = [];
+  for (let i = 0; i < 2; i++) {
+    teamsToEvaluate.push(allTeams[Math.floor(Math.random() * allTeams.length)]);
+  }
+
+  for (const team of teamsToEvaluate) {
+    // Basic Depth Check
+    let gks = 0, defs = 0, mids = 0, fwds = 0;
+    const squad = team.players.map(pid => save.players[pid]).filter(Boolean);
+    
+    squad.forEach(p => {
+      if (p.role === 'GK') gks++;
+      else if (p.role === 'DEF') defs++;
+      else if (p.role === 'MID') mids++;
+      else if (p.role === 'FWD') fwds++;
+    });
+
+    let targetRole: 'GK' | 'DEF' | 'MID' | 'FWD' | null = null;
+    if (gks < 2) targetRole = 'GK';
+    else if (defs < 6) targetRole = 'DEF';
+    else if (mids < 6) targetRole = 'MID';
+    else if (fwds < 4) targetRole = 'FWD';
+
+    // If depth is fine, look for a starter upgrade
+    if (!targetRole && (team.transferBudget || 0) > 5000000) {
+      const roles: ('GK' | 'DEF' | 'MID' | 'FWD')[] = ['GK', 'DEF', 'MID', 'FWD'];
+      targetRole = roles[Math.floor(Math.random() * roles.length)];
+    }
+
+    if (targetRole) {
+      // Find a target
+      const budget = team.transferBudget || 0;
+      if (budget < 100000) continue; // Too poor
+
+      // Scan all players not on this team
+      const potentialTargets = Object.values(save.players).filter(p => 
+        p.role === targetRole && 
+        p.teamId !== team.id && 
+        (p.overall || 50) > (team.overall || 50) - 5 // Must be decent enough for the team
+      );
+
+      // Shuffle to add randomness
+      potentialTargets.sort(() => Math.random() - 0.5);
+
+      for (const target of potentialTargets) {
+        const val = calculatePlayerValue(target, save.currentDate);
+        if (val < budget) {
+          // Found a target we can afford!
+          const bidAmount = val * 1.05; // AI bids slightly above market value
+
+          if (target.teamId === save.manager.teamId) {
+            // Bid for User's Player
+            addInboxMessage(save, {
+              teamId: save.manager.teamId,
+              date: save.currentDate,
+              sender: team.name,
+              subject: `Transfer Offer: ${target.name}`,
+              body: `We are very interested in bringing ${target.name} to our club.\n\nWe are offering a formal transfer fee of ${new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(bidAmount)}.\n\nPlease let us know your decision.`,
+              type: 'TRANSFER',
+              isUrgent: true,
+              relatedEntityId: `cpuoffer_${target.id}_${bidAmount}_${team.id}`
+            });
+            break; // Stop looking for this team today
+          } else {
+            // CPU to CPU Transfer
+            const sellingTeam = save.teams[target.teamId!];
+            if (sellingTeam) {
+              // 60% chance CPU accepts if bid is good
+              if (Math.random() > 0.4) {
+                // Execute Transfer
+                team.transferBudget = (team.transferBudget || 0) - bidAmount;
+                sellingTeam.transferBudget = (sellingTeam.transferBudget || 0) + bidAmount;
+                
+                sellingTeam.players = sellingTeam.players.filter(id => id !== target.id);
+                team.players.push(target.id);
+                target.teamId = team.id;
+                
+                // Add news
+                const league = save.leagues.find(l => l.teams.includes(team.id));
+                if (league) {
+                  if (!league.news) league.news = [];
+                  league.news.push({
+                    id: `n_${Math.random().toString(36).slice(2, 11)}`,
+                    week: save.currentWeek,
+                    headline: `TRANSFER DONE: ${team.name} secure the signing of ${target.name}!`,
+                    type: 'TRANSFER',
+                    relatedPlayerId: target.id,
+                    relatedTeamId: team.id
+                  });
+                }
+              }
+            }
+            break; // Stop looking
+          }
+        }
+      }
+    }
+  }
+}
+
 export function advanceOneDay(save: SaveGame): { mustStop: boolean; reason?: string } {
   const date = new Date(save.currentDate);
   date.setDate(date.getDate() + 1);
@@ -379,6 +494,9 @@ export function advanceOneDay(save: SaveGame): { mustStop: boolean; reason?: str
 
   let mustStop = false;
   let reason = '';
+
+  // Process AI Transfers
+  processAITransfers(save);
 
   // 1. Check for Birthdays
   const managerTeam = save.teams[save.manager.teamId];
