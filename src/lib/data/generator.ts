@@ -287,6 +287,7 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
   const orderedPlayers = orderSquadForMatchday(rawPlayers);
   orderedPlayers.forEach((p, index) => {
     p.number = index + 1;
+    p.teamId = team.id;
     team.players.push(p.id);
   });
   team.overall = calculateTeamOverall(team, Object.fromEntries(orderedPlayers.map((p) => [p.id, p])));

@@ -1,14 +1,33 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import type { PageData } from './$types';
+  import PlayerModal from '$lib/components/PlayerModal.svelte';
 
   let { data }: { data: PageData } = $props();
 
   let selectedId = $state(data.messages.length > 0 ? data.messages[0].id : null);
   let selectedMessage = $derived(data.messages.find(m => m.id === selectedId));
+  
+  let selectedPlayerId = $state<string | null>(null);
+  const selectedPlayer = $derived(selectedPlayerId ? data.players[selectedPlayerId] : null);
+
+  const selectedPlayerScoutingLevel = $derived.by(() => {
+    if (!selectedPlayerId) return 0;
+    const report = (data.scoutingReports || []).find((r: any) => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
+    return report ? report.level : 0;
+  });
 
   function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getPlayerIdFromMessage(msg: any) {
+    if (!msg || !msg.relatedEntityId) return null;
+    if (msg.relatedEntityId.startsWith('offer_') || msg.relatedEntityId.startsWith('cpuoffer_')) {
+      const parts = msg.relatedEntityId.split('_');
+      return parts.length > 1 ? parts[1] : null;
+    }
+    return null;
   }
 </script>
 
@@ -127,7 +146,10 @@
               }}>
                 <input type="hidden" name="messageId" value={selectedMessage.id} />
                 <input type="hidden" name="relatedEntityId" value={selectedMessage.relatedEntityId} />
-                <button class="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest shadow-md transition-all active:scale-95">Complete Transfer</button>
+                <div class="flex gap-2">
+                  <button type="button" class="bg-white border-2 border-green-200 text-green-700 hover:bg-green-50 py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest transition-all active:scale-95" onclick={() => selectedPlayerId = getPlayerIdFromMessage(selectedMessage)}>View Player</button>
+                  <button type="submit" class="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest shadow-md transition-all active:scale-95">Complete Transfer</button>
+                </div>
               </form>
             </div>
           {/if}
@@ -142,6 +164,7 @@
                 </div>
               </div>
               <div class="flex gap-2">
+                <button type="button" class="bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 py-3 px-6 rounded-xl text-xs uppercase font-black tracking-widest transition-all active:scale-95" onclick={() => selectedPlayerId = getPlayerIdFromMessage(selectedMessage)}>View Player</button>
                 <form method="POST" action="?/acceptCpuOffer" use:enhance={() => {
                   return async ({ update }) => {
                     await update();
@@ -174,3 +197,13 @@
     </div>
   </div>
 </div>
+
+{#if selectedPlayer}
+  <PlayerModal 
+    player={selectedPlayer} 
+    currentDate={data.currentDate}
+    managerTeamId={data.managerTeamId}
+    scoutingLevel={selectedPlayerScoutingLevel}
+    onclose={() => selectedPlayerId = null} 
+  />
+{/if}

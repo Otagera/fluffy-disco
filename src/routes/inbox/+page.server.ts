@@ -4,6 +4,7 @@ import * as schema from '$lib/data/schema';
 import { eq, and } from 'drizzle-orm';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { calculatePlayerValue } from '$lib/data/ratings';
 
 export const load: PageServerLoad = async () => {
   const save = loadSaveGame();
@@ -23,6 +24,9 @@ export const load: PageServerLoad = async () => {
 
   return {
     messages,
+    players: save.players,
+    scoutingReports: save.scoutingReports || [],
+    managerTeamId: save.manager.teamId,
     currentDate: save.currentDate
   };
 };
