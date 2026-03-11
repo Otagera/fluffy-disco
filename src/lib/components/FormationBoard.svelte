@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formations } from '$lib/engine/ai/Formations';
-  import type { PlayerProfile, TeamProfile } from '$lib/data/types';
+  import type { PlayerProfile, TeamProfile, ScoutingReport } from '$lib/data/types';
   import PlayerModal from '$lib/components/PlayerModal.svelte';
   import { TACTICAL_COMPATIBILITY, getTacticalCompatibility, type TacticalStyle, type Mentality } from '$lib/engine/ai/Compatibility';
 
@@ -10,8 +10,11 @@
     editable = false,
     allowRoleOverrides = false,
     allowPositionOverrides = false,
+    allowSubs = false,
     isHome = true,
     currentDate = '2024-08-01',
+    managerTeamId = '',
+    scoutingReports = [],
     onSwap = () => {},
     onFormationChange = () => {},
     onOverridesChange = () => {}
@@ -21,9 +24,11 @@
     editable?: boolean,
     allowRoleOverrides?: boolean,
     allowPositionOverrides?: boolean,
+    allowSubs?: boolean,
     isHome?: boolean,
     currentDate?: string,
     managerTeamId?: string,
+    scoutingReports?: ScoutingReport[],
     onSwap?: (id1: string, id2: string) => void,
     onFormationChange?: (name: string) => void,
     onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
@@ -66,6 +71,12 @@
   let hoveredSlotIndex = $state<number | null>(null);
 
   let selectedPlayerForModal = $state<PlayerProfile | null>(null);
+  const selectedPlayerScoutingLevel = $derived.by(() => {
+    const p = selectedPlayerForModal;
+    if (!p) return 0;
+    const report = (scoutingReports || []).find(r => r.playerId === p.id && r.teamId === managerTeamId);
+    return report ? report.level : 0;
+  });
 
   // Deep comparison helper to avoid unnecessary dirty triggers
   function hasChanged(newPos: any, newRoles: any, newStyle: string, newMentality: string) {
@@ -508,6 +519,7 @@
     player={selectedPlayerForModal} 
     currentDate={currentDate}
     managerTeamId={managerTeamId}
+    scoutingLevel={selectedPlayerScoutingLevel}
     onclose={() => selectedPlayerForModal = null} 
   />
 {/if}

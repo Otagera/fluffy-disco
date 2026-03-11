@@ -3,11 +3,26 @@
   import { calculateAge, calculatePlayerValue } from '$lib/data/ratings';
   import { enhance } from '$app/forms';
 
-  let { player, onclose, currentDate, managerTeamId }: { player: any; onclose: () => void; currentDate: string; managerTeamId?: string } = $props();
+  let { 
+    player, 
+    onclose, 
+    currentDate, 
+    managerTeamId, 
+    scoutingLevel = 0 
+  }: { 
+    player: any; 
+    onclose: () => void; 
+    currentDate: string; 
+    managerTeamId?: string; 
+    scoutingLevel?: number 
+  } = $props();
 
   let showOfferForm = $state(false);
   let offerAmount = $state(calculatePlayerValue(player, currentDate));
   let isSubmitting = $state(false);
+
+  // If player is on manager's team, they are fully scouted (level 2)
+  const effectiveScoutLevel = $derived(player.teamId === managerTeamId ? 2 : scoutingLevel);
 
   function getStatColor(val: number) {
     if (val >= 15) return 'text-green-600';
@@ -17,6 +32,27 @@
 
   function formatCurrency(val: number) {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(val);
+  }
+
+  function renderStatValue(val: number) {
+    if (effectiveScoutLevel >= 2) return val.toString();
+    if (effectiveScoutLevel === 1) {
+      const low = Math.max(1, val - 2);
+      const high = Math.min(20, val + 2);
+      return `${low}-${high}`;
+    }
+    return '?';
+  }
+
+  function renderMarketValue() {
+    const val = calculatePlayerValue(player, currentDate);
+    if (effectiveScoutLevel >= 2) return formatCurrency(val);
+    if (effectiveScoutLevel === 1) {
+      const low = Math.round((val * 0.8) / 100000) * 100000;
+      const high = Math.round((val * 1.2) / 100000) * 100000;
+      return `${formatCurrency(low)} - ${formatCurrency(high)}`;
+    }
+    return 'Unknown';
   }
 
   function getRadarPoints(attr: any, overrideRadius?: number) {
@@ -89,7 +125,27 @@
             </div>
             <div class="bg-white p-3 rounded-lg border border-light-border">
               <span class="text-[0.6rem] font-black subtle uppercase tracking-wider block mb-1">Market Value</span>
-              <span class="font-black text-sm text-primary">{formatCurrency(calculatePlayerValue(player, currentDate))}</span>
+              <span class="font-black text-sm text-primary">{renderMarketValue()}</span>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-light-border">
+              <span class="text-[0.6rem] font-black subtle uppercase tracking-wider block mb-1">Morale</span>
+              <span class="font-black text-sm {player.morale > 70 ? 'text-green-600' : player.morale > 30 ? 'text-amber-600' : 'text-red-600'}">
+                {#if effectiveScoutLevel >= 1}
+                  {player.morale > 80 ? 'Superb' : player.morale > 60 ? 'Happy' : player.morale > 40 ? 'Content' : player.morale > 20 ? 'Low' : 'Abysmal'}
+                {:else}
+                  Unknown
+                {/if}
+              </span>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-light-border">
+              <span class="text-[0.6rem] font-black subtle uppercase tracking-wider block mb-1">Contract Expiry</span>
+              <span class="font-black text-[0.65rem] {new Date(player.contractExpires).getFullYear() <= 2025 ? 'text-red-600' : 'text-dark'}">
+                {#if effectiveScoutLevel >= 1}
+                  {player.contractExpires ? new Date(player.contractExpires).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'None'}
+                {:else}
+                  Unknown
+                {/if}
+              </span>
             </div>
           </div>
           
@@ -100,7 +156,9 @@
                 {#if typeof val === 'number'}
                   <div class="flex justify-between items-center pb-1 border-b border-gray-50 last:border-0">
                     <span class="font-bold text-light-text capitalize text-[0.7rem]">{key.replace(/([A-Z])/g, ' $1').replace('Attributes', '')}</span>
-                    <span class="font-black text-xs {getStatColor(val as number)}">{val}</span>
+                    <span class="font-black text-xs {effectiveScoutLevel >= 2 ? getStatColor(val as number) : 'text-gray-400'}">
+                      {renderStatValue(val as number)}
+                    </span>
                   </div>
                 {/if}
               {/each}
@@ -148,9 +206,19 @@
             <button type="button" class="text-xs font-bold subtle hover:text-dark px-2" onclick={() => showOfferForm = false}>Cancel</button>
           </form>
         {:else}
-          <button class="btn-primary py-2 px-6" onclick={() => showOfferForm = true}>
-            Make Offer
-          </button>
+          <div class="flex gap-2">
+            {#if effectiveScoutLevel < 2}
+              <form method="POST" action="/teams/{player.teamId}?/assignScout" use:enhance>
+                <input type="hidden" name="playerId" value={player.id} />
+                <button type="submit" class="btn-secondary py-2 px-6">
+                  Assign Scout
+                </button>
+              </form>
+            {/if}
+            <button class="btn-primary py-2 px-6" onclick={() => showOfferForm = true}>
+              Make Offer
+            </button>
+          </div>
         {/if}
       {:else}
         <div></div>

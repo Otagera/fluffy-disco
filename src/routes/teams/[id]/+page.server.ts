@@ -8,7 +8,10 @@ export const load: PageServerLoad = async ({ params }) => {
 
   if (!save) {
     return {
-      hasSave: false
+      hasSave: false,
+      scoutingReports: [],
+      managerTeamId: '',
+      currentDate: ''
     };
   }
 
@@ -25,7 +28,8 @@ export const load: PageServerLoad = async ({ params }) => {
     team,
     players: teamPlayers,
     managerTeamId: save.manager.teamId,
-    currentDate: save.currentDate
+    currentDate: save.currentDate,
+    scoutingReports: save.scoutingReports || []
   };
 };
 
@@ -86,6 +90,43 @@ export const actions: Actions = {
       isUrgent: true,
       relatedEntityId: isAccepted ? `offer_${player.id}_${amount}` : undefined
     });
+
+    return { success: true };
+  },
+  assignScout: async ({ request }) => {
+    const data = await request.formData();
+    const playerId = data.get('playerId') as string;
+
+    if (!playerId) return fail(400, { message: 'Missing player ID' });
+
+    const save = loadSaveGame();
+    if (!save) return fail(500, { message: 'No save found' });
+
+    const player = save.players[playerId];
+    if (!player) return fail(404, { message: 'Player not found' });
+
+    if (player.teamId === save.manager.teamId) {
+      return fail(400, { message: 'Cannot scout your own player' });
+    }
+
+    if (!save.scoutingReports) save.scoutingReports = [];
+
+    // Check if already being scouted
+    const existing = save.scoutingReports.find(r => r.playerId === playerId && r.teamId === save.manager.teamId);
+    if (existing) {
+      return fail(400, { message: 'Player is already being scouted' });
+    }
+
+    const newReport = {
+      id: `sr_${Math.random().toString(36).slice(2, 11)}`,
+      teamId: save.manager.teamId,
+      playerId: playerId,
+      level: 0,
+      progressDays: 0
+    };
+
+    save.scoutingReports.push(newReport);
+    writeSaveGame(save);
 
     return { success: true };
   }

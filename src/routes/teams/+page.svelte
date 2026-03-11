@@ -4,6 +4,9 @@
 
   let { data }: { data: PageData } = $props();
 
+  const currentDate = $derived(data.currentDate ?? '');
+  const managerTeamId = $derived(data.managerTeamId ?? '');
+
   const roleOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as const;
   const sortedTeams = $derived([...(data.teams ?? [])].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)));
 
@@ -47,6 +50,11 @@
   const bench = $derived(allPlayers.filter(p => !probableXI.includes(p)).slice(0, 9));
   
   const selectedPlayer = $derived(allPlayers.find((player) => player.id === selectedPlayerId) ?? null);
+  const selectedPlayerScoutingLevel = $derived.by(() => {
+    if (!selectedPlayerId) return 0;
+    const report = (data.scoutingReports || []).find(r => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
+    return report ? report.level : 0;
+  });
 
   function getOverallColor(overall: number) {
     if (overall >= 16) return 'bg-green-100 text-green-800 border-green-200';
@@ -155,7 +163,9 @@
 {#if selectedPlayer}
   <PlayerModal 
     player={selectedPlayer} 
-    currentDate={data.currentDate}
+    currentDate={currentDate}
+    managerTeamId={managerTeamId}
+    scoutingLevel={selectedPlayerScoutingLevel}
     onclose={() => selectedPlayerId = null} 
   />
 {/if}

@@ -1,9 +1,9 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { db } from './db';
 import * as schema from './schema';
-import type { SaveGame, PlayerProfile, TeamProfile, League, Fixture, Standing } from './types';
+import type { SaveGame, PlayerProfile, TeamProfile, League, Fixture, Standing, InboxMessage, ScoutingReport } from './types';
 import { generateFixtures } from './generator';
-import { calculatePlayerOverall, calculateTeamOverall } from './ratings';
+import { calculatePlayerOverall, calculateTeamOverall, calculateAge, calculatePlayerValue } from './ratings';
 import { getTacticalCompatibility } from '../engine/ai/Compatibility';
 
 export function saveNewGameToDB(save: SaveGame) {
@@ -14,6 +14,7 @@ export function saveNewGameToDB(save: SaveGame) {
     tx.delete(schema.fixtureGoals).run();
     tx.delete(schema.leagueNews).run();
     tx.delete(schema.fixtures).run();
+    tx.delete(schema.scoutingReports).run();
     tx.delete(schema.players).run();
     tx.delete(schema.teams).run();
     tx.delete(schema.leagues).run();
@@ -85,6 +86,7 @@ export function saveNewGameToDB(save: SaveGame) {
         condition: p.condition,
         matchSharpness: p.matchSharpness || 50,
         morale: p.morale || 50,
+        consistency: p.consistency || 10,
         preferredFoot: p.preferredFoot || 'Right',
         wage: p.wage || 0,
         contractExpires: p.contractExpires || null,
@@ -101,6 +103,7 @@ export function saveNewGameToDB(save: SaveGame) {
         id: f.id,
         leagueId: f.leagueId,
         week: f.week,
+        date: f.date,
         homeTeamId: f.homeTeamId,
         awayTeamId: f.awayTeamId,
         played: f.played,
@@ -212,6 +215,11 @@ export function loadSaveGame(): SaveGame | null {
       .orderBy(sql`${schema.inboxMessages.date} DESC`)
       .all();
     save.inbox = inbox as any;
+
+    const reports = db.select().from(schema.scoutingReports)
+      .where(eq(schema.scoutingReports.teamId, save.manager.teamId))
+      .all();
+    save.scoutingReports = reports as ScoutingReport[];
 
     recalculateOverallRatings(save);
     return save;
@@ -328,6 +336,27 @@ export function writeSaveGame(saveData: SaveGame) {
                 goalsAgainst: s.goalsAgainst,
                 points: s.points,
               },
+            })
+            .run();
+        }
+      }
+
+      if (saveData.scoutingReports) {
+        for (const r of saveData.scoutingReports) {
+          tx.insert(schema.scoutingReports)
+            .values({
+              id: r.id,
+              teamId: r.teamId,
+              playerId: r.playerId,
+              level: r.level,
+              progressDays: r.progressDays
+            })
+            .onConflictDoUpdate({
+              target: [schema.scoutingReports.id],
+              set: {
+                level: r.level,
+                progressDays: r.progressDays
+              }
             })
             .run();
         }
@@ -487,6 +516,39 @@ function processAITransfers(save: SaveGame) {
   }
 }
 
+function advanceScouting(save: SaveGame) {
+  if (!save.scoutingReports) return;
+
+  for (const report of save.scoutingReports) {
+    if (report.level < 2) {
+      report.progressDays++;
+      
+      let newLevel = report.level;
+      if (report.progressDays >= 7) newLevel = 2;
+      else if (report.progressDays >= 3) newLevel = 1;
+
+      if (newLevel > report.level) {
+        report.level = newLevel;
+        const player = save.players[report.playerId];
+        if (player) {
+          addInboxMessage(save, {
+            teamId: save.manager.teamId,
+            date: save.currentDate,
+            sender: 'Chief Scout',
+            subject: `Scouting Update: ${player.name}`,
+            body: newLevel === 1 
+              ? `We have gathered some initial observations on ${player.name}. We now have a clearer idea of his attribute ranges and general potential. Full report expected in a few days.`
+              : `The final scouting report for ${player.name} is complete. We have revealed his exact attributes and true market value. He is currently rated ${player.overall} OVR with a potential of ${player.potential}.`,
+            type: 'LEAGUE',
+            isUrgent: false,
+            relatedEntityId: player.id
+          });
+        }
+      }
+    }
+  }
+}
+
 export function advanceOneDay(save: SaveGame): { mustStop: boolean; reason?: string } {
   const date = new Date(save.currentDate);
   date.setDate(date.getDate() + 1);
@@ -498,23 +560,84 @@ export function advanceOneDay(save: SaveGame): { mustStop: boolean; reason?: str
   // Process AI Transfers
   processAITransfers(save);
 
-  // 1. Check for Birthdays
+  // Process Scouting
+  advanceScouting(save);
+
+  // 1. Check for Birthdays, Contracts, and Morale
   const managerTeam = save.teams[save.manager.teamId];
-  if (managerTeam) {
-    for (const pid of managerTeam.players) {
-      const p = save.players[pid];
-      if (p && p.birthDate.endsWith(save.currentDate.slice(5))) {
-        const newAge = calculateAge(p.birthDate, save.currentDate);
+  
+  for (const player of Object.values(save.players)) {
+    // Contract Expiration
+    if (player.contractExpires && player.contractExpires === save.currentDate) {
+      const oldTeamId = player.teamId;
+      player.teamId = null; // Become Free Agent
+      
+      if (oldTeamId) {
+        const team = save.teams[oldTeamId];
+        if (team) {
+          team.players = team.players.filter(id => id !== player.id);
+          
+          if (oldTeamId === save.manager.teamId) {
+            addInboxMessage(save, {
+              teamId: save.manager.teamId,
+              date: save.currentDate,
+              sender: 'Board of Directors',
+              subject: `Contract Expired: ${player.name}`,
+              body: `${player.name}'s contract has officially expired today. He has left the club and is now a free agent.`,
+              type: 'LEAGUE',
+              isUrgent: true,
+              relatedEntityId: player.id
+            });
+            mustStop = true;
+            reason = 'Contract Expired';
+          }
+        }
+      }
+    }
+
+    // Morale Management (Only for manager's team)
+    if (managerTeam && player.teamId === managerTeam.id) {
+      // 1. Birthday
+      if (player.birthDate.endsWith(save.currentDate.slice(5))) {
+        const newAge = calculateAge(player.birthDate, save.currentDate);
         addInboxMessage(save, {
           teamId: managerTeam.id,
           date: save.currentDate,
           sender: 'Assistant Manager',
-          subject: `Happy Birthday: ${p.name}`,
-          body: `${p.name} turns ${newAge} today! The squad had a small celebration in training. He looks sharp and ready for the next match.`,
+          subject: `Happy Birthday: ${player.name}`,
+          body: `${player.name} turns ${newAge} today! The squad had a small celebration in training. He looks sharp and ready for the next match.`,
           type: 'BIRTHDAY',
           isUrgent: false,
-          relatedEntityId: p.id
+          relatedEntityId: player.id
         });
+      }
+
+      // 2. Playing Time (Morale Decay)
+      const isStarter = managerTeam.players.indexOf(player.id) < 11;
+      const isStarPlayer = (player.overall || 50) >= 15;
+      
+      if (!isStarter && isStarPlayer) {
+        // Star player on the bench
+        player.morale = Math.max(0, (player.morale || 50) - 1);
+        if (player.morale < 30) {
+          // Send warning if they hit low morale
+          const warningKey = `low_morale_${player.id}_${save.currentDate.slice(0, 7)}`; // once a month
+          if (Math.random() < 0.1) { // Random chance to trigger inbox complain
+             addInboxMessage(save, {
+                teamId: managerTeam.id,
+                date: save.currentDate,
+                sender: player.name,
+                subject: `Discontent: Lack of Playing Time`,
+                body: `Boss, I'm not happy with my current role at the club. A player of my quality shouldn't be sitting on the bench every week. I need regular football or I'll have to consider my future.`,
+                type: 'LEAGUE',
+                isUrgent: false,
+                relatedEntityId: player.id
+             });
+          }
+        }
+      } else if (isStarter) {
+        // Happy to be playing
+        player.morale = Math.min(100, (player.morale || 50) + 0.2);
       }
     }
   }
@@ -937,7 +1060,7 @@ function advanceSeason(save: SaveGame) {
   const performSwap = (l: League, leave: string[], enter: string[]) => { l.teams = l.teams.filter(t => !leave.includes(t)); l.teams.push(...enter.filter(t => t && t !== "")); };
   performSwap(L1, rel1, pro2); performSwap(L2, [...pro2, ...rel2], [...rel1, ...pro3]); performSwap(L3, [...pro3, ...rel3], [...rel2, ...pro4]); performSwap(L4, pro4, rel3);
   save.currentSeason = (save.currentSeason || 1) + 1; save.currentWeek = 1; save.fixtures = [];
-  save.leagues.forEach(league => { league.standings = league.teams.map(tid => ({ teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 })); save.fixtures.push(...generateFixtures(league.teams, league.id)); });
+  save.leagues.forEach(league => { league.standings = league.teams.map(tid => ({ teamId: tid, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 })); save.fixtures.push(...generateFixtures(league.teams, league.id, save.currentDate)); });
   return save;
 }
 

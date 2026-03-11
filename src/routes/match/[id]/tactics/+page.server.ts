@@ -31,6 +31,7 @@ export const load: PageServerLoad = async ({ params }) => {
     homePlayers,
     awayPlayers,
     managerTeamId: save.manager.teamId,
-    currentDate: save.currentDate
+    currentDate: save.currentDate,
+    scoutingReports: save.scoutingReports || []
   };
 };

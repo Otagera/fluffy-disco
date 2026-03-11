@@ -7,10 +7,12 @@
 
   let { data }: { data: PageData } = $props();
 
-  const isMyTeam = data.managerTeamId === data.team.id;
+  const isMyTeam = data.managerTeamId === data.team?.id;
+  const currentDate = $derived(data.currentDate ?? '');
+  const managerTeamId = $derived(data.managerTeamId ?? '');
 
   // Local state for editing if it's my team
-  let currentTeam = $state({ ...data.team });
+  let currentTeam = $state(data.team ? { ...data.team } : {} as any);
   let currentPlayers = $state([...(data.players ?? [])]);
 
   // If it's NOT my team, we show a "Probable XI" based on OVR
@@ -31,6 +33,11 @@
 
   let selectedPlayerId = $state<string | null>(null);
   const selectedPlayer = $derived(currentPlayers.find((player) => player.id === selectedPlayerId) ?? null);
+  const selectedPlayerScoutingLevel = $derived.by(() => {
+    if (!selectedPlayerId) return 0;
+    const report = (data.scoutingReports || []).find(r => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
+    return report ? report.level : 0;
+  });
 
   function handleSwap(id1: string, id2: string) {
     if (!isMyTeam) return;
@@ -110,8 +117,9 @@
             team={currentTeam}
             players={isMyTeam ? currentPlayers : displayPlayers}
             editable={isMyTeam}
-            currentDate={data.currentDate}
-            managerTeamId={data.managerTeamId}
+            currentDate={currentDate}
+            managerTeamId={managerTeamId}
+            scoutingReports={data.scoutingReports}
             onSwap={handleSwap}
             onFormationChange={handleFormationChange}          />
         </div>
@@ -148,8 +156,9 @@
 {#if selectedPlayer}
   <PlayerModal 
     player={selectedPlayer} 
-    currentDate={data.currentDate}
-    managerTeamId={data.managerTeamId}
+    currentDate={currentDate}
+    managerTeamId={managerTeamId}
+    scoutingLevel={selectedPlayerScoutingLevel}
     onclose={() => selectedPlayerId = null} 
   />
 {/if}

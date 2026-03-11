@@ -8,7 +8,10 @@ export const load: PageServerLoad = async () => {
     return {
       hasSave: false,
       teams: [],
-      players: {}
+      players: {},
+      scoutingReports: [],
+      managerTeamId: '',
+      currentDate: ''
     };
   }
 
@@ -17,6 +20,7 @@ export const load: PageServerLoad = async () => {
     managerTeamId: save.manager.teamId,
     teams: Object.values(save.teams),
     players: save.players,
-    currentDate: save.currentDate
+    currentDate: save.currentDate,
+    scoutingReports: save.scoutingReports || []
   };
 };

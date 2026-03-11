@@ -77,6 +77,10 @@ export const actions: Actions = {
     if (!sellingTeam) return fail(500, { message: 'Selling team not found' });
 
     // Financials
+    if (buyingTeam.transferBudget && buyingTeam.transferBudget < amount) {
+      return fail(400, { message: 'Insufficient transfer budget' });
+    }
+    
     buyingTeam.transferBudget = (buyingTeam.transferBudget || 0) - amount;
     sellingTeam.transferBudget = (sellingTeam.transferBudget || 0) + amount;
 
@@ -84,6 +88,15 @@ export const actions: Actions = {
     sellingTeam.players = sellingTeam.players.filter(id => id !== playerId);
     buyingTeam.players.push(playerId);
     player.teamId = buyingTeam.id;
+
+    // New Contract: 3 years from current date
+    const d = new Date(save.currentDate);
+    d.setFullYear(d.getFullYear() + 3);
+    player.contractExpires = d.toISOString().split('T')[0];
+    
+    // Set market wage
+    const marketValue = calculatePlayerValue(player, save.currentDate);
+    player.wage = Math.round(marketValue / 100);
 
     // Persist
     writeSaveGame(save);
@@ -123,6 +136,10 @@ export const actions: Actions = {
     if (!buyingTeam || !sellingTeam) return fail(500, { message: 'Teams not found' });
 
     // Financials
+    if (buyingTeam.transferBudget && buyingTeam.transferBudget < amount) {
+      return fail(400, { message: 'Insufficient transfer budget' });
+    }
+    
     buyingTeam.transferBudget = (buyingTeam.transferBudget || 0) - amount;
     sellingTeam.transferBudget = (sellingTeam.transferBudget || 0) + amount;
 
@@ -130,6 +147,15 @@ export const actions: Actions = {
     sellingTeam.players = sellingTeam.players.filter(id => id !== playerId);
     buyingTeam.players.push(playerId);
     player.teamId = buyingTeam.id;
+
+    // New Contract: 3 years from current date
+    const d = new Date(save.currentDate);
+    d.setFullYear(d.getFullYear() + 3);
+    player.contractExpires = d.toISOString().split('T')[0];
+    
+    // Set market wage
+    const marketValue = calculatePlayerValue(player, save.currentDate);
+    player.wage = Math.round(marketValue / 100);
 
     // Persist
     writeSaveGame(save);

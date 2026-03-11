@@ -361,7 +361,10 @@ export class Match {
                     const dx = goalX - bx;
                     const dy = 34 - by;
                     
-                    const errorSpread = MathUtils.clamp(2.0 * (1.0 - stats.finishing / 100), 0.1, 2.0);
+                    const consistency = stats.consistency || 10;
+                    const consistencyMultiplier = 1.0 + (10 - consistency) * 0.05;
+
+                    const errorSpread = MathUtils.clamp(2.0 * (1.0 - stats.finishing / 100) * consistencyMultiplier, 0.1, 2.0);
                     const ty = 34 + MathUtils.nextGaussian(0, errorSpread);
                     const targetedDy = ty - by;
 
@@ -447,8 +450,13 @@ export class Match {
             const team = possessionIdx < 11 ? 0 : 1;
             const speed = Math.sqrt(vx * vx + vy * vy);
             const lead = 0.6; 
-            const stats = this.playerStats[possessionIdx] || { passing: 50, finishing: 50, tackling: 50, dribbling: 50, vision: 50, composure: 50 };
+            const stats = this.playerStats[possessionIdx] || { passing: 50, finishing: 50, tackling: 50, dribbling: 50, vision: 50, composure: 50, consistency: 10 };
             const role = this.playerRoles[possessionIdx] || '';
+
+            // Calculate consistency multiplier (1-20 scale)
+            // Consistency 20 -> 0.5 (half spread), Consistency 1 -> 1.45 (wider spread)
+            const consistency = stats.consistency || 10;
+            const consistencyMultiplier = 1.0 + (10 - consistency) * 0.05;
             
             // AI Action Decisions
             const attackDir = this.getAttackDir(team);
@@ -538,8 +546,8 @@ export class Match {
                 const pressureError = 1.0 + pressureFactor * (1.0 - shotComposure) * 1.2;
                 const longShotPenalty = MathUtils.clamp((approximateDist - 20) / 28, 0, 1);
                 
-                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError + longShotPenalty * 1.15, 0.12, 3.8);
-                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality));
+                const errorSpread = MathUtils.clamp(1.8 * (1.0 - stats.finishing / 100) * systemBonus * pressureError * consistencyMultiplier + longShotPenalty * 1.15, 0.12, 3.8);
+                const gkBias = MathUtils.nextGaussian(0, 0.9 * (1.0 - shotQuality) * consistencyMultiplier);
                 const ty = targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
                 
                 const dy = ty - py;
@@ -565,7 +573,7 @@ export class Match {
                     const systemBonus = this.systemBonuses[team];
                     const passCalm = ((stats.passing || 50) * 0.75 + (stats.composure || 50) * 0.25) / 100;
                     const pressurePassError = 1.0 + pressureFactor * (1.0 - passCalm) * 1.1;
-                    const errorSpread = MathUtils.clamp(2.5 * (1.0 - stats.passing / 100) * systemBonus * pressurePassError, 0.15, 4.0);
+                    const errorSpread = MathUtils.clamp(2.5 * (1.0 - stats.passing / 100) * systemBonus * pressurePassError * consistencyMultiplier, 0.15, 4.0);
                     const tx = passTarget.x + MathUtils.nextGaussian(0, errorSpread);
                     const ty = passTarget.y + MathUtils.nextGaussian(0, errorSpread);
 
@@ -1117,12 +1125,17 @@ export class Match {
                 
                 if (lastPossessorContending) {
                     // Gaussian Tackling Duel!
-                    const attackerStats = this.playerStats[this.lastPossessorIdx] || { dribbling: 50, composure: 50 };
-                    const defenderStats = this.playerStats[closest] || { tackling: 50, aggression: 50 };
+                    const attackerStats = this.playerStats[this.lastPossessorIdx] || { dribbling: 50, composure: 50, consistency: 10 };
+                    const defenderStats = this.playerStats[closest] || { tackling: 50, aggression: 50, consistency: 10 };
                     
+                    const attackerConsistency = attackerStats.consistency || 10;
+                    const attackerMultiplier = 1.0 + (10 - attackerConsistency) * 0.05;
+                    const defenderConsistency = defenderStats.consistency || 10;
+                    const defenderMultiplier = 1.0 + (10 - defenderConsistency) * 0.05;
+
                     // Mean is based on attribute, spread is based on composure/concentration
-                    const tackleScore = MathUtils.nextGaussian(defenderStats.tackling, 15);
-                    const dribbleScore = MathUtils.nextGaussian(attackerStats.dribbling, 15);
+                    const tackleScore = MathUtils.nextGaussian(defenderStats.tackling, 15 * defenderMultiplier);
+                    const dribbleScore = MathUtils.nextGaussian(attackerStats.dribbling, 15 * attackerMultiplier);
                     
                     if (tackleScore < dribbleScore) {
                         // Check for Foul (Critical Failure + High Aggression)

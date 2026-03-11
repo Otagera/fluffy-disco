@@ -540,6 +540,8 @@
             allowPositionOverrides={true}
             isHome={isHome}
             currentDate={data.currentDate}
+            managerTeamId={data.managerTeamId}
+            scoutingReports={data.scoutingReports}
             onSwap={handleTacticsSwap}
             onFormationChange={(f) => console.log('Formation', $state.snapshot(f))}
             onOverridesChange={handleTacticsOverrides}

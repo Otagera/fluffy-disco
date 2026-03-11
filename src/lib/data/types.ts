@@ -23,6 +23,7 @@ export interface MatchAnalytics {
 
 export interface PlayerProfile {
   id: string;
+  teamId: string | null;
   name: string;
   number?: number;
   birthDate: string; // YYYY-MM-DD
@@ -34,7 +35,7 @@ export interface PlayerProfile {
   morale?: number; // 0-100
   preferredFoot?: 'Left' | 'Right' | 'Both';
   wage?: number;
-  contractExpires?: number;
+  contractExpires?: string; // YYYY-MM-DD
   injury: { type: string; weeksRemaining: number } | null;
   attributes: {
     // Technical
@@ -62,6 +63,7 @@ export interface PlayerProfile {
     reflexes: number;
     handling: number;
   };
+  consistency?: number;
   hiddenTraits?: {
     injuryProneness: number;
     consistency: number;
@@ -120,7 +122,7 @@ export interface NewsItem {
   id: string;
   week: number;
   headline: string;
-  type: 'BIG_RESULT' | 'HAT_TRICK' | 'GOLDEN_BOOT' | 'TOP_CLASH';
+  type: 'BIG_RESULT' | 'HAT_TRICK' | 'GOLDEN_BOOT' | 'TOP_CLASH' | 'TRANSFER';
   relatedPlayerId?: string;
   relatedTeamId?: string;
 }
@@ -160,6 +162,14 @@ export interface InboxMessage {
   relatedEntityId?: string;
 }
 
+export interface ScoutingReport {
+  id: string;
+  teamId: string;
+  playerId: string;
+  level: number;
+  progressDays: number;
+}
+
 export interface SaveGame {
   manager: {
     name: string;
@@ -174,4 +184,5 @@ export interface SaveGame {
   fixtures: Fixture[];
   lastMatchAnalytics?: MatchAnalytics;
   inbox?: InboxMessage[];
+  scoutingReports?: ScoutingReport[];
 }

@@ -131,6 +131,8 @@
       allowPositionOverrides={true}
       isHome={isHome}
       currentDate={data.currentDate}
+      managerTeamId={data.managerTeamId}
+      scoutingReports={data.scoutingReports}
       onSwap={handleSwap}
       onFormationChange={handleFormationChange}
       onOverridesChange={handleOverridesChange}

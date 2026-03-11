@@ -76,7 +76,7 @@ export function calculateAge(birthDate: string, currentDate: string): number {
   return age;
 }
 
-export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'attributes' | 'condition' | 'potential' | 'birthDate'>, currentDate: string, options?: { includeTransient?: boolean }): number {
+export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'attributes' | 'condition' | 'potential' | 'birthDate' | 'morale'>, currentDate: string, options?: { includeTransient?: boolean }): number {
   const weights = WEIGHTS[player.role];
   let weighted = 0;
   let weightTotal = 0;
@@ -96,6 +96,11 @@ export function calculatePlayerOverall(player: Pick<PlayerProfile, 'role' | 'att
   const ageDecline = currentAge > 31 ? -(currentAge - 31) * 0.15 : 0;
 
   let score = base + developmentGap + ageDecline;
+
+  // Morale Impact
+  const morale = player.morale ?? 50;
+  if (morale < 30) score -= (30 - morale) / 10; // Max -3 penalty
+  else if (morale > 90) score += 1;
 
   if (options?.includeTransient) {
     const fitnessMod = (clamp(player.condition, 35, 100) - 85) / 25;

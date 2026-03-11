@@ -73,7 +73,8 @@ export const players = sqliteTable('players', {
   morale: integer('morale').notNull(),
   preferredFoot: text('preferredFoot').notNull(),
   wage: integer('wage').notNull(),
-  contractExpires: integer('contractExpires'),
+  contractExpires: text('contractExpires'),
+  consistency: integer('consistency').notNull().default(10),
   
   // JSON Columns for complex nested data
   injury: text('injury', { mode: 'json' }).$type<{ type: string; weeksRemaining: number } | null>(),
@@ -189,5 +190,25 @@ export const inboxMessagesRelations = relations(inboxMessages, ({ one }) => ({
   team: one(teams, {
     fields: [inboxMessages.teamId],
     references: [teams.id],
+  }),
+}));
+
+// Scouting Reports
+export const scoutingReports = sqliteTable('scouting_reports', {
+  id: text('id').primaryKey(),
+  teamId: text('teamId').notNull().references(() => teams.id),
+  playerId: text('playerId').notNull().references(() => players.id),
+  level: integer('level').notNull().default(0), // 0: Unknown, 1: Range, 2: Exact
+  progressDays: integer('progressDays').notNull().default(0),
+});
+
+export const scoutingReportsRelations = relations(scoutingReports, ({ one }) => ({
+  team: one(teams, {
+    fields: [scoutingReports.teamId],
+    references: [teams.id],
+  }),
+  player: one(players, {
+    fields: [scoutingReports.playerId],
+    references: [players.id],
   }),
 }));

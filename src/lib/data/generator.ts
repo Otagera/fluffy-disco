@@ -165,8 +165,10 @@ function generatePlayer(role: Role, baseAbility: number, level: number, youthWei
     condition: 100,
     matchSharpness: getRandomInt(80, 100),
     morale: getRandomInt(70, 100),
+    consistency: getRandomInt(1, 20),
     preferredFoot: Math.random() > 0.8 ? 'Left' : 'Right',
     wage: Math.round((baseAbility * 1000) * (level === 1 ? 5 : level === 2 ? 2 : 1)),
+    contractExpires: `${2024 + getRandomInt(1, 4)}-06-30`,
     injury: null,
     attributes,
     seasonStats: { apps: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, averageRating: 0 }

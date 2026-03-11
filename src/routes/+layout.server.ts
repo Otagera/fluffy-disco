@@ -8,7 +8,12 @@ export const load: LayoutServerLoad = async () => {
   const save = loadSaveGame();
   
   if (!save) {
-    return { hasSave: false };
+    return { 
+      hasSave: false,
+      currentDate: '',
+      managerTeamId: '',
+      unreadInboxCount: 0
+    };
   }
 
   const unreadInboxCount = db.select({ value: count() })
@@ -22,6 +27,7 @@ export const load: LayoutServerLoad = async () => {
   return {
     hasSave: true,
     manager: save.manager,
+    managerTeamId: save.manager.teamId,
     currentDate: save.currentDate,
     unreadInboxCount: unreadInboxCount?.value || 0
   };
