@@ -207,6 +207,12 @@ export function loadSaveGame(): SaveGame | null {
       });
     }
 
+    const inbox = db.select().from(schema.inboxMessages)
+      .where(eq(schema.inboxMessages.teamId, save.manager.teamId))
+      .orderBy(sql`${schema.inboxMessages.date} DESC`)
+      .all();
+    save.inbox = inbox as any;
+
     recalculateOverallRatings(save);
     return save;
   } catch (error) {
@@ -337,6 +343,86 @@ export function writeSaveGame(saveData: SaveGame) {
 function recalculateOverallRatings(save: SaveGame) {
   for (const player of Object.values(save.players)) player.overall = calculatePlayerOverall(player, save.currentDate);
   for (const team of Object.values(save.teams)) team.overall = calculateTeamOverall(team, save.players, save.currentDate);
+}
+
+export function addInboxMessage(save: SaveGame, message: Omit<InboxMessage, 'id' | 'isRead'>) {
+  const msg: InboxMessage = {
+    ...message,
+    id: `msg_${Math.random().toString(36).slice(2, 11)}`,
+    isRead: false
+  };
+  
+  if (!save.inbox) save.inbox = [];
+  save.inbox.unshift(msg);
+
+  // Persist to DB
+  db.insert(schema.inboxMessages).values({
+    id: msg.id,
+    teamId: msg.teamId,
+    date: msg.date,
+    sender: msg.sender,
+    subject: msg.subject,
+    body: msg.body,
+    type: msg.type,
+    isRead: false,
+    isUrgent: msg.isUrgent,
+    relatedEntityId: msg.relatedEntityId
+  }).run();
+
+  return msg;
+}
+
+export function advanceOneDay(save: SaveGame): { mustStop: boolean; reason?: string } {
+  const date = new Date(save.currentDate);
+  date.setDate(date.getDate() + 1);
+  save.currentDate = date.toISOString().split('T')[0];
+
+  let mustStop = false;
+  let reason = '';
+
+  // 1. Check for Birthdays
+  const managerTeam = save.teams[save.manager.teamId];
+  if (managerTeam) {
+    for (const pid of managerTeam.players) {
+      const p = save.players[pid];
+      if (p && p.birthDate.endsWith(save.currentDate.slice(5))) {
+        const newAge = calculateAge(p.birthDate, save.currentDate);
+        addInboxMessage(save, {
+          teamId: managerTeam.id,
+          date: save.currentDate,
+          sender: 'Assistant Manager',
+          subject: `Happy Birthday: ${p.name}`,
+          body: `${p.name} turns ${newAge} today! The squad had a small celebration in training. He looks sharp and ready for the next match.`,
+          type: 'BIRTHDAY',
+          isUrgent: false,
+          relatedEntityId: p.id
+        });
+      }
+    }
+  }
+
+  // 2. Check for Match Day
+  const todayFixture = save.fixtures.find(f => 
+    f.played === false && 
+    (f.homeTeamId === save.manager.teamId || f.awayTeamId === save.manager.teamId) &&
+    f.date === save.currentDate
+  );
+
+  if (todayFixture) {
+    mustStop = true;
+    reason = 'Match Day';
+  }
+
+  // 3. Update DB
+  db.update(schema.gamestate)
+    .set({ currentDate: save.currentDate })
+    .where(eq(schema.gamestate.id, 1))
+    .run();
+
+  // Recalculate ratings in case of aging
+  recalculateOverallRatings(save);
+
+  return { mustStop, reason };
 }
 
 export function processWeekResults(save: any, playerMatchResult: any) {

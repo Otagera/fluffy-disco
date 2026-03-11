@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { loadSaveGame, writeSaveGame } from '$lib/data/store';
+import { loadSaveGame, writeSaveGame, addInboxMessage } from '$lib/data/store';
+import { calculatePlayerValue } from '$lib/data/ratings';
 
 export const load: PageServerLoad = async ({ params }) => {
   const save = loadSaveGame();
@@ -47,6 +48,44 @@ export const actions: Actions = {
     team.players = JSON.parse(playerIdsJson);
 
     writeSaveGame(save);
+
+    return { success: true };
+  },
+  submitTransferBid: async ({ request, params }) => {
+    const data = await request.formData();
+    const playerId = data.get('playerId') as string;
+    const amount = Number(data.get('amount'));
+
+    if (!playerId || !amount) return fail(400, { message: 'Missing data' });
+
+    const save = loadSaveGame();
+    if (!save) return fail(500, { message: 'No save found' });
+
+    const player = save.players[playerId];
+    const sellingTeam = save.teams[params.id];
+    
+    if (!player || !sellingTeam) return fail(404, { message: 'Player or team not found' });
+
+    const value = calculatePlayerValue(player, save.currentDate);
+    const formatter = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
+
+    // A simple AI negotiation: if you bid at least 95% of the value, they accept.
+    const isAccepted = amount >= value * 0.95;
+
+    const body = isAccepted 
+      ? `We have received your offer of ${formatter.format(amount)} for ${player.name}.\n\nThe board has reviewed the financials and we are happy to accept this bid. You may proceed with the transfer when ready.`
+      : `We have received your offer of ${formatter.format(amount)} for ${player.name}.\n\nUnfortunately, this falls short of our valuation for the player. We expect a bid closer to ${formatter.format(value)} before we consider selling.`;
+
+    addInboxMessage(save, {
+      teamId: save.manager.teamId,
+      date: save.currentDate,
+      sender: sellingTeam.name,
+      subject: `Transfer Offer ${isAccepted ? 'Accepted' : 'Rejected'}: ${player.name}`,
+      body: body,
+      type: 'TRANSFER',
+      isUrgent: true,
+      relatedEntityId: isAccepted ? `offer_${player.id}_${amount}` : undefined
+    });
 
     return { success: true };
   }

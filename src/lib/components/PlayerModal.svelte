@@ -1,8 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { calculateAge, calculatePlayerValue } from '$lib/data/ratings';
+  import { enhance } from '$app/forms';
 
-  let { player, onclose, currentDate }: { player: any; onclose: () => void; currentDate: string } = $props();
+  let { player, onclose, currentDate, managerTeamId }: { player: any; onclose: () => void; currentDate: string; managerTeamId?: string } = $props();
+
+  let showOfferForm = $state(false);
+  let offerAmount = $state(calculatePlayerValue(player, currentDate));
+  let isSubmitting = $state(false);
 
   function getStatColor(val: number) {
     if (val >= 15) return 'text-green-600';
@@ -105,7 +110,51 @@
       </div>
     </div>
 
-    <div class="p-4 sm:p-6 bg-light-bg border-t border-light-border flex justify-end">
+    <div class="p-4 sm:p-6 bg-light-bg border-t border-light-border flex justify-between items-center">
+      {#if managerTeamId && player.teamId !== managerTeamId}
+        {#if showOfferForm}
+          <form 
+            method="POST" 
+            action="/teams/{player.teamId}?/submitTransferBid" 
+            class="flex items-center gap-2 w-full max-w-sm"
+            use:enhance={() => {
+              isSubmitting = true;
+              return async ({ update }) => {
+                await update();
+                isSubmitting = false;
+                showOfferForm = false;
+                onclose();
+              };
+            }}
+          >
+            <input type="hidden" name="playerId" value={player.id} />
+            <input type="hidden" name="managerTeamId" value={managerTeamId} />
+            
+            <div class="relative flex-1">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 font-bold subtle">₦</span>
+              <input 
+                type="number" 
+                name="amount" 
+                bind:value={offerAmount} 
+                class="w-full pl-8 pr-3 py-2 rounded-lg border border-light-border font-bold text-sm"
+                min="0"
+                step="50000"
+              />
+            </div>
+            
+            <button type="submit" class="btn-primary py-2 px-4 text-xs" disabled={isSubmitting}>
+              {isSubmitting ? 'Sending...' : 'Submit Bid'}
+            </button>
+            <button type="button" class="text-xs font-bold subtle hover:text-dark px-2" onclick={() => showOfferForm = false}>Cancel</button>
+          </form>
+        {:else}
+          <button class="btn-primary py-2 px-6" onclick={() => showOfferForm = true}>
+            Make Offer
+          </button>
+        {/if}
+      {:else}
+        <div></div>
+      {/if}
       <button class="btn-secondary py-2 px-8" onclick={onclose}>Close</button>
     </div>
   </div>

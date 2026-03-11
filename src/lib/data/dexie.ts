@@ -19,7 +19,7 @@ export class FootballSimDB extends Dexie {
 
   constructor() {
     super('FootballSimReplays');
-    this.version(1).stores({
+    this.version(2).stores({
       replays: '++id, matchId, homeTeamId, awayTeamId, timestamp'
     });
   }

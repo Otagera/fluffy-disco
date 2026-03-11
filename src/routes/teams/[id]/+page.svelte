@@ -111,6 +111,7 @@
             players={isMyTeam ? currentPlayers : displayPlayers}
             editable={isMyTeam}
             currentDate={data.currentDate}
+            managerTeamId={data.managerTeamId}
             onSwap={handleSwap}
             onFormationChange={handleFormationChange}          />
         </div>
@@ -148,6 +149,7 @@
   <PlayerModal 
     player={selectedPlayer} 
     currentDate={data.currentDate}
-    onclose={() => selectedPlayer = null} 
+    managerTeamId={data.managerTeamId}
+    onclose={() => selectedPlayerId = null} 
   />
 {/if}

@@ -138,6 +138,7 @@ export interface Fixture {
   id: string;
   leagueId: string;
   week: number;
+  date?: string; // YYYY-MM-DD
   homeTeamId: string;
   awayTeamId: string;
   played: boolean;
@@ -146,17 +147,31 @@ export interface Fixture {
   goalEvents?: GoalEvent[];
 }
 
+export interface InboxMessage {
+  id: string;
+  teamId: string;
+  date: string;
+  sender: string;
+  subject: string;
+  body: string;
+  type: 'BIRTHDAY' | 'TRANSFER' | 'LEAGUE' | 'MATCH';
+  isRead: boolean;
+  isUrgent: boolean;
+  relatedEntityId?: string;
+}
+
 export interface SaveGame {
   manager: {
     name: string;
     teamId: string;
   };
   currentSeason: number;
-  currentDate: string;
+  currentDate: string; // YYYY-MM-DD
   currentWeek: number;
   leagues: League[];
   teams: Record<string, TeamProfile>;
   players: Record<string, PlayerProfile>;
   fixtures: Fixture[];
   lastMatchAnalytics?: MatchAnalytics;
+  inbox?: InboxMessage[];
 }

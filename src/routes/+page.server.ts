@@ -1,6 +1,8 @@
-import { loadSaveGame, writeSaveGame, processWeekResults, saveNewGameToDB } from '$lib/data/store';
+import { loadSaveGame, writeSaveGame, processWeekResults, saveNewGameToDB, advanceOneDay } from '$lib/data/store';
 import { generateSaveGame } from '$lib/data/generator';
 import { db, sqlite } from '$lib/data/db';
+import * as schema from '$lib/data/schema';
+import { eq, and, count } from 'drizzle-orm';
 import { fail, redirect } from '@sveltejs/kit';
 import fs from 'fs';
 import path from 'path';
@@ -27,12 +29,13 @@ export const load: PageServerLoad = async () => {
     opponentTeam = save.teams[oppId];
   }
   
-  const leagueTeams: Record<string, any> = {};
-  if (activeLeague) {
-    activeLeague.teams.forEach(tId => {
-      leagueTeams[tId] = save.teams[tId];
-    });
-  }
+  const unreadInboxCount = db.select({ value: count() })
+    .from(schema.inboxMessages)
+    .where(and(
+      eq(schema.inboxMessages.teamId, managerTeamId),
+      eq(schema.inboxMessages.isRead, false)
+    ))
+    .get();
 
   return {
     hasSave: true,
@@ -45,11 +48,20 @@ export const load: PageServerLoad = async () => {
     opponentTeam,
     week: save.currentWeek,
     currentSeason: save.currentSeason || 1,
+    currentDate: save.currentDate,
+    unreadInboxCount: unreadInboxCount?.value || 0,
     hasAnalytics: !!save.lastMatchAnalytics
   };
 };
 
 export const actions: Actions = {
+  advanceDay: async () => {
+    const save = loadSaveGame();
+    if (!save) return fail(404, { error: 'Save not found' });
+    
+    const result = advanceOneDay(save);
+    return { success: true, ...result, currentDate: save.currentDate };
+  },
   startCareer: async ({ request }) => {
     const data = await request.formData();
     const name = data.get('managerName')?.toString() || 'The Gaffer';

@@ -45,6 +45,10 @@ const anglicizedNames = {
   arabic: {
     first: ['Ahmed', 'Mohamed', 'Omar', 'Ali', 'Youssef', 'Ibrahim', 'Mahmoud', 'Mustafa', 'Hassan', 'Khaled', 'Kareem'],
     last: ['Mansour', 'Haddad', 'Saleh', 'Abadi', 'Fahmy', 'Said', 'Ghanem', 'Zaki', 'Rahman', 'Nagi']
+  },
+  nigerian: {
+    first: ['Chukwudi', 'Okafor', 'Adeyemi', 'Olumide', 'Femi', 'Chinedu', 'Tunde', 'Ifeanyi', 'Segun', 'Uche', 'Emeka', 'Babatunde', 'Kolawole'],
+    last: ['Okonkwo', 'Balogun', 'Obi', 'Eze', 'Adebayo', 'Olatunji', 'Nwosu', 'Ibrahim', 'Musa', 'Onuoha', 'Abubakar', 'Lawal']
   }
 };
 
@@ -67,7 +71,8 @@ const styleLocales: Record<string, any> = {
   'German': [fakerDE],
   'Italian': [fakerIT],
   'French': [fakerFR],
-  'Brazilian': [fakerPT_BR]
+  'Brazilian': [fakerPT_BR],
+  'Nigerian': [fakerEN_NG]
 };
 
 function randomName(style: string = 'Global') {
@@ -80,6 +85,7 @@ function randomName(style: string = 'Global') {
     if (rand < (isGlobal ? 0.1 : 0.05)) return `${anglicizedNames.chinese.first[getRandomInt(0, anglicizedNames.chinese.first.length - 1)]} ${anglicizedNames.chinese.last[getRandomInt(0, anglicizedNames.chinese.last.length - 1)]}`;
     if (rand < (isGlobal ? 0.2 : 0.1)) return `${anglicizedNames.japanese.first[getRandomInt(0, anglicizedNames.japanese.first.length - 1)]} ${anglicizedNames.japanese.last[getRandomInt(0, anglicizedNames.japanese.last.length - 1)]}`;
     if (rand < (isGlobal ? 0.3 : 0.15)) return `${anglicizedNames.arabic.first[getRandomInt(0, anglicizedNames.arabic.first.length - 1)]} ${anglicizedNames.arabic.last[getRandomInt(0, anglicizedNames.arabic.last.length - 1)]}`;
+    if (rand < (isGlobal ? 0.4 : 0.2)) return `${anglicizedNames.nigerian.first[getRandomInt(0, anglicizedNames.nigerian.first.length - 1)]} ${anglicizedNames.nigerian.last[getRandomInt(0, anglicizedNames.nigerian.last.length - 1)]}`;
     
     if (!isGlobal) {
       const randomLocale = locales[getRandomInt(0, locales.length - 1)];
@@ -200,6 +206,7 @@ function orderSquadForMatchday(players: PlayerProfile[]) {
 }
 
 import { TACTICAL_COMPATIBILITY, type TacticalStyle, getTacticalCompatibility } from '../engine/ai/Compatibility';
+import { formations } from '../engine/ai/Formations';
 
 export function generateTeam(level: number, usedNames: Set<string>, style: string = 'Global'): { team: TeamProfile; players: PlayerProfile[] } {
   let name = '';
@@ -212,7 +219,8 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
     'German': ['FC', '04', 'SV', 'Borussia', 'Eintracht', 'VfL', 'TSG'],
     'Italian': ['AC', 'FC', 'AS', 'SS', 'US', 'Calcio'],
     'French': ['FC', 'Olympique', 'AS', 'RC', 'Stade'],
-    'Brazilian': ['FC', 'EC', 'FR', 'CR', 'SE']
+    'Brazilian': ['FC', 'EC', 'FR', 'CR', 'SE'],
+    'Nigerian': ['United', 'Rangers Int\'l', 'Pillars', 'Enyimba', 'Stars', 'Warriors', 'Sunshine', 'Heartland', 'Tornadoes', 'Insurance']
   };
 
   const activeLocales = styleLocales[style] || locales;
@@ -223,6 +231,13 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
     const cityName = locale.location.city();
     if (['Spanish', 'Italian', 'French', 'German'].includes(style) && Math.random() > 0.5) {
         name = `${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]} ${cityName}`;
+    } else if (style === 'Nigerian') {
+        const prefixes = ['Rivers', 'Plateau', 'Lobi', 'Remo', 'Kwara', 'Akwa', 'Bayelsa', 'Bendel', 'Kano', 'Abia'];
+        if (Math.random() > 0.4) {
+            name = `${prefixes[getRandomInt(0, prefixes.length - 1)]} ${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]}`;
+        } else {
+            name = `${cityName} ${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]}`;
+        }
     } else {
         name = `${cityName} ${teamSuffixes[getRandomInt(0, teamSuffixes.length - 1)]}`;
     }
@@ -277,7 +292,16 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
   return { team, players: orderedPlayers };
 }
 
-export function generateFixtures(teams: string[], leagueId: string): Fixture[] {
+function getFixtureDate(startStr: string, weekOffset: number): string {
+  const d = new Date(startStr);
+  // Find first Saturday
+  const day = d.getDay();
+  const daysToSaturday = (6 - day + 7) % 7;
+  d.setDate(d.getDate() + daysToSaturday + (weekOffset - 1) * 7);
+  return d.toISOString().split('T')[0];
+}
+
+export function generateFixtures(teams: string[], leagueId: string, seasonStartDate: string): Fixture[] {
   const fixtures: Fixture[] = [];
   const n = teams.length;
   const tempTeams = [...teams];
@@ -289,6 +313,7 @@ export function generateFixtures(teams: string[], leagueId: string): Fixture[] {
 
   for (let round = 0; round < rounds; round++) {
     const week = round + 1;
+    const date = getFixtureDate(seasonStartDate, week);
     for (let i = 0; i < half; i++) {
       let home = tempTeams[i];
       let away = tempTeams[numTeams - 1 - i];
@@ -303,6 +328,7 @@ export function generateFixtures(teams: string[], leagueId: string): Fixture[] {
           id: `f_${Math.random().toString(36).slice(2, 11)}`,
           leagueId,
           week,
+          date,
           homeTeamId: home,
           awayTeamId: away,
           played: false
@@ -318,6 +344,7 @@ export function generateFixtures(teams: string[], leagueId: string): Fixture[] {
       id: `f_${Math.random().toString(36).slice(2, 11)}`,
       leagueId,
       week: f.week + rounds,
+      date: getFixtureDate(seasonStartDate, f.week + rounds),
       homeTeamId: f.awayTeamId,
       awayTeamId: f.homeTeamId,
       played: false
@@ -369,7 +396,7 @@ export function generateSaveGame(managerName: string, style: string = 'Global', 
       });
     }
 
-    saveGame.fixtures.push(...generateFixtures(league.teams, league.id));
+    saveGame.fixtures.push(...generateFixtures(league.teams, league.id, saveGame.currentDate));
     saveGame.leagues.push(league);
   });
 

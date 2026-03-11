@@ -5,6 +5,10 @@
   
   let selectedLeagueId = $state(data.activeLeagueId);
   let showTerminateModal = $state(false);
+
+  $effect(() => {
+    selectedLeagueId = data.activeLeagueId;
+  });
   
   let selectedLeague = $derived(data.leagues?.find((l: any) => l.id === selectedLeagueId));
 
@@ -33,6 +37,63 @@
       if (pos >= 21) return 'border-l-4 border-red-500 bg-red-50/50';
     }
     return '';
+  }
+
+  let isAdvancing = $state(false);
+  let stopRequested = false;
+  let processingDate = $state(data.currentDate);
+
+  $effect(() => {
+    if (!isAdvancing) {
+      processingDate = data.currentDate;
+    }
+  });
+
+  async function handleContinue() {
+    if (isAdvancing) {
+      stopRequested = true;
+      return;
+    }
+
+    // If there's a match today, don't advance
+    if (data.nextFixture && new Date(data.currentDate).getDay() === 6) {
+        // Just Play Match
+        return;
+    }
+
+    isAdvancing = true;
+    stopRequested = false;
+
+    while (!stopRequested) {
+      const formData = new FormData();
+      const response = await fetch('?/advanceDay', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      const actionResult = JSON.parse(result.data);
+      
+      // Parse the SvelteKit action result
+      const success = actionResult[0] === 'success';
+      const actualData = actionResult[actionResult.findIndex((v: any) => typeof v === 'object' && v !== null)];
+
+      if (!success) break;
+
+      processingDate = actualData.currentDate;
+      
+      // Stop conditions
+      if (actualData.mustStop) {
+        console.log("Stopping due to:", actualData.reason);
+        break;
+      }
+
+      // Add a small delay for visual feedback
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+
+    isAdvancing = false;
+    window.location.reload(); // Refresh to get new unread counts/fixtures
   }
 </script>
 
@@ -79,6 +140,7 @@
           <option value="Italian">🇮🇹 Italian</option>
           <option value="French">🇫🇷 French</option>
           <option value="Brazilian">🇧🇷 Brazilian</option>
+          <option value="Nigerian">🇳🇬 Nigerian</option>
         </select>
 
         <button type="submit" class="btn-primary w-full py-4 uppercase tracking-widest text-sm">Create Career</button>
@@ -87,32 +149,67 @@
   {:else}
     <!-- Active Career Hub -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-light-border p-6 rounded-xl shadow-sm mb-8 gap-4">
-      <div>
+      <div class="flex-1">
         <h1 class="mb-1 flex items-center gap-3">
           {data.manager.name}
           <span class="bg-primary text-white text-[0.65rem] px-2 py-1 rounded uppercase font-black tracking-widest">Season {data.currentSeason}</span>
         </h1>
         <p class="subtle uppercase tracking-widest font-black text-xs">{data.team.name} Manager</p>
-        <button 
-          type="button" 
-          class="mt-2 text-danger text-[0.65rem] font-black underline opacity-40 hover:opacity-100 transition-opacity uppercase tracking-tighter"
-          onclick={() => showTerminateModal = true}
-        >
-          TERMINATE CAREER
-        </button>
+        <div class="flex items-center gap-4 mt-2">
+          <button 
+            type="button" 
+            class="text-danger text-[0.65rem] font-black underline opacity-40 hover:opacity-100 transition-opacity uppercase tracking-tighter"
+            onclick={() => showTerminateModal = true}
+          >
+            TERMINATE CAREER
+          </button>
+          <a href="/inbox" class="flex items-center gap-2 bg-light-bg px-3 py-1 rounded-full border border-light-border hover:bg-white transition-colors">
+            <span class="text-[0.65rem] font-black uppercase tracking-widest subtle">Inbox</span>
+            {#if data.unreadInboxCount > 0}
+              <span class="bg-primary text-white text-[0.6rem] px-1.5 rounded-full font-black min-w-[1.2rem] h-4 flex items-center justify-center animate-pulse">{data.unreadInboxCount}</span>
+            {/if}
+          </a>
+        </div>
       </div>
-      <div class="bg-light-bg text-primary px-6 py-3 rounded-xl font-black border border-light-border shadow-inner flex flex-col items-center leading-none">
-        <span class="text-[0.6rem] subtle uppercase mb-1">Current Week</span>
-        <span class="text-2xl">{data.week}</span>
+
+      <div class="flex items-center gap-4">
+        <div class="bg-light-bg text-primary px-6 py-3 rounded-xl font-black border border-light-border shadow-inner flex flex-col items-center leading-none min-w-[140px]">
+          <span class="text-[0.6rem] subtle uppercase mb-1">{isAdvancing ? 'Processing...' : 'Current Date'}</span>
+          <span class="text-lg uppercase tracking-tighter">
+            {new Date(isAdvancing ? processingDate : data.currentDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+          </span>
+        </div>
+
+        <button 
+          class="h-full px-10 py-4 {isAdvancing ? 'bg-amber-500 hover:bg-amber-600' : 'btn-primary'} text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+          onclick={handleContinue}
+        >
+          {#if isAdvancing}
+            <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            STOP
+          {:else}
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            CONTINUE
+          {/if}
+        </button>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       <!-- Next Match Panel -->
       <div class="card flex flex-col border-t-4 border-t-primary">
-        <h2 class="text-xs font-black subtle uppercase tracking-widest mb-6 flex justify-between">
+        <h2 class="text-xs font-black subtle uppercase tracking-widest mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
           Next Fixture
-          <span class="text-primary">MATCHDAY {data.week}</span>
+          <div class="flex items-center gap-2 text-primary bg-primary/10 px-3 py-1 rounded-md">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>
+              {#if data.nextFixture?.date}
+                {new Date(data.nextFixture.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {:else}
+                MATCHDAY {data.week}
+              {/if}
+            </span>
+          </div>
         </h2>
         
         {#if data.nextFixture}

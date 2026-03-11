@@ -23,6 +23,7 @@
     allowPositionOverrides?: boolean,
     isHome?: boolean,
     currentDate?: string,
+    managerTeamId?: string,
     onSwap?: (id1: string, id2: string) => void,
     onFormationChange?: (name: string) => void,
     onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
@@ -506,6 +507,7 @@
   <PlayerModal 
     player={selectedPlayerForModal} 
     currentDate={currentDate}
+    managerTeamId={managerTeamId}
     onclose={() => selectedPlayerForModal = null} 
   />
 {/if}

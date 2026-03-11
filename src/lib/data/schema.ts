@@ -111,6 +111,7 @@ export const fixtures = sqliteTable('fixtures', {
   id: text('id').primaryKey(),
   leagueId: text('leagueId').notNull().references(() => leagues.id),
   week: integer('week').notNull(),
+  date: text('date'), // YYYY-MM-DD
   homeTeamId: text('homeTeamId').notNull().references(() => teams.id),
   awayTeamId: text('awayTeamId').notNull().references(() => teams.id),
   played: integer('played', { mode: 'boolean' }).notNull().default(false),
@@ -167,5 +168,26 @@ export const leagueNewsRelations = relations(leagueNews, ({ one }) => ({
   league: one(leagues, {
     fields: [leagueNews.leagueId],
     references: [leagues.id],
+  }),
+}));
+
+// Inbox Messages
+export const inboxMessages = sqliteTable('inbox_messages', {
+  id: text('id').primaryKey(),
+  teamId: text('teamId').notNull().references(() => teams.id),
+  date: text('date').notNull(),
+  sender: text('sender').notNull(),
+  subject: text('subject').notNull(),
+  body: text('body').notNull(),
+  type: text('type').notNull(), // 'BIRTHDAY', 'TRANSFER', 'LEAGUE', 'MATCH'
+  isRead: integer('isRead', { mode: 'boolean' }).notNull().default(false),
+  isUrgent: integer('isUrgent', { mode: 'boolean' }).notNull().default(false),
+  relatedEntityId: text('relatedEntityId'),
+});
+
+export const inboxMessagesRelations = relations(inboxMessages, ({ one }) => ({
+  team: one(teams, {
+    fields: [inboxMessages.teamId],
+    references: [teams.id],
   }),
 }));
