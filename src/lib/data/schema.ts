@@ -9,6 +9,7 @@ export const gamestate = sqliteTable('gamestate', {
   currentSeason: integer('currentSeason').notNull(),
   currentDate: text('currentDate').notNull(),
   currentWeek: integer('currentWeek').notNull(),
+  shortlist: text('shortlist', { mode: 'json' }).$type<string[]>(),
 });
 
 // Leagues
@@ -200,6 +201,7 @@ export const scoutingReports = sqliteTable('scouting_reports', {
   playerId: text('playerId').notNull().references(() => players.id),
   level: integer('level').notNull().default(0), // 0: Unknown, 1: Range, 2: Exact
   progressDays: integer('progressDays').notNull().default(0),
+  isPriority: integer('isPriority', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const scoutingReportsRelations = relations(scoutingReports, ({ one }) => ({

@@ -168,6 +168,7 @@ export interface ScoutingReport {
   playerId: string;
   level: number;
   progressDays: number;
+  isPriority: boolean;
 }
 
 export interface SaveGame {
@@ -182,6 +183,7 @@ export interface SaveGame {
   teams: Record<string, TeamProfile>;
   players: Record<string, PlayerProfile>;
   fixtures: Fixture[];
+  shortlist?: string[]; // Array of PlayerProfile IDs
   lastMatchAnalytics?: MatchAnalytics;
   inbox?: InboxMessage[];
   scoutingReports?: ScoutingReport[];

@@ -15,6 +15,7 @@
     currentDate = '2024-08-01',
     managerTeamId = '',
     scoutingReports = [],
+    shortlist = [],
     onSwap = () => {},
     onFormationChange = () => {},
     onOverridesChange = () => {}
@@ -29,6 +30,7 @@
     currentDate?: string,
     managerTeamId?: string,
     scoutingReports?: ScoutingReport[],
+    shortlist?: string[],
     onSwap?: (id1: string, id2: string) => void,
     onFormationChange?: (name: string) => void,
     onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
@@ -520,6 +522,7 @@
     currentDate={currentDate}
     managerTeamId={managerTeamId}
     scoutingLevel={selectedPlayerScoutingLevel}
+    isShortlisted={shortlist.includes(selectedPlayerForModal.id)}
     onclose={() => selectedPlayerForModal = null} 
   />
 {/if}

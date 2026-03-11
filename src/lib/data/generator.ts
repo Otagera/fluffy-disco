@@ -158,6 +158,7 @@ function generatePlayer(role: Role, baseAbility: number, level: number, youthWei
 
   return {
     id: `p_${Math.random().toString(36).slice(2, 11)}`,
+    teamId: null,
     name: randomName(style),
     birthDate,
     role,
@@ -280,7 +281,7 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
   const rolePool: Role[] = ['GK', 'GK', 'GK', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'MID', 'MID', 'MID', 'FWD', 'FWD', 'FWD', 'FWD', 'FWD'];
   const rawPlayers = rolePool.map((role) => {
     const p = generatePlayer(role, teamAbility + randomFloat(-1.2, 1.2), level, profile.youthWeight, style);
-    p.overall = calculatePlayerOverall(p);
+    p.overall = calculatePlayerOverall(p, '2024-08-01');
     return p;
   });
 
@@ -290,7 +291,7 @@ export function generateTeam(level: number, usedNames: Set<string>, style: strin
     p.teamId = team.id;
     team.players.push(p.id);
   });
-  team.overall = calculateTeamOverall(team, Object.fromEntries(orderedPlayers.map((p) => [p.id, p])));
+  team.overall = calculateTeamOverall(team, Object.fromEntries(orderedPlayers.map((p) => [p.id, p])), '2024-08-01');
 
   return { team, players: orderedPlayers };
 }

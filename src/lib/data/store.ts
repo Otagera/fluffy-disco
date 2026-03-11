@@ -131,6 +131,7 @@ export function saveNewGameToDB(save: SaveGame) {
       currentSeason: save.currentSeason,
       currentDate: save.currentDate,
       currentWeek: save.currentWeek,
+      shortlist: save.shortlist || [],
     }).run();
   });
 }
@@ -145,10 +146,11 @@ export function loadSaveGame(): SaveGame | null {
       currentSeason: gs.currentSeason,
       currentDate: gs.currentDate,
       currentWeek: gs.currentWeek,
+      shortlist: gs.shortlist || [],
       leagues: [],
       teams: {},
       players: {},
-      fixtures: []
+      fixtures: [],
     };
 
     const leagues = db.select().from(schema.leagues).all();
@@ -237,6 +239,7 @@ export function writeSaveGame(saveData: SaveGame) {
           currentSeason: saveData.currentSeason,
           currentDate: saveData.currentDate,
           currentWeek: saveData.currentWeek,
+          shortlist: saveData.shortlist || [],
         })
         .where(eq(schema.gamestate.id, 1))
         .run();
@@ -349,13 +352,15 @@ export function writeSaveGame(saveData: SaveGame) {
               teamId: r.teamId,
               playerId: r.playerId,
               level: r.level,
-              progressDays: r.progressDays
+              progressDays: r.progressDays,
+              isPriority: r.isPriority
             })
             .onConflictDoUpdate({
               target: [schema.scoutingReports.id],
               set: {
                 level: r.level,
-                progressDays: r.progressDays
+                progressDays: r.progressDays,
+                isPriority: r.isPriority
               }
             })
             .run();
@@ -520,7 +525,7 @@ function advanceScouting(save: SaveGame) {
   if (!save.scoutingReports) return;
 
   for (const report of save.scoutingReports) {
-    if (report.level < 2) {
+    if (report.level < 2 && report.isPriority) {
       report.progressDays++;
       
       let newLevel = report.level;
@@ -1066,6 +1071,33 @@ function advanceSeason(save: SaveGame) {
 
 function poisson(lambda: number) { let L = Math.exp(-lambda); let p = 1.0; let k = 0; do { k++; p *= Math.random(); } while (p > L); return k - 1; }
 
-function getRandomInt(min: number, max: number) {
+export function getRandomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function toggleShortlist(save: SaveGame, playerId: string) {
+  if (!save.shortlist) save.shortlist = [];
+  const index = save.shortlist.indexOf(playerId);
+  if (index === -1) {
+    save.shortlist.push(playerId);
+  } else {
+    save.shortlist.splice(index, 1);
+  }
+}
+
+export function toggleScoutingPriority(save: SaveGame, playerId: string): { success: boolean; message?: string } {
+  if (!save.scoutingReports) save.scoutingReports = [];
+  const report = save.scoutingReports.find(r => r.playerId === playerId && r.teamId === save.manager.teamId);
+  if (!report) return { success: false, message: 'Scouting report not found' };
+
+  if (!report.isPriority) {
+    const priorityCount = save.scoutingReports.filter(r => r.isPriority && r.teamId === save.manager.teamId).length;
+    if (priorityCount >= 5) {
+      return { success: false, message: 'Already scouting 5 players (limit reached)' };
+    }
+    report.isPriority = true;
+  } else {
+    report.isPriority = false;
+  }
+  return { success: true };
 }

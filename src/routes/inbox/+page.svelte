@@ -204,6 +204,7 @@
     currentDate={data.currentDate}
     managerTeamId={data.managerTeamId}
     scoutingLevel={selectedPlayerScoutingLevel}
+    isShortlisted={(data.shortlist as string[] || []).includes(selectedPlayer.id)}
     onclose={() => selectedPlayerId = null} 
   />
 {/if}

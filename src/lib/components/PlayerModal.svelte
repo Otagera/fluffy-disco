@@ -8,13 +8,15 @@
     onclose, 
     currentDate, 
     managerTeamId, 
-    scoutingLevel = 0 
+    scoutingLevel = 0,
+    isShortlisted = false
   }: { 
     player: any; 
     onclose: () => void; 
     currentDate: string; 
     managerTeamId?: string; 
-    scoutingLevel?: number 
+    scoutingLevel?: number;
+    isShortlisted?: boolean;
   } = $props();
 
   let showOfferForm = $state(false);
@@ -93,11 +95,21 @@
 <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick={onclose}>
   <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onclick={(e) => e.stopPropagation()}>
     <div class="p-4 sm:p-6 border-b border-light-border bg-light-bg flex justify-between items-center">
-      <div>
-        <h2 class="mb-0 text-xl sm:text-2xl font-black">{player.name}</h2>
-        <p class="text-sm font-bold text-light-subtle uppercase tracking-widest">
-          {player.role} • {calculateAge(player.birthDate, currentDate)} yrs • {player.nationality || 'Local'}
-        </p>
+      <div class="flex items-center gap-4">
+        <div>
+          <h2 class="mb-0 text-xl sm:text-2xl font-black">{player.name}</h2>
+          <p class="text-sm font-bold text-light-subtle uppercase tracking-widest">
+            {player.role} • {calculateAge(player.birthDate, currentDate)} yrs • {player.nationality || 'Local'}
+          </p>
+        </div>
+        {#if managerTeamId && player.teamId !== managerTeamId}
+          <form method="POST" action="/scouting?/toggleShortlist" use:enhance>
+            <input type="hidden" name="playerId" value={player.id} />
+            <button type="submit" class="text-2xl transition-transform hover:scale-110 {isShortlisted ? 'text-amber-400' : 'text-gray-300'}" title={isShortlisted ? 'Remove from Shortlist' : 'Add to Shortlist'}>
+              {isShortlisted ? '★' : '☆'}
+            </button>
+          </form>
+        {/if}
       </div>
       <button class="w-8 h-8 rounded-full bg-white border border-light-border flex items-center justify-center font-bold hover:bg-gray-100 transition-colors" onclick={onclose}>&times;</button>
     </div>

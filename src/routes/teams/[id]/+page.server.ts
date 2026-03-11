@@ -117,12 +117,15 @@ export const actions: Actions = {
       return fail(400, { message: 'Player is already being scouted' });
     }
 
+    const priorityCount = save.scoutingReports.filter(r => r.isPriority).length;
+
     const newReport = {
       id: `sr_${Math.random().toString(36).slice(2, 11)}`,
       teamId: save.manager.teamId,
       playerId: playerId,
       level: 0,
-      progressDays: 0
+      progressDays: 0,
+      isPriority: priorityCount < 5
     };
 
     save.scoutingReports.push(newReport);

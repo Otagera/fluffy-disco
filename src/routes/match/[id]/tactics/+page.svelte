@@ -133,6 +133,7 @@
       currentDate={data.currentDate}
       managerTeamId={data.managerTeamId}
       scoutingReports={data.scoutingReports}
+      shortlist={data.shortlist}
       onSwap={handleSwap}
       onFormationChange={handleFormationChange}
       onOverridesChange={handleOverridesChange}

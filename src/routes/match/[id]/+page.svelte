@@ -542,6 +542,7 @@
             currentDate={data.currentDate}
             managerTeamId={data.managerTeamId}
             scoutingReports={data.scoutingReports}
+            shortlist={data.shortlist}
             onSwap={handleTacticsSwap}
             onFormationChange={(f) => console.log('Formation', $state.snapshot(f))}
             onOverridesChange={handleTacticsOverrides}

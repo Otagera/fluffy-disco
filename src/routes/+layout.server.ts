@@ -29,6 +29,7 @@ export const load: LayoutServerLoad = async () => {
     manager: save.manager,
     managerTeamId: save.manager.teamId,
     currentDate: save.currentDate,
-    unreadInboxCount: unreadInboxCount?.value || 0
+    unreadInboxCount: unreadInboxCount?.value || 0,
+    shortlist: save.shortlist || []
   };
 };
