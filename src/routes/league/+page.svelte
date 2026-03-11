@@ -303,9 +303,16 @@
                   {/if}
 
                   <div class="flex justify-between items-center mb-2">
-                    <span class="text-[0.6rem] font-black subtle uppercase tracking-widest">
-                      {fixture.played ? 'Full Time' : 'Upcoming'}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[0.6rem] font-black subtle uppercase tracking-widest">
+                        {fixture.played ? 'Full Time' : 'Upcoming'}
+                      </span>
+                      {#if fixture.date}
+                        <span class="text-[0.6rem] font-bold text-light-text bg-light-bg px-2 py-0.5 rounded border border-light-border">
+                          {new Date(fixture.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      {/if}
+                    </div>
                     {#if fixture.played && hasReplay}
                       <a 
                         href="/replay/{fixture.id}" 

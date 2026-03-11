@@ -55,9 +55,20 @@
       return;
     }
 
-    // If there's a match today, don't advance
-    if (data.nextFixture && new Date(data.currentDate).getDay() === 6) {
-        // Just Play Match
+    // Check for urgent conditions that require user attention first
+    if (data.unreadInboxCount && data.unreadInboxCount > 0) {
+      window.location.href = '/inbox';
+      return;
+    }
+
+    // If there's a match today, go to the pre-match tactics screen
+    const todayStr = new Date(data.currentDate).getDay();
+    if (data.nextFixture && data.nextFixture.date === data.currentDate) {
+        window.location.href = `/match/${data.nextFixture.id}/tactics`;
+        return;
+    } else if (data.nextFixture && todayStr === 6 && !data.nextFixture.date) {
+        // Fallback if date is not properly set but it's Saturday
+        window.location.href = `/match/${data.nextFixture.id}/tactics`;
         return;
     }
 
