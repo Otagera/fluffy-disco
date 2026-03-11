@@ -112,17 +112,17 @@
       </div>
     </div>
 
-    <FormationBoard 
-      team={currentTeam} 
-      players={currentPlayers} 
-      editable={true} 
+    <FormationBoard
+      team={currentTeam}
+      players={currentPlayers}
+      editable={true}
       allowPositionOverrides={true}
       allowRoleOverrides={true}
+      currentDate={data.currentDate}
       onSwap={handleSwap}
       onFormationChange={handleFormationChange}
       onOverridesChange={handleOverridesChange}
-    />
-  </div>
+    />  </div>
 
   <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
     <div class="card p-6 bg-light-bg/50 border-dashed">

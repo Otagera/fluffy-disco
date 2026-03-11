@@ -64,7 +64,7 @@ export const players = sqliteTable('players', {
   teamId: text('teamId').references(() => teams.id),
   name: text('name').notNull(),
   number: integer('number'),
-  age: integer('age').notNull(),
+  birthDate: text('birthDate').notNull(),
   role: text('role').notNull(),
   potential: integer('potential').notNull(),
   overall: integer('overall').notNull(),

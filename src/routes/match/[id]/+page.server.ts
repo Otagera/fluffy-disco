@@ -30,7 +30,8 @@ export const load: PageServerLoad = async ({ params }) => {
     awayTeam,
     homePlayers,
     awayPlayers,
-    managerTeamId: save.manager.teamId
+    managerTeamId: save.manager.teamId,
+    currentDate: save.currentDate
   };
 };
 

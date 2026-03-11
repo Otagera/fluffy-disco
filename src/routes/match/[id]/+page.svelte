@@ -539,6 +539,7 @@
             allowRoleOverrides={true}
             allowPositionOverrides={true}
             isHome={isHome}
+            currentDate={data.currentDate}
             onSwap={handleTacticsSwap}
             onFormationChange={(f) => console.log('Formation', $state.snapshot(f))}
             onOverridesChange={handleTacticsOverrides}

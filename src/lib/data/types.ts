@@ -25,7 +25,7 @@ export interface PlayerProfile {
   id: string;
   name: string;
   number?: number;
-  age: number;
+  birthDate: string; // YYYY-MM-DD
   role: 'GK' | 'DEF' | 'MID' | 'FWD';
   potential: number;
   overall?: number;

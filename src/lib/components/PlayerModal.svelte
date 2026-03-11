@@ -1,12 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { calculateAge, calculatePlayerValue } from '$lib/data/ratings';
 
-  let { player, onclose }: { player: any; onclose: () => void } = $props();
+  let { player, onclose, currentDate }: { player: any; onclose: () => void; currentDate: string } = $props();
 
   function getStatColor(val: number) {
     if (val >= 15) return 'text-green-600';
     if (val >= 10) return 'text-amber-600';
     return 'text-red-600';
+  }
+
+  function formatCurrency(val: number) {
+    return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(val);
   }
 
   function getRadarPoints(attr: any, overrideRadius?: number) {
@@ -50,7 +55,7 @@
       <div>
         <h2 class="mb-0 text-xl sm:text-2xl font-black">{player.name}</h2>
         <p class="text-sm font-bold text-light-subtle uppercase tracking-widest">
-          {player.role} • {player.age} yrs • {player.nationality || 'Local'}
+          {player.role} • {calculateAge(player.birthDate, currentDate)} yrs • {player.nationality || 'Local'}
         </p>
       </div>
       <button class="w-8 h-8 rounded-full bg-white border border-light-border flex items-center justify-center font-bold hover:bg-gray-100 transition-colors" onclick={onclose}>&times;</button>
@@ -72,9 +77,15 @@
         </div>
         
         <div class="space-y-4">
-          <div class="flex justify-between items-center bg-white p-3 rounded-lg border border-light-border">
-            <span class="text-xs font-black subtle uppercase tracking-wider">Condition</span>
-            <span class="font-black {player.condition > 80 ? 'text-green-600' : player.condition > 50 ? 'text-amber-600' : 'text-red-600'}">{Math.round(player.condition)}%</span>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-white p-3 rounded-lg border border-light-border">
+              <span class="text-[0.6rem] font-black subtle uppercase tracking-wider block mb-1">Condition</span>
+              <span class="font-black text-sm {player.condition > 80 ? 'text-green-600' : player.condition > 50 ? 'text-amber-600' : 'text-red-600'}">{Math.round(player.condition)}%</span>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-light-border">
+              <span class="text-[0.6rem] font-black subtle uppercase tracking-wider block mb-1">Market Value</span>
+              <span class="font-black text-sm text-primary">{formatCurrency(calculatePlayerValue(player, currentDate))}</span>
+            </div>
           </div>
           
           <div class="bg-white border border-light-border rounded-xl p-4 shadow-sm">

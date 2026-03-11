@@ -144,10 +144,16 @@ function generatePlayer(role: Role, baseAbility: number, level: number, youthWei
 
   const potentialGrowth = age <= 21 ? getRandomInt(2, 6) : age <= 24 ? getRandomInt(1, 4) : getRandomInt(0, 2);
 
+  // Calculate birthDate by subtracting age from '2024-08-01' and picking a random month/day
+  const birthYear = 2024 - age;
+  const birthMonth = getRandomInt(1, 12).toString().padStart(2, '0');
+  const birthDay = getRandomInt(1, 28).toString().padStart(2, '0');
+  const birthDate = `${birthYear}-${birthMonth}-${birthDay}`;
+
   return {
     id: `p_${Math.random().toString(36).slice(2, 11)}`,
     name: randomName(style),
-    age,
+    birthDate,
     role,
     potential: clamp(Math.round(baseAbility + potentialGrowth), 1, 20),
     condition: 100,

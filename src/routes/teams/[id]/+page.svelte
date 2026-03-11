@@ -3,6 +3,7 @@
   import PlayerModal from '$lib/components/PlayerModal.svelte';
   import FormationBoard from '$lib/components/FormationBoard.svelte';
   import { enhance } from '$app/forms';
+  import { calculateAge } from '$lib/data/ratings';
 
   let { data }: { data: PageData } = $props();
 
@@ -105,13 +106,13 @@
         </div>
         
         <div class="card bg-white shadow-xl p-6 sm:p-8">
-          <FormationBoard 
-            team={currentTeam} 
-            players={isMyTeam ? currentPlayers : displayPlayers} 
+          <FormationBoard
+            team={currentTeam}
+            players={isMyTeam ? currentPlayers : displayPlayers}
             editable={isMyTeam}
+            currentDate={data.currentDate}
             onSwap={handleSwap}
-            onFormationChange={handleFormationChange}
-          />
+            onFormationChange={handleFormationChange}          />
         </div>
       </section>
 
@@ -129,7 +130,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-bold text-sm truncate">{player.name}</div>
-                <div class="text-[0.6rem] subtle font-black uppercase tracking-widest">{player.age} yrs • {Math.round(player.condition)}% Fitness</div>
+                <div class="text-[0.6rem] subtle font-black uppercase tracking-widest">{calculateAge(player.birthDate, data.currentDate)} yrs • {Math.round(player.condition)}% Fitness</div>
               </div>
               <div class="text-right">
                 <div class="text-lg font-black leading-none {getStatColor(player.overall || 0)}">{player.overall}</div>
@@ -144,5 +145,9 @@
 </div>
 
 {#if selectedPlayer}
-  <PlayerModal player={selectedPlayer} onclose={() => selectedPlayerId = null} />
+  <PlayerModal 
+    player={selectedPlayer} 
+    currentDate={data.currentDate}
+    onclose={() => selectedPlayer = null} 
+  />
 {/if}

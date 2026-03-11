@@ -78,7 +78,7 @@ export function saveNewGameToDB(save: SaveGame) {
         teamId: team?.id || null,
         name: p.name,
         number: p.number || null,
-        age: p.age,
+        birthDate: p.birthDate,
         role: p.role,
         potential: p.potential,
         overall: p.overall || 50,
@@ -335,8 +335,8 @@ export function writeSaveGame(saveData: SaveGame) {
 }
 
 function recalculateOverallRatings(save: SaveGame) {
-  for (const player of Object.values(save.players)) player.overall = calculatePlayerOverall(player);
-  for (const team of Object.values(save.teams)) team.overall = calculateTeamOverall(team, save.players);
+  for (const player of Object.values(save.players)) player.overall = calculatePlayerOverall(player, save.currentDate);
+  for (const team of Object.values(save.teams)) team.overall = calculateTeamOverall(team, save.players, save.currentDate);
 }
 
 export function processWeekResults(save: any, playerMatchResult: any) {

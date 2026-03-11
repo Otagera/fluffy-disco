@@ -23,7 +23,8 @@ export const load: PageServerLoad = async ({ params }) => {
     hasSave: true,
     team,
     players: teamPlayers,
-    managerTeamId: save.manager.teamId
+    managerTeamId: save.manager.teamId,
+    currentDate: save.currentDate
   };
 };
 

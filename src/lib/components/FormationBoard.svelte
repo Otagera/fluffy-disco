@@ -10,7 +10,8 @@
     editable = false,
     allowRoleOverrides = false,
     allowPositionOverrides = false,
-    isHome = true, 
+    isHome = true,
+    currentDate = '2024-08-01',
     onSwap = () => {},
     onFormationChange = () => {},
     onOverridesChange = () => {}
@@ -21,6 +22,7 @@
     allowRoleOverrides?: boolean,
     allowPositionOverrides?: boolean,
     isHome?: boolean,
+    currentDate?: string,
     onSwap?: (id1: string, id2: string) => void,
     onFormationChange?: (name: string) => void,
     onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
@@ -501,5 +503,9 @@
 </div>
 
 {#if selectedPlayerForModal}
-  <PlayerModal player={selectedPlayerForModal} onclose={() => selectedPlayerForModal = null} />
+  <PlayerModal 
+    player={selectedPlayerForModal} 
+    currentDate={currentDate}
+    onclose={() => selectedPlayerForModal = null} 
+  />
 {/if}

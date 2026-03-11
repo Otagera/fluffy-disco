@@ -123,16 +123,16 @@
       </div>
     </div>
 
-    <FormationBoard 
+    <FormationBoard
       team={currentTeam}
       players={squad}
       editable={true}
       allowRoleOverrides={true}
       allowPositionOverrides={true}
       isHome={isHome}
+      currentDate={data.currentDate}
       onSwap={handleSwap}
       onFormationChange={handleFormationChange}
       onOverridesChange={handleOverridesChange}
-    />
-  </div>
+    />  </div>
 </div>

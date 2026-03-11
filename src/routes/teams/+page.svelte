@@ -153,5 +153,9 @@
 </div>
 
 {#if selectedPlayer}
-  <PlayerModal player={selectedPlayer} onclose={() => selectedPlayerId = null} />
+  <PlayerModal 
+    player={selectedPlayer} 
+    currentDate={data.currentDate}
+    onclose={() => selectedPlayerId = null} 
+  />
 {/if}

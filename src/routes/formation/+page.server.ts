@@ -14,7 +14,8 @@ export const load: PageServerLoad = async () => {
 
   return {
     team,
-    players
+    players,
+    currentDate: save.currentDate
   };
 };
 

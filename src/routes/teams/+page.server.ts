@@ -16,6 +16,7 @@ export const load: PageServerLoad = async () => {
     hasSave: true,
     managerTeamId: save.manager.teamId,
     teams: Object.values(save.teams),
-    players: save.players
+    players: save.players,
+    currentDate: save.currentDate
   };
 };
