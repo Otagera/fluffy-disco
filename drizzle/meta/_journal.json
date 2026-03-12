@@ -8,6 +8,13 @@
 			"when": 1773235156509,
 			"tag": "0000_loose_cannonball",
 			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "6",
+			"when": 1773328221211,
+			"tag": "0001_motionless_sunspot",
+			"breakpoints": true
 		}
 	]
 }

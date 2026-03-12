@@ -1,0 +1,129 @@
+# Match Engine & Physics Overhaul
+
+The current engine uses a "virtual save mechanic" for goalkeepers and linear ball movement. To achieve modern realism, the physics must become more physical.
+
+## Physical Goalkeeper Presence
+
+**The Change:** Replace the virtual save probability in checkBoundariesAndGoals with a physical "Goalkeeper Box" entity using Inverse Kinematics (IK).
+
+**Pros:** Leads to "unscripted" goals (deflections, fumbles).
+
+**Cons:** Significantly increases math complexity per tick.
+
+**Action:** Add a GK_STATE to the playerBuffer to track dive reach and "hand" coordinates.
+
+## The Magnus Effect & Ball Drag
+
+**The Change:** The ball currently moves with simple friction. Implement air resistance and the Magnus effect (ball spin/curl).
+
+**Pros:** Allows for world-class "curled" shots and realistic long-ball trajectories.
+
+**Cons:** Requires tracking BALL_SPIN_X/Y in the ballBuffer.
+
+**Action:** Update PhysicsEngine.updateBall to apply a lateral force vector proportional to the ball's velocity and a new spin attribute.
+
+# Tactical & AI Depth
+
+The current TacticalManager relies on "anchors" and role-based offsets. While performant, it is deterministic and predictable.
+
+## Dynamic Pressing Triggers (The "Gegenpress" Logic)
+
+**The Change:** Instead of a static homePressers set, implement "Trigger Zones." Players should initiate a press based on ball speed, receiver's "composure" attribute, and proximity to the touchline.
+
+**Pros:** Mimics modern "traps" used by elite tactical managers.
+
+**Cons:** Can lead to "clumping" where AI players abandon their shape too easily.
+
+**Action:** Modify calculateAnchors to include a pressureIntensity variable that scales the pursuitAggression.
+
+## Mental "Fog of War" (Perception Stats)
+
+**The Change:** Currently, the SpatialMap gives every player perfect knowledge of the pitch. Introduce a perception delay.
+
+**Pros:** High-vision players "see" passes 10 ticks before low-vision players.
+
+**Cons:** Makes the game feel "laggy" if not balanced correctly.
+
+**Action:** Buffer the spatialMap data per player based on their vision and anticipation stats.
+
+# Managerial Simulation & Economy
+
+The schema.ts provides a solid DB structure, but the career loop is currently "flat."
+
+## Deep Scouting & Knowledge Levels
+
+**The Change:** Expand the scoutingReports table. A player's attributes should be hidden or shown as a range (e.g., Passing: 60-80) until a scout completes multiple assignments.
+
+**Pros:** Makes the transfer market a game of risk and discovery rather than a "search by highest OVR" exercise.
+
+**Cons:** Requires a more complex UI for the "Recruitment Centre."
+
+**Action:** Add a knowledgeLevel column to scouting_reports and a scout_assignments table.
+
+## Dynamic Wage & Contract Negotiations
+
+**The Change:** Players currently have a static wage and contractExpires. Implement a "Status" system (Star Player, Prospect, Surplus).
+
+**Pros:** Prevents users from hoarding elite talent in low-tier leagues.
+
+**Cons:** Requires a "sentiment" AI to handle agent demands.
+
+**Action:** Add a playerExpectations JSON column to the players table.
+
+# Technical Architecture & Performance
+
+While PixiJS is a great choice for rendering, the main thread is doing too much.
+
+## Headless Web Workers for Simulation
+
+**The Change:** Move the Match.tick loop into a Web Worker.
+
+**Pros:** Keeps the Svelte UI buttery smooth (60FPS) even during 100x speed simulations.
+
+**Cons:** Requires serializing the Float32Array buffers between threads (Transferable Objects).
+
+**Action:** Refactor Match.svelte.ts to be instantiable within a Worker and use postMessage to sync state for the PixiRenderer.
+
+## Deterministic Replays (Binary Serialization)
+
+**The Change:** The MatchRecorder currently captures frames. Move to an "Input/Event" recording system.
+
+**Pros:** Replay files become kilobytes (just the RNG seed and tactical changes) instead of megabytes.
+
+**Cons:** Any change to the engine logic breaks old replays.
+
+**Action:** Store the initial Math.random seed and a timestamped log of tactical overrides in the database.
+
+# UI/UX & Data Storytelling
+
+The current UI is a "clean light theme", but management games live or die on data visualization.
+
+## Live xG (Expected Goals) & Shot Maps
+
+**The Change:** Use the evaluateShotQuality logic to generate a live xG timeline during matches.
+
+**Pros:** Gives the user immediate feedback on whether their tactics are creating good chances or just many chances.
+
+**Cons:** Can feel "gamey" if the xG doesn't match the visual outcome.
+
+**Action:** Add an xG property to the MatchEvent interface and render a "Shot Map" component on the Analytics page.
+
+## Contextual Match HUD
+
+**The Change:** Instead of a static scoreboard, implement a "Broadcast Style" HUD that surfaces stats like "Last 5 mins Possession" or "Distance Covered" during pauses or goals.
+
+**Pros:** Increases immersion and helps the user make informed substitutions.
+
+**Action:** Leverage Svelte 5's $state in Match.svelte.ts to drive reactive UI overlays in the HUD.svelte component.
+
+# Summary of Priority Implementation
+
+| Feature          | Difficulty | Impact | File to Modify                  |
+|------------------|------------|--------|---------------------------------|
+| Physical GKs     | High       | Extreme| Match.svelte.ts                 |
+| Web Worker Sim   | Medium     | High   | Match.svelte.ts / New Worker    |
+| Attribute Fog    | Low        | High   | schema.ts / scouting/+page.svelte |
+| Ball Curl        | Medium     | Medium | Steering.ts / Match.svelte.ts   |
+| xG Timeline      | Low        | Medium | Analytics/+page.svelte          |
+
+**Pro Tip:** As you expand the players table, ensure you maintain the Zero GC principle. If you add many objects to the match loop, your 100-match simulation speed (currently <5s) will degrade rapidly. Stick to the TypedArray pattern whenever possible.

@@ -1,5 +1,7 @@
 <script lang="ts">
+import type { ActionResult } from "@sveltejs/kit";
 import { onMount } from "svelte";
+import { deserialize } from "$app/forms";
 
 let {
 	currentDate,
@@ -32,12 +34,14 @@ function setMilestone(type: "next_match" | "end_of_week" | "end_of_season") {
 		const diff = 7 - day;
 		date.setDate(date.getDate() + (diff === 0 ? 7 : diff));
 	} else if (type === "next_match") {
-		// For simplicity, just set to +3 days for now as a guess, 
-		// actual loop will stop at match day anyway
-		date.setDate(date.getDate() + 7);
+		// Just set a far date, the loop will stop on Match Day anyway
+		date.setDate(date.getDate() + 30);
 	} else if (type === "end_of_season") {
-		// End of May 2025 (assuming season start 2024)
-		targetDate = "2025-05-31";
+		const year = date.getFullYear();
+		const month = date.getMonth();
+		// If we're already past May, end of next season
+		const targetYear = month >= 5 ? year + 1 : year;
+		targetDate = `${targetYear}-05-31`;
 		return;
 	}
 	targetDate = date.toISOString().split("T")[0];
@@ -55,21 +59,27 @@ async function startSkip() {
 		const response = await fetch("?/advanceDay", {
 			method: "POST",
 			body: formData,
+			headers: {
+				"x-sveltekit-action": "true",
+			},
 		});
 
-		const result = await response.json();
-		const actionResult = JSON.parse(result.data);
+		const text = await response.text();
+		const result: ActionResult = deserialize(text);
 
-		const success = actionResult[0] === "success";
-		const actualData = actionResult.find(
-			(v: any) => typeof v === "object" && v !== null && v.currentDate,
-		);
+		if (result.type !== "success" || !result.data) {
+			console.error("Server action failed:", result);
+			break;
+		}
 
-		if (!success || !actualData) break;
+		const actualData = result.data as any;
 
 		processingDate = actualData.currentDate;
-		if (actualData.delegatedActions) {
-			aggregatedActions = [...aggregatedActions, ...actualData.delegatedActions];
+		if (Array.isArray(actualData.delegatedActions)) {
+			aggregatedActions = [
+				...aggregatedActions,
+				...actualData.delegatedActions,
+			];
 		}
 
 		if (actualData.mustStop) {
@@ -88,13 +98,13 @@ async function startSkip() {
 		await fetch("?/sendSkipSummary", {
 			method: "POST",
 			body: summaryData,
+			headers: {
+				"x-sveltekit-action": "true",
+			},
 		});
 	}
 
-	if (processingDate >= targetDate || stopRequested || !isSkipping) {
-		// Reload to show results
-		window.location.reload();
-	}
+	window.location.reload();
 }
 </script>
 

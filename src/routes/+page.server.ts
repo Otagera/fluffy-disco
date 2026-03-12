@@ -112,7 +112,7 @@ export const actions: Actions = {
 	deleteCareer: async () => {
 		try {
 			sqlite.exec(
-				"DELETE FROM gamestate; DELETE FROM standings; DELETE FROM fixture_goals; DELETE FROM league_news; DELETE FROM fixtures; DELETE FROM player_stats; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues;",
+				"DELETE FROM fixture_goals; DELETE FROM league_news; DELETE FROM standings; DELETE FROM scouting_reports; DELETE FROM inbox_messages; DELETE FROM fixtures; DELETE FROM players; DELETE FROM teams; DELETE FROM leagues; DELETE FROM gamestate;",
 			);
 			throw redirect(303, "/");
 		} catch (e) {

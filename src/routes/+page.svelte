@@ -1,4 +1,6 @@
 <script lang="ts">
+import type { ActionResult } from "@sveltejs/kit";
+import { deserialize } from "$app/forms";
 import SkipModal from "$lib/components/SkipModal.svelte";
 import type { PageData } from "./$types";
 
@@ -85,19 +87,20 @@ async function handleContinue(fastForward = false) {
 		const response = await fetch("?/advanceDay", {
 			method: "POST",
 			body: formData,
+			headers: {
+				"x-sveltekit-action": "true",
+			},
 		});
 
-		const result = await response.json();
-		const actionResult = JSON.parse(result.data);
+		const text = await response.text();
+		const result: ActionResult = deserialize(text);
 
-		// Parse the SvelteKit action result
-		const success = actionResult[0] === "success";
-		const actualData =
-			actionResult[
-				actionResult.findIndex((v: any) => typeof v === "object" && v !== null)
-			];
+		if (result.type !== "success" || !result.data) {
+			console.error("Server action failed:", result);
+			break;
+		}
 
-		if (!success) break;
+		const actualData = result.data as any;
 
 		processingDate = actualData.currentDate;
 
@@ -223,7 +226,7 @@ async function handleContinue(fastForward = false) {
             CONTINUE
           </button>
           <button 
-            class="h-full px-10 py-4 btn-secondary text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+            class="h-full px-10 py-4 btn-secondary text-black font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
             onclick={() => showSkipModal = true}
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 19l6-7-6-7M6 19l6-7-6-7"/></svg>
