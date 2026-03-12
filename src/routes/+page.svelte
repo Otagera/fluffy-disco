@@ -1,111 +1,126 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  
-  let { data }: { data: PageData } = $props();
-  
-  let selectedLeagueId = $state(data.activeLeagueId);
-  let showTerminateModal = $state(false);
+import SkipModal from "$lib/components/SkipModal.svelte";
+import type { PageData } from "./$types";
 
-  $effect(() => {
-    selectedLeagueId = data.activeLeagueId;
-  });
-  
-  let selectedLeague = $derived(data.leagues?.find((l: any) => l.id === selectedLeagueId));
+let { data }: { data: PageData } = $props();
 
-  let sortedStandings = $derived.by(() => {
-    if (!selectedLeague) return [];
-    return [...selectedLeague.standings].sort((a: any, b: any) => {
-      if (b.points !== a.points) return b.points - a.points;
-      const gdA = a.goalsFor - a.goalsAgainst;
-      const gdB = b.goalsFor - b.goalsAgainst;
-      return gdB - gdA;
-    });
-  });
+let selectedLeagueId = $state(data.activeLeagueId);
+let showTerminateModal = $state(false);
+let showSkipModal = $state(false);
 
-  function getTeamName(teamId: string) {
-    return data.teams?.[teamId]?.name || teamId;
-  }
+$effect(() => {
+	selectedLeagueId = data.activeLeagueId;
+});
 
-  function getZoneClass(level: number, pos: number) {
-    if (!level) return '';
-    if (level === 1) {
-      if (pos < 4) return 'border-l-4 border-blue-500 bg-blue-50/50';
-      if (pos >= 17) return 'border-l-4 border-red-500 bg-red-50/50';
-    } else if (level === 2) {
-      if (pos < 2) return 'border-l-4 border-green-500 bg-green-50/50';
-      if (pos >= 2 && pos < 6) return 'border-l-4 border-amber-500 bg-amber-50/50';
-      if (pos >= 21) return 'border-l-4 border-red-500 bg-red-50/50';
-    }
-    return '';
-  }
+let selectedLeague = $derived(
+	data.leagues?.find((l: any) => l.id === selectedLeagueId),
+);
 
-  let isAdvancing = $state(false);
-  let stopRequested = false;
-  let processingDate = $state(data.currentDate);
+let sortedStandings = $derived.by(() => {
+	if (!selectedLeague) return [];
+	return [...selectedLeague.standings].sort((a: any, b: any) => {
+		if (b.points !== a.points) return b.points - a.points;
+		const gdA = a.goalsFor - a.goalsAgainst;
+		const gdB = b.goalsFor - b.goalsAgainst;
+		return gdB - gdA;
+	});
+});
 
-  $effect(() => {
-    if (!isAdvancing) {
-      processingDate = data.currentDate;
-    }
-  });
+function getTeamName(teamId: string) {
+	return data.teams?.[teamId]?.name || teamId;
+}
 
-  async function handleContinue() {
-    if (isAdvancing) {
-      stopRequested = true;
-      return;
-    }
+function getZoneClass(level: number, pos: number) {
+	if (!level) return "";
+	if (level === 1) {
+		if (pos < 4) return "border-l-4 border-blue-500 bg-blue-50/50";
+		if (pos >= 17) return "border-l-4 border-red-500 bg-red-50/50";
+	} else if (level === 2) {
+		if (pos < 2) return "border-l-4 border-green-500 bg-green-50/50";
+		if (pos >= 2 && pos < 6)
+			return "border-l-4 border-amber-500 bg-amber-50/50";
+		if (pos >= 21) return "border-l-4 border-red-500 bg-red-50/50";
+	}
+	return "";
+}
 
-    // Check for urgent conditions that require user attention first
-    if (data.unreadInboxCount && data.unreadInboxCount > 0) {
-      window.location.href = '/inbox';
-      return;
-    }
+let isAdvancing = $state(false);
+let stopRequested = false;
+let processingDate = $state(data.currentDate);
 
-    // If there's a match today, go to the pre-match tactics screen
-    const todayStr = new Date(data.currentDate).getDay();
-    if (data.nextFixture && data.nextFixture.date === data.currentDate) {
-        window.location.href = `/match/${data.nextFixture.id}/tactics`;
-        return;
-    } else if (data.nextFixture && todayStr === 6 && !data.nextFixture.date) {
-        // Fallback if date is not properly set but it's Saturday
-        window.location.href = `/match/${data.nextFixture.id}/tactics`;
-        return;
-    }
+$effect(() => {
+	if (!isAdvancing) {
+		processingDate = data.currentDate;
+	}
+});
 
-    isAdvancing = true;
-    stopRequested = false;
+async function handleContinue(fastForward = false) {
+	if (isAdvancing) {
+		stopRequested = true;
+		return;
+	}
 
-    while (!stopRequested) {
-      const formData = new FormData();
-      const response = await fetch('?/advanceDay', {
-        method: 'POST',
-        body: formData
-      });
-      
-      const result = await response.json();
-      const actionResult = JSON.parse(result.data);
-      
-      // Parse the SvelteKit action result
-      const success = actionResult[0] === 'success';
-      const actualData = actionResult[actionResult.findIndex((v: any) => typeof v === 'object' && v !== null)];
+	// Check for urgent conditions that require user attention first
+	if (data.unreadInboxCount && data.unreadInboxCount > 0) {
+		window.location.href = "/inbox";
+		return;
+	}
 
-      if (!success) break;
+	// If there's a match today, go to the pre-match tactics screen
+	const todayStr = new Date(data.currentDate).getDay();
+	if (data.nextFixture && data.nextFixture.date === data.currentDate) {
+		window.location.href = `/match/${data.nextFixture.id}/tactics`;
+		return;
+	} else if (data.nextFixture && todayStr === 6 && !data.nextFixture.date) {
+		// Fallback if date is not properly set but it's Saturday
+		window.location.href = `/match/${data.nextFixture.id}/tactics`;
+		return;
+	}
 
-      processingDate = actualData.currentDate;
-      
-      // Stop conditions
-      if (actualData.mustStop) {
-        console.log("Stopping due to:", actualData.reason);
-        break;
-      }
+	isAdvancing = true;
+	stopRequested = false;
 
-      // Add a small delay for visual feedback
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
+	while (!stopRequested) {
+		const formData = new FormData();
+		const response = await fetch("?/advanceDay", {
+			method: "POST",
+			body: formData,
+		});
 
-    isAdvancing = false;
-    window.location.reload(); // Refresh to get new unread counts/fixtures
-  }
+		const result = await response.json();
+		const actionResult = JSON.parse(result.data);
+
+		// Parse the SvelteKit action result
+		const success = actionResult[0] === "success";
+		const actualData =
+			actionResult[
+				actionResult.findIndex((v: any) => typeof v === "object" && v !== null)
+			];
+
+		if (!success) break;
+
+		processingDate = actualData.currentDate;
+
+		// Stop conditions
+		if (actualData.mustStop) {
+			if (fastForward && actualData.reason !== "Match Day") {
+				// Continue if it's not a match day and we are fast-forwarding
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				continue;
+			}
+			console.log("Stopping due to:", actualData.reason);
+			break;
+		}
+
+		if (!fastForward) break; // If not fast-forwarding, stop after one day
+
+		// Add a small delay for visual feedback
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+
+	isAdvancing = false;
+	window.location.reload(); // Refresh to get new unread counts/fixtures
+}
 </script>
 
 <div class="max-w-6xl mx-auto p-4 sm:p-8">
@@ -191,20 +206,40 @@
           </span>
         </div>
 
-        <button 
-          class="h-full px-10 py-4 {isAdvancing ? 'bg-amber-500 hover:bg-amber-600' : 'btn-primary'} text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
-          onclick={handleContinue}
-        >
-          {#if isAdvancing}
+        {#if isAdvancing}
+          <button 
+            class="h-full px-10 py-4 bg-amber-500 hover:bg-amber-600 text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+            onclick={() => stopRequested = true}
+          >
             <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             STOP
-          {:else}
+          </button>
+        {:else}
+          <button 
+            class="h-full px-10 py-4 btn-primary text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+            onclick={() => handleContinue(false)}
+          >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             CONTINUE
-          {/if}
-        </button>
+          </button>
+          <button 
+            class="h-full px-10 py-4 btn-secondary text-white font-black tracking-widest uppercase rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+            onclick={() => showSkipModal = true}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 19l6-7-6-7M6 19l6-7-6-7"/></svg>
+            SKIP TO DATE
+          </button>
+        {/if}
       </div>
     </div>
+
+    {#if showSkipModal}
+      <SkipModal 
+        currentDate={data.currentDate} 
+        onclose={() => showSkipModal = false} 
+        oncomplete={() => window.location.reload()}
+      />
+    {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       <!-- Next Match Panel -->
