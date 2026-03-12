@@ -1,24 +1,25 @@
 <script lang="ts">
-  import type { TeamProfile } from '../data/types';
-  import type { Match } from '../engine/Match.svelte.ts';
+import type { TeamProfile } from "../data/types";
+import type { Match } from "../engine/Match.svelte.ts";
 
-  let { currentTime, homeTeam, awayTeam, match, cinematicUi, forceShowControls } = $props<{
-    match: Match;
-    currentTime: number;
-    homeTeam?: TeamProfile;
-    awayTeam?: TeamProfile;
-    cinematicUi: boolean;
-    forceShowControls: boolean;
-  }>();
+let { currentTime, homeTeam, awayTeam, match, cinematicUi, forceShowControls } =
+	$props<{
+		match: Match;
+		currentTime: number;
+		homeTeam?: TeamProfile;
+		awayTeam?: TeamProfile;
+		cinematicUi: boolean;
+		forceShowControls: boolean;
+	}>();
 
-  let clockDisplay = $derived.by(() => {
-    const mins = Math.floor(currentTime / 60);
-    const secs = Math.floor(currentTime % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  });
-  
-  let homeScore = $derived(match.homeScore);
-  let awayScore = $derived(match.awayScore);
+let clockDisplay = $derived.by(() => {
+	const mins = Math.floor(currentTime / 60);
+	const secs = Math.floor(currentTime % 60);
+	return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+});
+
+let homeScore = $derived(match.homeScore);
+let awayScore = $derived(match.awayScore);
 </script>
 
 <div 

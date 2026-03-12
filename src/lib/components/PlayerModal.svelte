@@ -1,93 +1,125 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { calculateAge, calculatePlayerValue } from '$lib/data/ratings';
-  import { enhance } from '$app/forms';
+import { onMount } from "svelte";
+import { enhance } from "$app/forms";
+import { calculateAge, calculatePlayerValue } from "$lib/data/ratings";
 
-  let { 
-    player, 
-    onclose, 
-    currentDate, 
-    managerTeamId, 
-    scoutingLevel = 0,
-    isShortlisted = false
-  }: { 
-    player: any; 
-    onclose: () => void; 
-    currentDate: string; 
-    managerTeamId?: string; 
-    scoutingLevel?: number;
-    isShortlisted?: boolean;
-  } = $props();
+let {
+	player,
+	onclose,
+	currentDate,
+	managerTeamId,
+	scoutingLevel = 0,
+	isShortlisted = false,
+}: {
+	player: any;
+	onclose: () => void;
+	currentDate: string;
+	managerTeamId?: string;
+	scoutingLevel?: number;
+	isShortlisted?: boolean;
+} = $props();
 
-  let showOfferForm = $state(false);
-  let offerAmount = $state(calculatePlayerValue(player, currentDate));
-  let isSubmitting = $state(false);
+let showOfferForm = $state(false);
+let offerAmount = $state(calculatePlayerValue(player, currentDate));
+let isSubmitting = $state(false);
 
-  // If player is on manager's team, they are fully scouted (level 2)
-  const effectiveScoutLevel = $derived(player.teamId === managerTeamId ? 2 : scoutingLevel);
+// If player is on manager's team, they are fully scouted (level 2)
+const effectiveScoutLevel = $derived(
+	player.teamId === managerTeamId ? 2 : scoutingLevel,
+);
 
-  function getStatColor(val: number) {
-    if (val >= 15) return 'text-green-600';
-    if (val >= 10) return 'text-amber-600';
-    return 'text-red-600';
-  }
+function getStatColor(val: number) {
+	if (val >= 15) return "text-green-600";
+	if (val >= 10) return "text-amber-600";
+	return "text-red-600";
+}
 
-  function formatCurrency(val: number) {
-    return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(val);
-  }
+function formatCurrency(val: number) {
+	return new Intl.NumberFormat("en-NG", {
+		style: "currency",
+		currency: "NGN",
+		maximumFractionDigits: 0,
+	}).format(val);
+}
 
-  function renderStatValue(val: number) {
-    if (effectiveScoutLevel >= 2) return val.toString();
-    if (effectiveScoutLevel === 1) {
-      const low = Math.max(1, val - 2);
-      const high = Math.min(20, val + 2);
-      return `${low}-${high}`;
-    }
-    return '?';
-  }
+function renderStatValue(val: number) {
+	if (effectiveScoutLevel >= 2) return val.toString();
+	if (effectiveScoutLevel === 1) {
+		const low = Math.max(1, val - 2);
+		const high = Math.min(20, val + 2);
+		return `${low}-${high}`;
+	}
+	return "?";
+}
 
-  function renderMarketValue() {
-    const val = calculatePlayerValue(player, currentDate);
-    if (effectiveScoutLevel >= 2) return formatCurrency(val);
-    if (effectiveScoutLevel === 1) {
-      const low = Math.round((val * 0.8) / 100000) * 100000;
-      const high = Math.round((val * 1.2) / 100000) * 100000;
-      return `${formatCurrency(low)} - ${formatCurrency(high)}`;
-    }
-    return 'Unknown';
-  }
+function renderMarketValue() {
+	const val = calculatePlayerValue(player, currentDate);
+	if (effectiveScoutLevel >= 2) return formatCurrency(val);
+	if (effectiveScoutLevel === 1) {
+		const low = Math.round((val * 0.8) / 100000) * 100000;
+		const high = Math.round((val * 1.2) / 100000) * 100000;
+		return `${formatCurrency(low)} - ${formatCurrency(high)}`;
+	}
+	return "Unknown";
+}
 
-  function getRadarPoints(attr: any, overrideRadius?: number) {
-    const pillars = [
-      { label: 'ATTACK', value: ((attr.finishing || 0) + (attr.composure || 0) + (attr.anticipation || 0)) / 3 },
-      { label: 'DEFENSE', value: ((attr.tackling || 0) + (attr.marking || 0) + (attr.positioning || 0)) / 3 },
-      { label: 'SPEED', value: ((attr.pace || 0) + (attr.acceleration || 0)) / 2 },
-      { label: 'CREATIVITY', value: ((attr.passing || 0) + (attr.vision || 0) + (attr.decisions || 0)) / 3 },
-      { label: 'PHYSICAL', value: ((attr.strength || 0) + (attr.stamina || 0) + (attr.workRate || 0)) / 3 },
-      { label: 'CONTROL', value: ((attr.dribbling || 0) + (attr.concentration || 0)) / 2 }
-    ];
+function getRadarPoints(attr: any, overrideRadius?: number) {
+	const pillars = [
+		{
+			label: "ATTACK",
+			value:
+				((attr.finishing || 0) +
+					(attr.composure || 0) +
+					(attr.anticipation || 0)) /
+				3,
+		},
+		{
+			label: "DEFENSE",
+			value:
+				((attr.tackling || 0) + (attr.marking || 0) + (attr.positioning || 0)) /
+				3,
+		},
+		{
+			label: "SPEED",
+			value: ((attr.pace || 0) + (attr.acceleration || 0)) / 2,
+		},
+		{
+			label: "CREATIVITY",
+			value:
+				((attr.passing || 0) + (attr.vision || 0) + (attr.decisions || 0)) / 3,
+		},
+		{
+			label: "PHYSICAL",
+			value:
+				((attr.strength || 0) + (attr.stamina || 0) + (attr.workRate || 0)) / 3,
+		},
+		{
+			label: "CONTROL",
+			value: ((attr.dribbling || 0) + (attr.concentration || 0)) / 2,
+		},
+	];
 
-    const centerX = 60;
-    const centerY = 60;
-    const baseRadius = overrideRadius || 40;
+	const centerX = 60;
+	const centerY = 60;
+	const baseRadius = overrideRadius || 40;
 
-    return pillars.map((p, i) => {
-      const angle = (Math.PI * 2 * i) / pillars.length - Math.PI / 2;
-      const val = overrideRadius ? 20 : p.value;
-      const r = (val / 20) * baseRadius;
-      return {
-        x: centerX + Math.cos(angle) * r,
-        y: centerY + Math.sin(angle) * r,
-        outerX: centerX + Math.cos(angle) * baseRadius,
-        outerY: centerY + Math.sin(angle) * baseRadius,
-        label: p.label,
-        labelX: centerX + Math.cos(angle) * (baseRadius + 14),
-        labelY: centerY + Math.sin(angle) * (baseRadius + 14)
-      };
-    });
-  }
+	return pillars.map((p, i) => {
+		const angle = (Math.PI * 2 * i) / pillars.length - Math.PI / 2;
+		const val = overrideRadius ? 20 : p.value;
+		const r = (val / 20) * baseRadius;
+		return {
+			x: centerX + Math.cos(angle) * r,
+			y: centerY + Math.sin(angle) * r,
+			outerX: centerX + Math.cos(angle) * baseRadius,
+			outerY: centerY + Math.sin(angle) * baseRadius,
+			label: p.label,
+			labelX: centerX + Math.cos(angle) * (baseRadius + 14),
+			labelY: centerY + Math.sin(angle) * (baseRadius + 14),
+		};
+	});
+}
 
-  const playerPoints = $derived(getRadarPoints(player.attributes));
+const playerPoints = $derived(getRadarPoints(player.attributes));
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->

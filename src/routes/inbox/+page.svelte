@@ -1,50 +1,95 @@
 <script lang="ts">
-  import { enhance } from '$app/forms';
-  import type { PageData } from './$types';
-  import PlayerModal from '$lib/components/PlayerModal.svelte';
+import { enhance } from "$app/forms";
+import PlayerModal from "$lib/components/PlayerModal.svelte";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  let selectedId = $state(data.messages.length > 0 ? data.messages[0].id : null);
-  let selectedMessage = $derived(data.messages.find(m => m.id === selectedId));
-  
-  let selectedPlayerId = $state<string | null>(null);
-  const selectedPlayer = $derived(selectedPlayerId ? data.players[selectedPlayerId] : null);
+let selectedId = $state(data.messages.length > 0 ? data.messages[0].id : null);
+let selectedMessage = $derived(
+	data.messages.find((m: any) => m.id === selectedId),
+);
 
-  const selectedPlayerScoutingLevel = $derived.by(() => {
-    if (!selectedPlayerId) return 0;
-    const report = (data.scoutingReports || []).find((r: any) => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
-    return report ? report.level : 0;
-  });
+let activeTab = $state("messages");
+const unreadMessagesCount = $derived(
+	data.messages.filter((m: any) => !m.isRead).length,
+);
 
-  function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
+let selectedPlayerId = $state<string | null>(null);
+const selectedPlayer = $derived(
+	selectedPlayerId ? data.players[selectedPlayerId] : null,
+);
 
-  function getPlayerIdFromMessage(msg: any) {
-    if (!msg || !msg.relatedEntityId) return null;
-    if (msg.relatedEntityId.startsWith('offer_') || msg.relatedEntityId.startsWith('cpuoffer_')) {
-      const parts = msg.relatedEntityId.split('_');
-      return parts.length > 1 ? parts[1] : null;
-    }
-    return null;
-  }
+const selectedPlayerScoutingLevel = $derived.by(() => {
+	if (!selectedPlayerId) return 0;
+	const report = (data.scoutingReports || []).find(
+		(r: any) =>
+			r.playerId === selectedPlayerId && r.teamId === data.managerTeamId,
+	);
+	return report ? report.level : 0;
+});
+
+function formatDate(dateStr: string) {
+	return new Date(dateStr).toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
+
+function getPlayerIdFromMessage(msg: any) {
+	if (!msg || !msg.relatedEntityId) return null;
+	if (
+		msg.relatedEntityId.startsWith("offer_") ||
+		msg.relatedEntityId.startsWith("cpuoffer_")
+	) {
+		const parts = msg.relatedEntityId.split("_");
+		return parts.length > 1 ? parts[1] : null;
+	}
+	return null;
+}
 </script>
 
 <div class="max-w-6xl mx-auto p-4 sm:p-8 h-[calc(100vh-100px)] flex flex-col">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-3xl font-black uppercase tracking-tighter flex items-center gap-3">
       Inbox
-      {#if data.messages.filter(m => !m.isRead).length > 0}
+      {#if unreadMessagesCount > 0}
         <span class="bg-primary text-white text-xs px-2 py-1 rounded-full font-black">
-          {data.messages.filter(m => !m.isRead).length} New
+          {unreadMessagesCount} New
         </span>
       {/if}
     </h1>
     <a href="/" class="btn-secondary py-2 px-6 uppercase tracking-widest text-xs font-bold">Back to Hub</a>
   </div>
 
-  <div class="flex-1 flex gap-6 min-h-0">
+  <!-- Tabs -->
+  <div class="flex gap-4 mb-6 border-b border-white/5">
+    <button 
+      onclick={() => activeTab = 'messages'}
+      class="pb-3 px-4 text-xs font-black uppercase tracking-widest transition-all relative {activeTab === 'messages' ? 'text-primary' : 'text-light-subtle hover:text-white'}"
+    >
+      Messages
+      {#if unreadMessagesCount > 0}
+        <span class="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
+      {/if}
+      {#if activeTab === 'messages'}
+        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+      {/if}
+    </button>
+    <button 
+      onclick={() => activeTab = 'feed'}
+      class="pb-3 px-4 text-xs font-black uppercase tracking-widest transition-all relative {activeTab === 'feed' ? 'text-primary' : 'text-light-subtle hover:text-white'}"
+    >
+      League Feed
+      {#if activeTab === 'feed'}
+        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+      {/if}
+    </button>
+  </div>
+
+  {#if activeTab === 'messages'}
+    <div class="flex-1 flex gap-6 min-h-0">
     <!-- Message List -->
     <div class="w-1/3 bg-white border border-light-border rounded-2xl shadow-sm flex flex-col overflow-hidden">
       <div class="p-4 bg-light-bg border-b border-light-border font-black text-[0.65rem] uppercase tracking-widest subtle">
@@ -196,6 +241,41 @@
       {/if}
     </div>
   </div>
+  {:else}
+    <!-- League Feed Tab -->
+    <div class="flex-1 bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div class="p-4 bg-light-bg border-b border-light-border font-black text-[0.65rem] uppercase tracking-widest subtle">
+        League Headlines
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        {#if !data.leagueNews || data.leagueNews.length === 0}
+          <div class="p-12 text-center subtle italic text-sm">No news stories yet this season.</div>
+        {:else}
+          <div class="max-w-3xl mx-auto space-y-6">
+            {#each data.leagueNews as news}
+              <div class="card p-6 border-l-4 {news.type === 'BIG_RESULT' ? 'border-l-primary' : 'border-l-gray-200'}">
+                <div class="flex justify-between items-start mb-3">
+                  <div class="flex items-center gap-3">
+                    <span class="bg-light-bg px-2 py-0.5 rounded text-[0.5rem] font-black uppercase tracking-widest text-primary">Week {news.week}</span>
+                    <span class="text-[0.5rem] font-bold text-light-subtle uppercase tracking-widest">{news.type.replace('_', ' ')}</span>
+                  </div>
+                </div>
+                <h3 class="text-lg font-black leading-tight text-dark">{news.headline}</h3>
+                {#if news.relatedPlayerId}
+                  <button 
+                    class="mt-4 text-[0.6rem] font-black uppercase tracking-widest text-primary hover:underline"
+                    onclick={() => selectedPlayerId = news.relatedPlayerId}
+                  >
+                    View Player Profile
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
 
 {#if selectedPlayer}

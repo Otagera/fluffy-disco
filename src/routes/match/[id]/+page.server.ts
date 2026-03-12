@@ -1,75 +1,79 @@
-import { loadSaveGame, writeSaveGame, processWeekResults } from '$lib/data/store';
-import { error, redirect } from '@sveltejs/kit';
-import type { PageServerLoad, Actions } from './$types';
+import { error, redirect } from "@sveltejs/kit";
+import {
+	loadSaveGame,
+	processWeekResults,
+	writeSaveGame,
+} from "$lib/data/store";
+import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params }) => {
-  const save = loadSaveGame();
-  
-  if (!save) {
-    throw error(404, 'No save game found');
-  }
+	const save = loadSaveGame();
 
-  const fixture = save.fixtures.find(f => f.id === params.id);
-  if (!fixture) {
-    throw error(404, 'Fixture not found');
-  }
+	if (!save) {
+		throw error(404, "No save game found");
+	}
 
-  const homeTeam = save.teams[fixture.homeTeamId];
-  const awayTeam = save.teams[fixture.awayTeamId];
+	const fixture = save.fixtures.find((f) => f.id === params.id);
+	if (!fixture) {
+		throw error(404, "Fixture not found");
+	}
 
-  if (!homeTeam || !awayTeam) {
-    throw error(500, 'Teams for fixture not found in save data');
-  }
+	const homeTeam = save.teams[fixture.homeTeamId];
+	const awayTeam = save.teams[fixture.awayTeamId];
 
-  const homePlayers = homeTeam.players.map(pid => save.players[pid]);
-  const awayPlayers = awayTeam.players.map(pid => save.players[pid]);
+	if (!homeTeam || !awayTeam) {
+		throw error(500, "Teams for fixture not found in save data");
+	}
 
-  return {
-    fixture,
-    homeTeam,
-    awayTeam,
-    homePlayers,
-    awayPlayers,
-    managerTeamId: save.manager.teamId,
-    currentDate: save.currentDate,
-    scoutingReports: save.scoutingReports || []
-  };
+	const homePlayers = homeTeam.players.map((pid) => save.players[pid]);
+	const awayPlayers = awayTeam.players.map((pid) => save.players[pid]);
+
+	return {
+		fixture,
+		homeTeam,
+		awayTeam,
+		homePlayers,
+		awayPlayers,
+		managerTeamId: save.manager.teamId,
+		currentDate: save.currentDate,
+		scoutingReports: save.scoutingReports || [],
+	};
 };
 
 export const actions: Actions = {
-  processMatch: async ({ request, params }) => {
-    const data = await request.formData();
-    const homeScore = Number(data.get('homeScore'));
-    const awayScore = Number(data.get('awayScore'));
-    let playerStamina = undefined;
-    let matchAnalytics = undefined;
-    try {
-      const staminaData = data.get('playerStamina');
-      if (staminaData) playerStamina = JSON.parse(staminaData.toString());
-      
-      const analyticsData = data.get('matchAnalytics');
-      if (analyticsData) matchAnalytics = JSON.parse(analyticsData.toString());
-    } catch (e) {
-      console.error("Failed to parse match data", e);
-    }
-    
-    const save = loadSaveGame();
-    if (!save) throw error(404, 'Save not found');
+	processMatch: async ({ request, params }) => {
+		const data = await request.formData();
+		const homeScore = Number(data.get("homeScore"));
+		const awayScore = Number(data.get("awayScore"));
+		let playerStamina;
+		let matchAnalytics;
+		try {
+			const staminaData = data.get("playerStamina");
+			if (staminaData) playerStamina = JSON.parse(staminaData.toString());
 
-    const updatedSave = processWeekResults(save, {
-      fixtureId: params.id || '',
-      homeScore,
-      awayScore,
-      playerStamina,
-      matchAnalytics
-    });
+			const analyticsData = data.get("matchAnalytics");
+			if (analyticsData) matchAnalytics = JSON.parse(analyticsData.toString());
+		} catch (e) {
+			console.error("Failed to parse match data", e);
+		}
 
-    if (matchAnalytics) {
-      updatedSave.lastMatchAnalytics = matchAnalytics;
-    }
+		const save = loadSaveGame();
+		if (!save) throw error(404, "Save not found");
 
-    writeSaveGame(updatedSave);
-    
-    throw redirect(303, '/');
-  }
+		const updatedSave = processWeekResults(save, {
+			fixtureId: params.id || "",
+			homeScore,
+			awayScore,
+			playerStamina,
+			matchAnalytics,
+		});
+
+		if (matchAnalytics) {
+			updatedSave.lastMatchAnalytics = matchAnalytics;
+		}
+
+		writeSaveGame(updatedSave);
+
+		throw redirect(303, "/");
+	},
 };

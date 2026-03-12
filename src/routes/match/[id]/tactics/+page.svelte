@@ -1,71 +1,81 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import { onMount } from 'svelte';
-  import FormationBoard from '$lib/components/FormationBoard.svelte';
+import { onMount } from "svelte";
+import FormationBoard from "$lib/components/FormationBoard.svelte";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
-  
-  const isHome = data.managerTeamId === data.homeTeam.id;
-  const myTeam = isHome ? data.homeTeam : data.awayTeam;
-  const opponentTeam = isHome ? data.awayTeam : data.homeTeam;
-  
-  // Tactical State
-  let squad = $state([...(isHome ? data.homePlayers : data.awayPlayers)]);
-  let currentTeam = $state({ ...myTeam });
+let { data }: { data: PageData } = $props();
 
-  // Overrides tracked from the FormationBoard
-  let tacticalPositions = $state<Record<number, {x: number, y: number}>>(myTeam.customPositions || {});
-  let tacticalRoles = $state<Record<number, string>>(myTeam.customRoles || {});
+const isHome = data.managerTeamId === data.homeTeam.id;
+const myTeam = isHome ? data.homeTeam : data.awayTeam;
+const opponentTeam = isHome ? data.awayTeam : data.homeTeam;
 
-  const styleDescriptions: Record<string, string> = {
-    'Tiki-Taka': 'Fluid attacking shape. Players drift to offer short passing lanes.',
-    'Gegenpress': 'Aggressive swarm pressing. High stamina drain, leaves gaps if bypassed.',
-    'Route One': 'Immediate vertical push. Players sprint forward directly.',
-    'Park the Bus': 'Deep, rigid defensive line. No pressing until the final third.',
-    'Fluid Counter': 'Balanced pressing with dynamic attacking movement.'
-  };
+// Tactical State
+let squad = $state([...(isHome ? data.homePlayers : data.awayPlayers)]);
+let currentTeam = $state({ ...myTeam });
 
-  onMount(() => {
-    window.scrollTo(0, 0);
-  });
+// Overrides tracked from the FormationBoard
+let tacticalPositions = $state<Record<number, { x: number; y: number }>>(
+	myTeam.customPositions || {},
+);
+let tacticalRoles = $state<Record<number, string>>(myTeam.customRoles || {});
 
-  function handleSwap(id1: string, id2: string) {
-    const idx1 = squad.findIndex(p => p.id === id1);
-    const idx2 = squad.findIndex(p => p.id === id2);
-    
-    if (idx1 !== -1 && idx2 !== -1) {
-      const newSquad = [...squad];
-      const temp = newSquad[idx1];
-      newSquad[idx1] = newSquad[idx2];
-      newSquad[idx2] = temp;
-      squad = newSquad;
-    }
-  }
+const styleDescriptions: Record<string, string> = {
+	"Tiki-Taka":
+		"Fluid attacking shape. Players drift to offer short passing lanes.",
+	Gegenpress:
+		"Aggressive swarm pressing. High stamina drain, leaves gaps if bypassed.",
+	"Route One": "Immediate vertical push. Players sprint forward directly.",
+	"Park the Bus":
+		"Deep, rigid defensive line. No pressing until the final third.",
+	"Fluid Counter": "Balanced pressing with dynamic attacking movement.",
+};
 
-  function handleFormationChange(name: string) {
-    currentTeam.formation = name;
-  }
+onMount(() => {
+	window.scrollTo(0, 0);
+});
 
-  function handleOverridesChange(positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) {
-    tacticalPositions = positions;
-    tacticalRoles = roles;
-    if (style) currentTeam.tacticalStyle = style;
-    if (mentality) currentTeam.mentality = mentality;
-  }
+function handleSwap(id1: string, id2: string) {
+	const idx1 = squad.findIndex((p) => p.id === id1);
+	const idx2 = squad.findIndex((p) => p.id === id2);
 
-  function handleConfirm() {
-    const payload = {
-      isHome,
-      formation: currentTeam.formation,
-      style: currentTeam.tacticalStyle,
-      mentality: currentTeam.mentality,
-      customSquad: squad,
-      customRoles: tacticalRoles,
-      customPositions: tacticalPositions
-    };
-    sessionStorage.setItem('tacticalOverrides', JSON.stringify(payload));
-    window.location.href = `/match/${data.fixture.id}`;
-  }
+	if (idx1 !== -1 && idx2 !== -1) {
+		const newSquad = [...squad];
+		const temp = newSquad[idx1];
+		newSquad[idx1] = newSquad[idx2];
+		newSquad[idx2] = temp;
+		squad = newSquad;
+	}
+}
+
+function handleFormationChange(name: string) {
+	currentTeam.formation = name;
+}
+
+function handleOverridesChange(
+	positions: Record<number, { x: number; y: number }>,
+	roles: Record<number, string>,
+	style: string,
+	mentality: string,
+) {
+	tacticalPositions = positions;
+	tacticalRoles = roles;
+	if (style) currentTeam.tacticalStyle = style;
+	if (mentality) currentTeam.mentality = mentality;
+}
+
+function handleConfirm() {
+	const payload = {
+		isHome,
+		formation: currentTeam.formation,
+		style: currentTeam.tacticalStyle,
+		mentality: currentTeam.mentality,
+		customSquad: squad,
+		customRoles: tacticalRoles,
+		customPositions: tacticalPositions,
+	};
+	sessionStorage.setItem("tacticalOverrides", JSON.stringify(payload));
+	window.location.href = `/match/${data.fixture.id}`;
+}
 </script>
 
 <div class="max-w-7xl mx-auto p-4 sm:p-8">

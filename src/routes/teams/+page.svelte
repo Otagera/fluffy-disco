@@ -1,67 +1,88 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import PlayerModal from '$lib/components/PlayerModal.svelte';
+import PlayerModal from "$lib/components/PlayerModal.svelte";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  const currentDate = $derived(data.currentDate ?? '');
-  const managerTeamId = $derived(data.managerTeamId ?? '');
+const currentDate = $derived(data.currentDate ?? "");
+const managerTeamId = $derived(data.managerTeamId ?? "");
 
-  const roleOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as const;
-  const sortedTeams = $derived([...(data.teams ?? [])].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)));
+const roleOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as const;
+const sortedTeams = $derived(
+	[...(data.teams ?? [])].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)),
+);
 
-  let selectedTeamId = $state<string | null>(null);
-  let selectedPlayerId = $state<string | null>(null);
+let selectedTeamId = $state<string | null>(null);
+let selectedPlayerId = $state<string | null>(null);
 
-  $effect(() => {
-    if (!selectedTeamId && sortedTeams.length > 0) selectedTeamId = sortedTeams[0].id;
-  });
+$effect(() => {
+	if (!selectedTeamId && sortedTeams.length > 0)
+		selectedTeamId = sortedTeams[0].id;
+});
 
-  const selectedTeam = $derived(sortedTeams.find((team) => team.id === selectedTeamId) ?? null);
-  const allPlayers = $derived(
-    selectedTeam
-      ? selectedTeam.players
-          .map((id) => data.players[id])
-          .filter(Boolean)
-          .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
-      : []
-  );
+const selectedTeam = $derived(
+	sortedTeams.find((team) => team.id === selectedTeamId) ?? null,
+);
+const allPlayers = $derived(
+	selectedTeam
+		? selectedTeam.players
+				.map((id) => data.players[id])
+				.filter(Boolean)
+				.sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
+		: [],
+);
 
-  const probableXI = $derived.by(() => {
-    if (!allPlayers.length) return [];
-    
-    // Balanced selection logic: 1 GK, 4 DEF, 3 MID, 3 FWD
-    const gks = allPlayers.filter(p => p.role === 'GK').slice(0, 1);
-    const defs = allPlayers.filter(p => p.role === 'DEF').slice(0, 4);
-    const mids = allPlayers.filter(p => p.role === 'MID').slice(0, 3);
-    const fwds = allPlayers.filter(p => p.role === 'FWD').slice(0, 3);
-    
-    const xi = [...gks, ...defs, ...mids, ...fwds];
-    
-    // Fallback if we don't have enough in each role
-    if (xi.length < 11) {
-      const remaining = allPlayers.filter(p => !xi.includes(p)).slice(0, 11 - xi.length);
-      return [...xi, ...remaining].sort((a, b) => roleOrder[a.role as keyof typeof roleOrder] - roleOrder[b.role as keyof typeof roleOrder]);
-    }
-    
-    return xi.sort((a, b) => roleOrder[a.role as keyof typeof roleOrder] - roleOrder[b.role as keyof typeof roleOrder]);
-  });
+const probableXI = $derived.by(() => {
+	if (!allPlayers.length) return [];
 
-  const bench = $derived(allPlayers.filter(p => !probableXI.includes(p)).slice(0, 9));
-  
-  const selectedPlayer = $derived(allPlayers.find((player) => player.id === selectedPlayerId) ?? null);
-  const selectedPlayerScoutingLevel = $derived.by(() => {
-    if (!selectedPlayerId) return 0;
-    const report = (data.scoutingReports || []).find(r => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
-    return report ? report.level : 0;
-  });
+	// Balanced selection logic: 1 GK, 4 DEF, 3 MID, 3 FWD
+	const gks = allPlayers.filter((p) => p.role === "GK").slice(0, 1);
+	const defs = allPlayers.filter((p) => p.role === "DEF").slice(0, 4);
+	const mids = allPlayers.filter((p) => p.role === "MID").slice(0, 3);
+	const fwds = allPlayers.filter((p) => p.role === "FWD").slice(0, 3);
 
-  function getOverallColor(overall: number) {
-    if (overall >= 16) return 'bg-green-100 text-green-800 border-green-200';
-    if (overall >= 13) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (overall >= 10) return 'bg-amber-100 text-amber-800 border-amber-200';
-    return 'bg-red-100 text-red-800 border-red-200';
-  }
+	const xi = [...gks, ...defs, ...mids, ...fwds];
+
+	// Fallback if we don't have enough in each role
+	if (xi.length < 11) {
+		const remaining = allPlayers
+			.filter((p) => !xi.includes(p))
+			.slice(0, 11 - xi.length);
+		return [...xi, ...remaining].sort(
+			(a, b) =>
+				roleOrder[a.role as keyof typeof roleOrder] -
+				roleOrder[b.role as keyof typeof roleOrder],
+		);
+	}
+
+	return xi.sort(
+		(a, b) =>
+			roleOrder[a.role as keyof typeof roleOrder] -
+			roleOrder[b.role as keyof typeof roleOrder],
+	);
+});
+
+const bench = $derived(
+	allPlayers.filter((p) => !probableXI.includes(p)).slice(0, 9),
+);
+
+const selectedPlayer = $derived(
+	allPlayers.find((player) => player.id === selectedPlayerId) ?? null,
+);
+const selectedPlayerScoutingLevel = $derived.by(() => {
+	if (!selectedPlayerId) return 0;
+	const report = (data.scoutingReports || []).find(
+		(r) => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId,
+	);
+	return report ? report.level : 0;
+});
+
+function getOverallColor(overall: number) {
+	if (overall >= 16) return "bg-green-100 text-green-800 border-green-200";
+	if (overall >= 13) return "bg-blue-100 text-blue-800 border-blue-200";
+	if (overall >= 10) return "bg-amber-100 text-amber-800 border-amber-200";
+	return "bg-red-100 text-red-800 border-red-200";
+}
 </script>
 
 <div class="max-w-6xl mx-auto p-4 sm:p-8">

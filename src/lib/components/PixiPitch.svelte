@@ -1,27 +1,28 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { MatchRenderer } from '$lib/renderer/PixiApp';
-    import type { MatchMemory } from '$lib/engine/core/MatchMemory';
+import { onDestroy, onMount } from "svelte";
+import type { MatchMemory } from "$lib/engine/core/MatchMemory";
+import { MatchRenderer } from "$lib/renderer/PixiApp";
 
-    let { memory, labels }: { memory: MatchMemory, labels: string[] } = $props();
+let { memory, labels }: { memory: MatchMemory; labels: string[] } = $props();
 
-    let canvas: HTMLCanvasElement;
-    let renderer: MatchRenderer;
+let canvas: HTMLCanvasElement;
+let renderer: MatchRenderer;
 
-    export function updateLabel(index: number, newLabel: string) {
-        if (renderer) renderer.updateLabel(index, newLabel);
-    }
+export function updateLabel(index: number, newLabel: string) {
+	if (renderer) renderer.updateLabel(index, newLabel);
+}
 
-    onMount(() => {        if (canvas && memory) {
-            renderer = new MatchRenderer(canvas, memory, labels);
-        }
-    });
+onMount(() => {
+	if (canvas && memory) {
+		renderer = new MatchRenderer(canvas, memory, labels);
+	}
+});
 
-    onDestroy(() => {
-        if (renderer) {
-            renderer.destroy();
-        }
-    });
+onDestroy(() => {
+	if (renderer) {
+		renderer.destroy();
+	}
+});
 </script>
 
 <div class="pitch-outer flex items-center justify-center p-4">

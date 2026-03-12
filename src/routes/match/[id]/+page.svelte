@@ -1,393 +1,465 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { enhance } from '$app/forms';
-  import { Match, MatchStatus } from '$lib/engine/Match.svelte.ts';
-  import { PLAYER_STRIDE, PLAYER_OFFSET_STAMINA, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, BALL_OFFSET_X, BALL_OFFSET_Y } from '$lib/engine/core/constants';
-  import PixiPitch from '$lib/components/PixiPitch.svelte';
-  import HUD from '$lib/components/HUD.svelte';
-  import FormationBoard from '$lib/components/FormationBoard.svelte';
-  import { MatchRecorder } from '$lib/engine/MatchRecorder';
-  import { formations } from '$lib/engine/ai/Formations';
-  import type { PageData } from './$types';
+import { onMount } from "svelte";
+import { enhance } from "$app/forms";
+import { page } from "$app/stores";
+import FormationBoard from "$lib/components/FormationBoard.svelte";
+import HUD from "$lib/components/HUD.svelte";
+import PixiPitch from "$lib/components/PixiPitch.svelte";
+import { formations } from "$lib/engine/ai/Formations";
+import {
+	BALL_OFFSET_X,
+	BALL_OFFSET_Y,
+	PLAYER_OFFSET_STAMINA,
+	PLAYER_OFFSET_X,
+	PLAYER_OFFSET_Y,
+	PLAYER_STRIDE,
+} from "$lib/engine/core/constants";
+import { Match, MatchStatus } from "$lib/engine/Match.svelte.ts";
+import { MatchRecorder } from "$lib/engine/MatchRecorder";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  const matchIdStr = $derived($page.params.id || '1');
-  
-  // determine which side we're managing
-  const isHome = data.managerTeamId === data.homeTeam.id;
+const matchIdStr = $derived($page.params.id || "1");
 
-  // New Engine Instance
-  const match = new Match();
-  match.recorder = new MatchRecorder(matchIdStr, data.homeTeam.id, data.awayTeam.id);
-  
-  let currentTime = $state(0);
-  let playerLabels = $state<string[]>([]);
-  let benchPlayers = $state<any[]>([]);
-  let showSubs = $state(false);
+// determine which side we're managing
+const isHome = data.managerTeamId === data.homeTeam.id;
 
-  let showFinalOverlay = $state(false);
-  let isSimulating = $state(false);
-  let cinematicUi = $state(false);
-  let forceShowControls = $state(false);
+// New Engine Instance
+const match = new Match();
+match.recorder = new MatchRecorder(
+	matchIdStr,
+	data.homeTeam.id,
+	data.awayTeam.id,
+);
 
-  let gameSpeed = $state(1);
-  // let gameSpeed = $state(20);
-  let isPaused = $state(false);
-  let hasKickedOff = $state(false);
-  let showTacticsModal = $state(false);
+let currentTime = $state(0);
+let playerLabels = $state<string[]>([]);
+let benchPlayers = $state<any[]>([]);
+let showSubs = $state(false);
 
-  let finalHomeScore = $state(0);
-  let finalAwayScore = $state(0);
-  
-  // Keep original formations for swapping sides
-  let homeStartPositions: {x:number, y:number}[] = [];
-  let awayStartPositions: {x:number, y:number}[] = [];
-  let playerStats: any[] = [];
-  let starterRoles: string[] = [];
-  let squad = $state<any[]>([]);
+let showFinalOverlay = $state(false);
+let isSimulating = $state(false);
+let cinematicUi = $state(false);
+let forceShowControls = $state(false);
 
-  function normalizeEngineStat(value: number | undefined, fallback: number = 50): number {
-    if (typeof value !== 'number' || Number.isNaN(value)) return fallback;
-    if (value <= 20) return Math.max(1, Math.min(100, value * 5));
-    return Math.max(1, Math.min(100, value));
-  }
+let gameSpeed = $state(1);
+// let gameSpeed = $state(20);
+let isPaused = $state(false);
+let hasKickedOff = $state(false);
+let showTacticsModal = $state(false);
 
-  function toEngineStats(attributes: any) {
-    return {
-      passing: normalizeEngineStat(attributes?.passing),
-      finishing: normalizeEngineStat(attributes?.finishing),
-      tackling: normalizeEngineStat(attributes?.tackling),
-      dribbling: normalizeEngineStat(attributes?.dribbling),
-      vision: normalizeEngineStat(attributes?.vision),
-      composure: normalizeEngineStat(attributes?.composure),
-      aggression: normalizeEngineStat(attributes?.aggression, 40),
-      reflexes: normalizeEngineStat(attributes?.reflexes, 50),
-      handling: normalizeEngineStat(attributes?.handling, 50)
-    };
-  }
+let finalHomeScore = $state(0);
+let finalAwayScore = $state(0);
 
-  // New Game Loop using the Match Orchestrator
-  let lastFrameTime = 0;
-  let syncTimer = 0;
+// Keep original formations for swapping sides
+let homeStartPositions: { x: number; y: number }[] = [];
+let awayStartPositions: { x: number; y: number }[] = [];
+let playerStats: any[] = [];
+let starterRoles: string[] = [];
+let squad = $state<any[]>([]);
 
-  function gameLoop(time: number) {
-    const rawDt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
-    const dt = Math.min(rawDt, 0.05);
-    lastFrameTime = time;
+function normalizeEngineStat(
+	value: number | undefined,
+	fallback: number = 50,
+): number {
+	if (typeof value !== "number" || Number.isNaN(value)) return fallback;
+	if (value <= 20) return Math.max(1, Math.min(100, value * 5));
+	return Math.max(1, Math.min(100, value));
+}
 
-    // Pulse the new engine
-    if (hasKickedOff && !isPaused && !showTacticsModal && match.status !== MatchStatus.PAUSED && match.status !== MatchStatus.HALF_TIME) {
-      
-      // Sub-step the physics to prevent Euler integration overshoot at high game speeds
-      let simulatedTime = 0;
-      const targetTime = dt * gameSpeed;
-      const fixedDt = 0.05; // 50ms per step max
-      
-      while (simulatedTime < targetTime) {
-          const step = Math.min(fixedDt, targetTime - simulatedTime);
-          match.tick(step);
-          simulatedTime += step;
-      }
-      
-      // Periodically sync engine stamina back to the UI squad array
-      syncTimer += targetTime;
-      if (syncTimer > 2) { // Sync every 2 engine seconds
-        syncTimer = 0;
-        const teamNum = isHome ? 0 : 1;
-        const startIdx = teamNum * 11;
-        let changed = false;
-        
-        // create a shallow copy to trigger Svelte 5 reactivity
-        const newSquad = [...squad];
-        
-        for (let i = 0; i < 11; i++) {
-            const engineIdx = startIdx + i;
-            const staminaRaw = match.memory.playerBuffer[engineIdx * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA];
-            const staminaScaled = Math.round(staminaRaw * 100);
-            
-            if (newSquad[i] && Math.abs(newSquad[i].condition - staminaScaled) > 1) {
-                newSquad[i] = { ...newSquad[i], condition: staminaScaled };
-                changed = true;
-            }
-        }
-        
-        if (changed) {
-            squad = newSquad;
-        }
-      }
-    }
-    
-    // Sync reactive state
-    currentTime = match.currentTime;
+function toEngineStats(attributes: any) {
+	return {
+		passing: normalizeEngineStat(attributes?.passing),
+		finishing: normalizeEngineStat(attributes?.finishing),
+		tackling: normalizeEngineStat(attributes?.tackling),
+		dribbling: normalizeEngineStat(attributes?.dribbling),
+		vision: normalizeEngineStat(attributes?.vision),
+		composure: normalizeEngineStat(attributes?.composure),
+		aggression: normalizeEngineStat(attributes?.aggression, 40),
+		reflexes: normalizeEngineStat(attributes?.reflexes, 50),
+		handling: normalizeEngineStat(attributes?.handling, 50),
+	};
+}
 
-    // Auto-show final overlay if time exceeds 90 mins (5400s)
-    if (currentTime >= 5400 && !showFinalOverlay && !isSimulating) {
-        finalHomeScore = match.homeScore;
-        finalAwayScore = match.awayScore;
-        showFinalOverlay = true;
-        
-        // Save Replay
-        if (match.recorder) {
-            match.recorder.saveToIndexedDB(match.analytics, playerLabels);
-        }
-    }
+// New Game Loop using the Match Orchestrator
+let lastFrameTime = 0;
+let syncTimer = 0;
 
-    requestAnimationFrame(gameLoop);
-  }
+function gameLoop(time: number) {
+	const rawDt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
+	const dt = Math.min(rawDt, 0.05);
+	lastFrameTime = time;
 
-  onMount(() => {
-    // apply any tactical overrides saved earlier
-    let overrides: any = null;
-    try {
-      const raw = sessionStorage.getItem('tacticalOverrides');
-      if (raw) {
-        overrides = JSON.parse(raw);
-        sessionStorage.removeItem('tacticalOverrides');
-      }
-    } catch (e) {
-      console.error('Failed to parse tactical overrides', e);
-    }
+	// Pulse the new engine
+	if (
+		hasKickedOff &&
+		!isPaused &&
+		!showTacticsModal &&
+		match.status !== MatchStatus.PAUSED &&
+		match.status !== MatchStatus.HALF_TIME
+	) {
+		// Sub-step the physics to prevent Euler integration overshoot at high game speeds
+		let simulatedTime = 0;
+		const targetTime = dt * gameSpeed;
+		const fixedDt = 0.05; // 50ms per step max
 
-    // 1. Get Formations
-    const homeForm = formations[data.homeTeam.formation] || formations['4-4-2 Wide'];
-    const awayForm = formations[data.awayTeam.formation] || formations['4-4-2 Wide'];
+		while (simulatedTime < targetTime) {
+			const step = Math.min(fixedDt, targetTime - simulatedTime);
+			match.tick(step);
+			simulatedTime += step;
+		}
 
-    // 2. Map to Pitch (105m x 68m)
-    for (let i = 0; i < 11; i++) {
-        let px = homeForm[i].x;
-        let py = homeForm[i].y;
-        
-        // Priority: 1. Session Overrides (Pre-match setup) -> 2. Persistent Overrides (Club Tactics) -> 3. Base Formation
-        if (overrides && overrides.isHome && overrides.customPositions?.[i]) {
-          px = overrides.customPositions[i].x;
-          py = overrides.customPositions[i].y;
-        } else if (isHome && data.homeTeam.customPositions?.[i]) {
-          px = data.homeTeam.customPositions[i].x;
-          py = data.homeTeam.customPositions[i].y;
-        }
-        homeStartPositions.push({ x: px * 105, y: py * 68 });
-    }
-    for (let i = 0; i < 11; i++) {
-        let px = awayForm[i].x;
-        let py = awayForm[i].y;
-        
-        if (overrides && !overrides.isHome && overrides.customPositions?.[i]) {
-          px = overrides.customPositions[i].x;
-          py = overrides.customPositions[i].y;
-        } else if (!isHome && data.awayTeam.customPositions?.[i]) {
-          // Note: if managing away team, we use their DB positions
-          px = data.awayTeam.customPositions[i].x;
-          py = data.awayTeam.customPositions[i].y;
-        }
-        awayStartPositions.push({ x: (1 - px) * 105, y: (1 - py) * 68 });
-    }
+		// Periodically sync engine stamina back to the UI squad array
+		syncTimer += targetTime;
+		if (syncTimer > 2) {
+			// Sync every 2 engine seconds
+			syncTimer = 0;
+			const teamNum = isHome ? 0 : 1;
+			const startIdx = teamNum * 11;
+			let changed = false;
 
-    // Prepare player list (possibly overridden squad)
-    const homePlayers = data.homePlayers || [];
-    const awayPlayers = data.awayPlayers || [];
-    squad = isHome ? homePlayers.slice() : awayPlayers.slice();
-    if (overrides && overrides.customSquad) {
-      squad = overrides.customSquad;
-    }
+			// create a shallow copy to trigger Svelte 5 reactivity
+			const newSquad = [...squad];
 
-    // Build full starter arrays for both teams; managed side can still use tactical overrides.
-    const managedRoles = squad.map((p: any, idx: number) => {
-        if (overrides?.customRoles?.[idx]) return overrides.customRoles[idx];
-        const team = isHome ? data.homeTeam : data.awayTeam;
-        return team.customRoles?.[idx] || p.role;
-    });
-    const managedStats = squad.map((p: any) => toEngineStats(p.attributes));
-    const opponentSquad = (isHome ? awayPlayers : homePlayers).slice();
-    const opponentRoles = opponentSquad.map((p: any) => p.role);
-    const opponentStats = opponentSquad.map((p: any) => toEngineStats(p.attributes));
+			for (let i = 0; i < 11; i++) {
+				const engineIdx = startIdx + i;
+				const staminaRaw =
+					match.memory.playerBuffer[
+						engineIdx * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA
+					];
+				const staminaScaled = Math.round(staminaRaw * 100);
 
-    const starterStats = isHome
-      ? [...managedStats.slice(0, 11), ...opponentStats.slice(0, 11)]
-      : [...opponentStats.slice(0, 11), ...managedStats.slice(0, 11)];
-    starterRoles = isHome
-      ? [...managedRoles.slice(0, 11), ...opponentRoles.slice(0, 11)]
-      : [...opponentRoles.slice(0, 11), ...managedRoles.slice(0, 11)];
-    const benchStatsArr = managedStats.slice(11);
-    const benchRolesArr = managedRoles.slice(11);
-    benchPlayers = squad.slice(11);
+				if (
+					newSquad[i] &&
+					Math.abs(newSquad[i].condition - staminaScaled) > 1
+				) {
+					newSquad[i] = { ...newSquad[i], condition: staminaScaled };
+					changed = true;
+				}
+			}
 
-    // assign to match instance after setup
-    playerStats = [...starterStats];
+			if (changed) {
+				squad = newSquad;
+			}
+		}
+	}
 
-    // 3. Labels (Numbers)
-    const hL = squad.slice(0, 11).map((p: any) => p.number?.toString() || 'P');
-    const aL = (isHome ? awayPlayers : homePlayers).slice(0, 11).map((p: any) => p.number?.toString() || 'P');
-    playerLabels = [...hL, ...aL];
+	// Sync reactive state
+	currentTime = match.currentTime;
 
-    const homeStyle = (overrides && overrides.isHome) ? (overrides.style || data.homeTeam.tacticalStyle) : data.homeTeam.tacticalStyle;
-    const awayStyle = (overrides && !overrides.isHome) ? (overrides.style || data.awayTeam.tacticalStyle) : data.awayTeam.tacticalStyle;
-    const homeMentality = (overrides && overrides.isHome) ? (overrides.mentality || data.homeTeam.mentality) : data.homeTeam.mentality;
-    const awayMentality = (overrides && !overrides.isHome) ? (overrides.mentality || data.awayTeam.mentality) : data.awayTeam.mentality;
+	// Auto-show final overlay if time exceeds 90 mins (5400s)
+	if (currentTime >= 5400 && !showFinalOverlay && !isSimulating) {
+		finalHomeScore = match.homeScore;
+		finalAwayScore = match.awayScore;
+		showFinalOverlay = true;
 
-    match.setup([...homeStartPositions, ...awayStartPositions], playerStats, starterRoles, [homeStyle, awayStyle], [homeMentality, awayMentality], true);
-    
-    // Assign managed team so the engine can skip AI auto-subs for the user
-    match.managedTeam = isHome ? 0 : 1;
+		// Save Replay
+		if (match.recorder) {
+			match.recorder.saveToIndexedDB(match.analytics, playerLabels);
+		}
+	}
 
-    // attach bench if provided
-    match.benchStats = benchStatsArr;
-    match.benchRoles = benchRolesArr;
+	requestAnimationFrame(gameLoop);
+}
 
-    requestAnimationFrame(gameLoop);
-  });
+onMount(() => {
+	// apply any tactical overrides saved earlier
+	let overrides: any = null;
+	try {
+		const raw = sessionStorage.getItem("tacticalOverrides");
+		if (raw) {
+			overrides = JSON.parse(raw);
+			sessionStorage.removeItem("tacticalOverrides");
+		}
+	} catch (e) {
+		console.error("Failed to parse tactical overrides", e);
+	}
 
-  function startSecondHalf() {
-    // Swap sides (mirror across X=52.5)
-    const swappedHome = homeStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
-    const swappedAway = awayStartPositions.map(p => ({ x: 105 - p.x, y: 68 - p.y }));
-    
-    // Half-time Stamina Recovery (approx +15%)
-    for (let i = 0; i < 22; i++) {
-        const offset = i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA;
-        const currentStamina = match.memory.playerBuffer[offset];
-        match.memory.playerBuffer[offset] = Math.min(1.0, currentStamina + 0.15);
-    }
+	// 1. Get Formations
+	const homeForm =
+		formations[data.homeTeam.formation] || formations["4-4-2 Wide"];
+	const awayForm =
+		formations[data.awayTeam.formation] || formations["4-4-2 Wide"];
 
-    match.currentHalf = 2;
-    // We pass empty arrays for styles/mentalities during half time so they don't overwrite current live states
-    match.setup([...swappedHome, ...swappedAway], playerStats, starterRoles, undefined, undefined, false);
-    match.status = MatchStatus.KICKOFF;
-  }
+	// 2. Map to Pitch (105m x 68m)
+	for (let i = 0; i < 11; i++) {
+		let px = homeForm[i].x;
+		let py = homeForm[i].y;
 
-  function startMatch() {
-    // user pressed kickoff – enable ticking and force PLAYING state
-    hasKickedOff = true;
-    match.status = MatchStatus.PLAYING;
-    // The ball is already placed at the center (52.5, 34.0) by match.setup()
-    // The closest player (usually the forward) will automatically pick it up.
-  }
+		// Priority: 1. Session Overrides (Pre-match setup) -> 2. Persistent Overrides (Club Tactics) -> 3. Base Formation
+		if (overrides && overrides.isHome && overrides.customPositions?.[i]) {
+			px = overrides.customPositions[i].x;
+			py = overrides.customPositions[i].y;
+		} else if (isHome && data.homeTeam.customPositions?.[i]) {
+			px = data.homeTeam.customPositions[i].x;
+			py = data.homeTeam.customPositions[i].y;
+		}
+		homeStartPositions.push({ x: px * 105, y: py * 68 });
+	}
+	for (let i = 0; i < 11; i++) {
+		let px = awayForm[i].x;
+		let py = awayForm[i].y;
 
-  function handleTacticsOverrides(o: any, roles: any, style: string, mentality: string) {
-      if (isHome) {
-          match.homeStyle = style;
-          match.homeMentality = mentality;
-      } else {
-          match.awayStyle = style;
-          match.awayMentality = mentality;
-      }
-      
-      // Update engine roles
-      const teamIdx = isHome ? 0 : 11;
-      for (let i = 0; i < 11; i++) {
-          if (roles[i]) {
-              match.roles[teamIdx + i] = roles[i];
-          }
-      }
-  }
+		if (overrides && !overrides.isHome && overrides.customPositions?.[i]) {
+			px = overrides.customPositions[i].x;
+			py = overrides.customPositions[i].y;
+		} else if (!isHome && data.awayTeam.customPositions?.[i]) {
+			// Note: if managing away team, we use their DB positions
+			px = data.awayTeam.customPositions[i].x;
+			py = data.awayTeam.customPositions[i].y;
+		}
+		awayStartPositions.push({ x: (1 - px) * 105, y: (1 - py) * 68 });
+	}
 
-  function handleTacticsSwap(id1: string, id2: string) {
-    const idx1 = squad.findIndex((p: any) => p.id === id1);
-    const idx2 = squad.findIndex((p: any) => p.id === id2);
-    
-    if (idx1 !== -1 && idx2 !== -1) {
-      const isSub = (idx1 < 11 && idx2 >= 11) || (idx2 < 11 && idx1 >= 11);
-      
-      if (isSub) {
-        const outIdx = idx1 < 11 ? idx1 : idx2;
-        const incomingId = idx1 >= 11 ? id1 : id2;
-        
-        const benchIdx = benchPlayers.findIndex((p: any) => p.id === incomingId);
-        if (benchIdx !== -1) {
-           const teamNum = isHome ? 0 : 1;
-           const didSub = match.makeSub(teamNum, outIdx, benchIdx);
-           if (!didSub) return;
-           
-           const incomingPlayer = benchPlayers.splice(benchIdx, 1)[0];
-           
-           const newSquad = [...squad];
-           newSquad[outIdx] = incomingPlayer;
-           const originalBenchIdx = newSquad.findIndex((p: any) => p.id === incomingId);
-           if (originalBenchIdx >= 11) {
-               newSquad.splice(originalBenchIdx, 1);
-           }
-           squad = newSquad;
-           benchPlayers = [...benchPlayers]; 
-        }
-      } else {
-        const newSquad = [...squad];
-        const temp = newSquad[idx1];
-        newSquad[idx1] = newSquad[idx2];
-        newSquad[idx2] = temp;
-        squad = newSquad;
-      }
-    }
-  }
+	// Prepare player list (possibly overridden squad)
+	const homePlayers = data.homePlayers || [];
+	const awayPlayers = data.awayPlayers || [];
+	squad = isHome ? homePlayers.slice() : awayPlayers.slice();
+	if (overrides && overrides.customSquad) {
+		squad = overrides.customSquad;
+	}
 
-  function handleSkip() {
-    if (isSimulating) return;
-    isSimulating = true;
-    showTacticsModal = false;
-    
-    // Use the high-speed batch simulation method
-    const results = match.simulateMatch();
-    finalHomeScore = results.homeScore;
-    finalAwayScore = results.awayScore;
-    
-    // Save Replay
-    if (match.recorder) {
-        match.recorder.saveToIndexedDB(match.analytics, playerLabels);
-    }
-    
-    isSimulating = false;
-    showFinalOverlay = true;
-  }
+	// Build full starter arrays for both teams; managed side can still use tactical overrides.
+	const managedRoles = squad.map((p: any, idx: number) => {
+		if (overrides?.customRoles?.[idx]) return overrides.customRoles[idx];
+		const team = isHome ? data.homeTeam : data.awayTeam;
+		return team.customRoles?.[idx] || p.role;
+	});
+	const managedStats = squad.map((p: any) => toEngineStats(p.attributes));
+	const opponentSquad = (isHome ? awayPlayers : homePlayers).slice();
+	const opponentRoles = opponentSquad.map((p: any) => p.role);
+	const opponentStats = opponentSquad.map((p: any) =>
+		toEngineStats(p.attributes),
+	);
 
-  function doManualSub(benchIdx: number) {
-    const teamNum = isHome ? 0 : 1;
-    const incoming = benchPlayers[benchIdx];
-    if (!incoming) return;
+	const starterStats = isHome
+		? [...managedStats.slice(0, 11), ...opponentStats.slice(0, 11)]
+		: [...opponentStats.slice(0, 11), ...managedStats.slice(0, 11)];
+	starterRoles = isHome
+		? [...managedRoles.slice(0, 11), ...opponentRoles.slice(0, 11)]
+		: [...opponentRoles.slice(0, 11), ...managedRoles.slice(0, 11)];
+	const benchStatsArr = managedStats.slice(11);
+	const benchRolesArr = managedRoles.slice(11);
+	benchPlayers = squad.slice(11);
 
-    // Logic: 
-    // 1. Try to find the most tired player in the SAME role
-    // 2. Fallback to the most tired player in the same general area (DEF/MID/FWD)
-    // 3. Absolute fallback: most tired outfield player
-    
-    const start = teamNum * 11;
-    let candidates = [];
-    for (let i = start; i < start + 11; i++) {
-      const p = squad[i - start];
-      if (p.role === 'GK') continue; // Never auto-sub GK
-      candidates.push({
-        index: i - start,
-        stamina: match.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA],
-        role: p.role
-      });
-    }
+	// assign to match instance after setup
+	playerStats = [...starterStats];
 
-    if (candidates.length === 0) return;
+	// 3. Labels (Numbers)
+	const hL = squad.slice(0, 11).map((p: any) => p.number?.toString() || "P");
+	const aL = (isHome ? awayPlayers : homePlayers)
+		.slice(0, 11)
+		.map((p: any) => p.number?.toString() || "P");
+	playerLabels = [...hL, ...aL];
 
-    // Filter by role match
-    const sameRole = candidates.filter(c => c.role === incoming.role);
-    let target;
-    
-    if (sameRole.length > 0) {
-      // Pick most tired of same role
-      target = sameRole.sort((a, b) => a.stamina - b.stamina)[0];
-    } else {
-      // Pick absolute most tired outfielder
-      target = candidates.sort((a, b) => a.stamina - b.stamina)[0];
-    }
+	const homeStyle =
+		overrides && overrides.isHome
+			? overrides.style || data.homeTeam.tacticalStyle
+			: data.homeTeam.tacticalStyle;
+	const awayStyle =
+		overrides && !overrides.isHome
+			? overrides.style || data.awayTeam.tacticalStyle
+			: data.awayTeam.tacticalStyle;
+	const homeMentality =
+		overrides && overrides.isHome
+			? overrides.mentality || data.homeTeam.mentality
+			: data.homeTeam.mentality;
+	const awayMentality =
+		overrides && !overrides.isHome
+			? overrides.mentality || data.awayTeam.mentality
+			: data.awayTeam.mentality;
 
-    const outIdx = target.index;
-    const didSub = match.makeSub(teamNum, outIdx, benchIdx);
-    if (!didSub) return;
+	match.setup(
+		[...homeStartPositions, ...awayStartPositions],
+		playerStats,
+		starterRoles,
+		[homeStyle, awayStyle],
+		[homeMentality, awayMentality],
+		true,
+	);
 
-    const newSquad = [...squad];
-    newSquad[outIdx] = incoming;
-    squad = newSquad;
+	// Assign managed team so the engine can skip AI auto-subs for the user
+	match.managedTeam = isHome ? 0 : 1;
 
-    // also update local benchPlayers list so button disappears
-    benchPlayers.splice(benchIdx, 1);
-    benchPlayers = [...benchPlayers];
-    showSubs = false;
-  }
+	// attach bench if provided
+	match.benchStats = benchStatsArr;
+	match.benchRoles = benchRolesArr;
+
+	requestAnimationFrame(gameLoop);
+});
+
+function startSecondHalf() {
+	// Swap sides (mirror across X=52.5)
+	const swappedHome = homeStartPositions.map((p) => ({
+		x: 105 - p.x,
+		y: 68 - p.y,
+	}));
+	const swappedAway = awayStartPositions.map((p) => ({
+		x: 105 - p.x,
+		y: 68 - p.y,
+	}));
+
+	// Half-time Stamina Recovery (approx +15%)
+	for (let i = 0; i < 22; i++) {
+		const offset = i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA;
+		const currentStamina = match.memory.playerBuffer[offset];
+		match.memory.playerBuffer[offset] = Math.min(1.0, currentStamina + 0.15);
+	}
+
+	match.currentHalf = 2;
+	// We pass empty arrays for styles/mentalities during half time so they don't overwrite current live states
+	match.setup(
+		[...swappedHome, ...swappedAway],
+		playerStats,
+		starterRoles,
+		undefined,
+		undefined,
+		false,
+	);
+	match.status = MatchStatus.KICKOFF;
+}
+
+function startMatch() {
+	// user pressed kickoff – enable ticking and force PLAYING state
+	hasKickedOff = true;
+	match.status = MatchStatus.PLAYING;
+	// The ball is already placed at the center (52.5, 34.0) by match.setup()
+	// The closest player (usually the forward) will automatically pick it up.
+}
+
+function handleTacticsOverrides(
+	o: any,
+	roles: any,
+	style: string,
+	mentality: string,
+) {
+	if (isHome) {
+		match.homeStyle = style;
+		match.homeMentality = mentality;
+	} else {
+		match.awayStyle = style;
+		match.awayMentality = mentality;
+	}
+
+	// Update engine roles
+	const teamIdx = isHome ? 0 : 11;
+	for (let i = 0; i < 11; i++) {
+		if (roles[i]) {
+			match.roles[teamIdx + i] = roles[i];
+		}
+	}
+}
+
+function handleTacticsSwap(id1: string, id2: string) {
+	const idx1 = squad.findIndex((p: any) => p.id === id1);
+	const idx2 = squad.findIndex((p: any) => p.id === id2);
+
+	if (idx1 !== -1 && idx2 !== -1) {
+		const isSub = (idx1 < 11 && idx2 >= 11) || (idx2 < 11 && idx1 >= 11);
+
+		if (isSub) {
+			const outIdx = idx1 < 11 ? idx1 : idx2;
+			const incomingId = idx1 >= 11 ? id1 : id2;
+
+			const benchIdx = benchPlayers.findIndex((p: any) => p.id === incomingId);
+			if (benchIdx !== -1) {
+				const teamNum = isHome ? 0 : 1;
+				const didSub = match.makeSub(teamNum, outIdx, benchIdx);
+				if (!didSub) return;
+
+				const incomingPlayer = benchPlayers.splice(benchIdx, 1)[0];
+
+				const newSquad = [...squad];
+				newSquad[outIdx] = incomingPlayer;
+				const originalBenchIdx = newSquad.findIndex(
+					(p: any) => p.id === incomingId,
+				);
+				if (originalBenchIdx >= 11) {
+					newSquad.splice(originalBenchIdx, 1);
+				}
+				squad = newSquad;
+				benchPlayers = [...benchPlayers];
+			}
+		} else {
+			const newSquad = [...squad];
+			const temp = newSquad[idx1];
+			newSquad[idx1] = newSquad[idx2];
+			newSquad[idx2] = temp;
+			squad = newSquad;
+		}
+	}
+}
+
+function handleSkip() {
+	if (isSimulating) return;
+	isSimulating = true;
+	showTacticsModal = false;
+
+	// Use the high-speed batch simulation method
+	const results = match.simulateMatch();
+	finalHomeScore = results.homeScore;
+	finalAwayScore = results.awayScore;
+
+	// Save Replay
+	if (match.recorder) {
+		match.recorder.saveToIndexedDB(match.analytics, playerLabels);
+	}
+
+	isSimulating = false;
+	showFinalOverlay = true;
+}
+
+function doManualSub(benchIdx: number) {
+	const teamNum = isHome ? 0 : 1;
+	const incoming = benchPlayers[benchIdx];
+	if (!incoming) return;
+
+	// Logic:
+	// 1. Try to find the most tired player in the SAME role
+	// 2. Fallback to the most tired player in the same general area (DEF/MID/FWD)
+	// 3. Absolute fallback: most tired outfield player
+
+	const start = teamNum * 11;
+	let candidates = [];
+	for (let i = start; i < start + 11; i++) {
+		const p = squad[i - start];
+		if (p.role === "GK") continue; // Never auto-sub GK
+		candidates.push({
+			index: i - start,
+			stamina:
+				match.memory.playerBuffer[i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA],
+			role: p.role,
+		});
+	}
+
+	if (candidates.length === 0) return;
+
+	// Filter by role match
+	const sameRole = candidates.filter((c) => c.role === incoming.role);
+	let target;
+
+	if (sameRole.length > 0) {
+		// Pick most tired of same role
+		target = sameRole.sort((a, b) => a.stamina - b.stamina)[0];
+	} else {
+		// Pick absolute most tired outfielder
+		target = candidates.sort((a, b) => a.stamina - b.stamina)[0];
+	}
+
+	const outIdx = target.index;
+	const didSub = match.makeSub(teamNum, outIdx, benchIdx);
+	if (!didSub) return;
+
+	const newSquad = [...squad];
+	newSquad[outIdx] = incoming;
+	squad = newSquad;
+
+	// also update local benchPlayers list so button disappears
+	benchPlayers.splice(benchIdx, 1);
+	benchPlayers = [...benchPlayers];
+	showSubs = false;
+}
 </script>
 
 <div class="match-wrapper min-h-screen bg-light-bg flex flex-col relative overflow-hidden">

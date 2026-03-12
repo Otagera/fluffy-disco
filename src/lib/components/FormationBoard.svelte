@@ -1,299 +1,347 @@
 <script lang="ts">
-  import { formations } from '$lib/engine/ai/Formations';
-  import type { PlayerProfile, TeamProfile, ScoutingReport } from '$lib/data/types';
-  import PlayerModal from '$lib/components/PlayerModal.svelte';
-  import { TACTICAL_COMPATIBILITY, getTacticalCompatibility, type TacticalStyle, type Mentality } from '$lib/engine/ai/Compatibility';
+import PlayerModal from "$lib/components/PlayerModal.svelte";
+import type {
+	PlayerProfile,
+	ScoutingReport,
+	TeamProfile,
+} from "$lib/data/types";
+import {
+	getTacticalCompatibility,
+	type Mentality,
+	TACTICAL_COMPATIBILITY,
+	type TacticalStyle,
+} from "$lib/engine/ai/Compatibility";
+import { formations } from "$lib/engine/ai/Formations";
 
-  let { 
-    team, 
-    players, 
-    editable = false,
-    allowRoleOverrides = false,
-    allowPositionOverrides = false,
-    allowSubs = false,
-    isHome = true,
-    currentDate = '2024-08-01',
-    managerTeamId = '',
-    scoutingReports = [],
-    shortlist = [],
-    onSwap = () => {},
-    onFormationChange = () => {},
-    onOverridesChange = () => {}
-  }: { 
-    team: TeamProfile, 
-    players: PlayerProfile[], 
-    editable?: boolean,
-    allowRoleOverrides?: boolean,
-    allowPositionOverrides?: boolean,
-    allowSubs?: boolean,
-    isHome?: boolean,
-    currentDate?: string,
-    managerTeamId?: string,
-    scoutingReports?: ScoutingReport[],
-    shortlist?: string[],
-    onSwap?: (id1: string, id2: string) => void,
-    onFormationChange?: (name: string) => void,
-    onOverridesChange?: (positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) => void
-  } = $props();
+let {
+	team,
+	players,
+	editable = false,
+	allowRoleOverrides = false,
+	allowPositionOverrides = false,
+	allowSubs = false,
+	isHome = true,
+	currentDate = "2024-08-01",
+	managerTeamId = "",
+	scoutingReports = [],
+	shortlist = [],
+	onSwap = () => {},
+	onFormationChange = () => {},
+	onOverridesChange = () => {},
+}: {
+	team: TeamProfile;
+	players: PlayerProfile[];
+	editable?: boolean;
+	allowRoleOverrides?: boolean;
+	allowPositionOverrides?: boolean;
+	allowSubs?: boolean;
+	isHome?: boolean;
+	currentDate?: string;
+	managerTeamId?: string;
+	scoutingReports?: ScoutingReport[];
+	shortlist?: string[];
+	onSwap?: (id1: string, id2: string) => void;
+	onFormationChange?: (name: string) => void;
+	onOverridesChange?: (
+		positions: Record<number, { x: number; y: number }>,
+		roles: Record<number, string>,
+		style: string,
+		mentality: string,
+	) => void;
+} = $props();
 
-  const startingXI = $derived(players.slice(0, 11));
-  const bench = $derived(players.slice(11));
+const startingXI = $derived(players.slice(0, 11));
+const bench = $derived(players.slice(11));
 
-  const baseFormationPositions = $derived(formations[team.formation] || formations['4-4-2 Wide']);
+const baseFormationPositions = $derived(
+	formations[team.formation] || formations["4-4-2 Wide"],
+);
 
-  let customPositions = $state<Record<number, {x: number, y: number}>>(team.customPositions || {});
-  let customRoles = $state<Record<number, string>>(team.customRoles || {});
-  let currentStyle = $state(team.tacticalStyle || 'Balanced');
-  let currentMentality = $state(team.mentality || 'BALANCED');
+let customPositions = $state<Record<number, { x: number; y: number }>>(
+	team.customPositions || {},
+);
+let customRoles = $state<Record<number, string>>(team.customRoles || {});
+let currentStyle = $state(team.tacticalStyle || "Balanced");
+let currentMentality = $state(team.mentality || "BALANCED");
 
-  const STYLES = Object.keys(TACTICAL_COMPATIBILITY);
-  const MENTALITIES: Mentality[] = ['ULTRA_ATTACKING', 'ATTACKING', 'BALANCED', 'DEFENSIVE', 'ULTRA_DEFENSIVE'];
+const STYLES = Object.keys(TACTICAL_COMPATIBILITY);
+const MENTALITIES: Mentality[] = [
+	"ULTRA_ATTACKING",
+	"ATTACKING",
+	"BALANCED",
+	"DEFENSIVE",
+	"ULTRA_DEFENSIVE",
+];
 
-  const compatibilityScore = $derived(getTacticalCompatibility(currentStyle, currentMentality, team.formation));
+const compatibilityScore = $derived(
+	getTacticalCompatibility(currentStyle, currentMentality, team.formation),
+);
 
-  // Unified Pitch Player State for reactivity
-  const pitchPlayers = $derived(baseFormationPositions.map((basePos, i) => ({
-    basePos,
-    player: startingXI[i],
-    displayedRole: customRoles[i] || getAutoRole(i, basePos.role)
-  })));
-  
-  // HTML5 Drag State (List)
-  let draggedPlayerId = $state<string | null>(null);
-  
-  // Pointer Drag State (Pitch)
-  let svgElement: SVGSVGElement | null = $state(null);
-  let pitchDraggingIdx = $state<number | null>(null);
-  let dragX = $state<number | null>(null);
-  let dragY = $state<number | null>(null);
-  let dragOffsetX = $state(0);
-  let dragOffsetY = $state(0);
-  
-  // Hover state for both HTML5 and Pointer drags
-  let hoveredSlotIndex = $state<number | null>(null);
+// Unified Pitch Player State for reactivity
+const pitchPlayers = $derived(
+	baseFormationPositions.map((basePos, i) => ({
+		basePos,
+		player: startingXI[i],
+		displayedRole: customRoles[i] || getAutoRole(i, basePos.role),
+	})),
+);
 
-  let selectedPlayerForModal = $state<PlayerProfile | null>(null);
-  const selectedPlayerScoutingLevel = $derived.by(() => {
-    const p = selectedPlayerForModal;
-    if (!p) return 0;
-    const report = (scoutingReports || []).find(r => r.playerId === p.id && r.teamId === managerTeamId);
-    return report ? report.level : 0;
-  });
+// HTML5 Drag State (List)
+let draggedPlayerId = $state<string | null>(null);
 
-  // Deep comparison helper to avoid unnecessary dirty triggers
-  function hasChanged(newPos: any, newRoles: any, newStyle: string, newMentality: string) {
-      if (newStyle !== team.tacticalStyle) return true;
-      if (newMentality !== team.mentality) return true;
-      if (JSON.stringify(newPos) !== JSON.stringify(team.customPositions || {})) return true;
-      if (JSON.stringify(newRoles) !== JSON.stringify(team.customRoles || {})) return true;
-      return false;
-  }
+// Pointer Drag State (Pitch)
+let svgElement: SVGSVGElement | null = $state(null);
+let pitchDraggingIdx = $state<number | null>(null);
+let dragX = $state<number | null>(null);
+let dragY = $state<number | null>(null);
+let dragOffsetX = $state(0);
+let dragOffsetY = $state(0);
 
-  $effect(() => {
-    // Only emit if there's a meaningful delta from the team's base props
-    if (hasChanged(customPositions, customRoles, currentStyle, currentMentality)) {
-        onOverridesChange(customPositions, customRoles, currentStyle, currentMentality);
-    }
-  });
+// Hover state for both HTML5 and Pointer drags
+let hoveredSlotIndex = $state<number | null>(null);
 
-  function getAvailableRoles(baseRole: string) {
-    if (baseRole === 'GK') return ['GK'];
-    if (baseRole === 'DEF') return ['CB', 'FB', 'WB', 'BWM'];
-    if (baseRole === 'MID') return ['BWM', 'DLP', 'MEZ', 'B2B', 'AM', 'WM'];
-    if (baseRole === 'FWD') return ['ST', 'IF', 'W', 'AF', 'TM', 'AM'];
-    return [];
-  }
+let selectedPlayerForModal = $state<PlayerProfile | null>(null);
+const selectedPlayerScoutingLevel = $derived.by(() => {
+	const p = selectedPlayerForModal;
+	if (!p) return 0;
+	const report = (scoutingReports || []).find(
+		(r) => r.playerId === p.id && r.teamId === managerTeamId,
+	);
+	return report ? report.level : 0;
+});
 
-  function getAutoRole(idx: number, baseRole: string) {
-    if (baseRole === 'GK') return 'GK';
-    if (baseRole === 'DEF') {
-      const pos = getPos(idx);
-      const isWide = pos.y < 0.3 || pos.y > 0.7;
-      return isWide ? 'FB' : 'CB';
-    }
-    if (baseRole === 'MID') {
-      const pos = getPos(idx);
-      const isWide = pos.y < 0.3 || pos.y > 0.7;
-      return isWide ? 'WM' : 'B2B';
-    }
-    if (baseRole === 'FWD') {
-      const pos = getPos(idx);
-      const isWide = pos.y < 0.3 || pos.y > 0.7;
-      return isWide ? 'W' : 'ST';
-    }
-    return baseRole;
-  }
+// Deep comparison helper to avoid unnecessary dirty triggers
+function hasChanged(
+	newPos: any,
+	newRoles: any,
+	newStyle: string,
+	newMentality: string,
+) {
+	if (newStyle !== team.tacticalStyle) return true;
+	if (newMentality !== team.mentality) return true;
+	if (JSON.stringify(newPos) !== JSON.stringify(team.customPositions || {}))
+		return true;
+	if (JSON.stringify(newRoles) !== JSON.stringify(team.customRoles || {}))
+		return true;
+	return false;
+}
 
-  function getPos(idx: number) {
-    if (customPositions[idx] && allowPositionOverrides) return customPositions[idx];
-    return baseFormationPositions[idx] || { x: 0.5, y: 0.5, role: 'MID' };
-  }
+$effect(() => {
+	// Only emit if there's a meaningful delta from the team's base props
+	if (
+		hasChanged(customPositions, customRoles, currentStyle, currentMentality)
+	) {
+		onOverridesChange(
+			customPositions,
+			customRoles,
+			currentStyle,
+			currentMentality,
+		);
+	}
+});
 
-  function resetOverrides() {
-    customPositions = {};
-    customRoles = {};
-    currentStyle = team.tacticalStyle || 'Balanced';
-    currentMentality = team.mentality || 'BALANCED';
-  }
+function getAvailableRoles(baseRole: string) {
+	if (baseRole === "GK") return ["GK"];
+	if (baseRole === "DEF") return ["CB", "FB", "WB", "BWM"];
+	if (baseRole === "MID") return ["BWM", "DLP", "MEZ", "B2B", "AM", "WM"];
+	if (baseRole === "FWD") return ["ST", "IF", "W", "AF", "TM", "AM"];
+	return [];
+}
 
-  // --- HTML5 Native Drag & Drop (Squad List <-> Pitch) ---
-  function handleListDragStart(e: DragEvent, id: string) {
-    if (!editable) return;
-    draggedPlayerId = id;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-    }
-  }
+function getAutoRole(idx: number, baseRole: string) {
+	if (baseRole === "GK") return "GK";
+	if (baseRole === "DEF") {
+		const pos = getPos(idx);
+		const isWide = pos.y < 0.3 || pos.y > 0.7;
+		return isWide ? "FB" : "CB";
+	}
+	if (baseRole === "MID") {
+		const pos = getPos(idx);
+		const isWide = pos.y < 0.3 || pos.y > 0.7;
+		return isWide ? "WM" : "B2B";
+	}
+	if (baseRole === "FWD") {
+		const pos = getPos(idx);
+		const isWide = pos.y < 0.3 || pos.y > 0.7;
+		return isWide ? "W" : "ST";
+	}
+	return baseRole;
+}
 
-  function handleDropOnPlayer(e: DragEvent, targetId: string) {
-    if (!editable || !draggedPlayerId) return;
-    e.preventDefault();
-    if (draggedPlayerId !== targetId) {
-      onSwap(draggedPlayerId, targetId);
-    }
-    draggedPlayerId = null;
-    hoveredSlotIndex = null;
-  }
+function getPos(idx: number) {
+	if (customPositions[idx] && allowPositionOverrides)
+		return customPositions[idx];
+	return baseFormationPositions[idx] || { x: 0.5, y: 0.5, role: "MID" };
+}
 
-  function handleSvgDragOver(e: DragEvent) {
-    if (!editable || !draggedPlayerId || !svgElement) return;
-    e.preventDefault();
-    
-    const pt = svgElement.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const screenCTM = svgElement.getScreenCTM();
-    if (!screenCTM) return;
-    const svgP = pt.matrixTransform(screenCTM.inverse());
-    
-    const nx = svgP.x / 105;
-    const ny = svgP.y / 68;
+function resetOverrides() {
+	customPositions = {};
+	customRoles = {};
+	currentStyle = team.tacticalStyle || "Balanced";
+	currentMentality = team.mentality || "BALANCED";
+}
 
-    let closestIdx = -1;
-    let minDist = Infinity;
+// --- HTML5 Native Drag & Drop (Squad List <-> Pitch) ---
+function handleListDragStart(e: DragEvent, id: string) {
+	if (!editable) return;
+	draggedPlayerId = id;
+	if (e.dataTransfer) {
+		e.dataTransfer.effectAllowed = "move";
+	}
+}
 
-    for (let i = 0; i < 11; i++) {
-      const pos = getPos(i);
-      const dx = pos.x - nx;
-      const dy = pos.y - ny;
-      const aspectDist = Math.sqrt(dx*dx + (dy*dy*(68/105)*(68/105))); 
-      if (aspectDist < minDist) {
-        minDist = aspectDist;
-        closestIdx = i;
-      }
-    }
+function handleDropOnPlayer(e: DragEvent, targetId: string) {
+	if (!editable || !draggedPlayerId) return;
+	e.preventDefault();
+	if (draggedPlayerId !== targetId) {
+		onSwap(draggedPlayerId, targetId);
+	}
+	draggedPlayerId = null;
+	hoveredSlotIndex = null;
+}
 
-    if (minDist < 0.1) {
-      hoveredSlotIndex = closestIdx;
-    } else {
-      hoveredSlotIndex = null;
-    }
-  }
+function handleSvgDragOver(e: DragEvent) {
+	if (!editable || !draggedPlayerId || !svgElement) return;
+	e.preventDefault();
 
-  function handleSvgDrop(e: DragEvent) {
-    if (!editable || !draggedPlayerId) return;
-    e.preventDefault();
-    if (hoveredSlotIndex !== null) {
-      const targetPlayer = startingXI[hoveredSlotIndex];
-      if (targetPlayer && draggedPlayerId !== targetPlayer.id) {
-        onSwap(draggedPlayerId, targetPlayer.id);
-      }
-    }
-    draggedPlayerId = null;
-    hoveredSlotIndex = null;
-  }
+	const pt = svgElement.createSVGPoint();
+	pt.x = e.clientX;
+	pt.y = e.clientY;
+	const screenCTM = svgElement.getScreenCTM();
+	if (!screenCTM) return;
+	const svgP = pt.matrixTransform(screenCTM.inverse());
 
-  // --- Pure Pointer Events (Pitch Dots) ---
-  function handlePointerDown(e: PointerEvent, idx: number) {
-    if (!editable) return;
-    if (baseFormationPositions[idx]?.role === 'GK') return; 
-    
-    pitchDraggingIdx = idx;
-    const pos = getPos(idx);
-    
-    // Explicitly set these BEFORE calculating offsets to ensure reactive coherence
-    dragX = pos.x;
-    dragY = pos.y;
-    dragOffsetX = 0;
-    dragOffsetY = 0;
-    
-    if (svgElement) {
-      const pt = svgElement.createSVGPoint();
-      pt.x = e.clientX; pt.y = e.clientY;
-      const screenCTM = svgElement.getScreenCTM();
-      if (screenCTM) {
-        const svgP = pt.matrixTransform(screenCTM.inverse());
-        dragOffsetX = pos.x - (svgP.x / 105);
-        dragOffsetY = pos.y - (svgP.y / 68);
-      }
-    }
-    
-    (e.target as Element).setPointerCapture(e.pointerId);
-  }
+	const nx = svgP.x / 105;
+	const ny = svgP.y / 68;
 
-  function handlePointerMove(e: PointerEvent) {
-    if (pitchDraggingIdx === null || !svgElement) return;
-    
-    const pt = svgElement.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const screenCTM = svgElement.getScreenCTM();
-    if (!screenCTM) return;
-    const svgP = pt.matrixTransform(screenCTM.inverse());
-    
-    let nx = (svgP.x / 105) + dragOffsetX; 
-    let ny = (svgP.y / 68) + dragOffsetY;
-    nx = Math.max(0.05, Math.min(0.95, nx));
-    ny = Math.max(0.05, Math.min(0.95, ny));
-    
-    dragX = nx;
-    dragY = ny;
+	let closestIdx = -1;
+	let minDist = Infinity;
 
-    let closestIdx = -1;
-    let minDist = Infinity;
-    for (let i = 0; i < 11; i++) {
-      if (i === pitchDraggingIdx) continue;
-      const pos = getPos(i);
-      const dx = pos.x - nx;
-      const dy = pos.y - ny;
-      const aspectDist = Math.sqrt(dx*dx + (dy*dy*(68/105)*(68/105))); 
-      if (aspectDist < minDist) {
-        minDist = aspectDist;
-        closestIdx = i;
-      }
-    }
+	for (let i = 0; i < 11; i++) {
+		const pos = getPos(i);
+		const dx = pos.x - nx;
+		const dy = pos.y - ny;
+		const aspectDist = Math.sqrt(dx * dx + dy * dy * (68 / 105) * (68 / 105));
+		if (aspectDist < minDist) {
+			minDist = aspectDist;
+			closestIdx = i;
+		}
+	}
 
-    if (minDist < 0.05) { 
-      hoveredSlotIndex = closestIdx;
-    } else {
-      hoveredSlotIndex = null;
-    }
-  }
+	if (minDist < 0.1) {
+		hoveredSlotIndex = closestIdx;
+	} else {
+		hoveredSlotIndex = null;
+	}
+}
 
-  function handlePointerUp() { 
-    if (pitchDraggingIdx === null) return;
+function handleSvgDrop(e: DragEvent) {
+	if (!editable || !draggedPlayerId) return;
+	e.preventDefault();
+	if (hoveredSlotIndex !== null) {
+		const targetPlayer = startingXI[hoveredSlotIndex];
+		if (targetPlayer && draggedPlayerId !== targetPlayer.id) {
+			onSwap(draggedPlayerId, targetPlayer.id);
+		}
+	}
+	draggedPlayerId = null;
+	hoveredSlotIndex = null;
+}
 
-    if (hoveredSlotIndex !== null) {
-      const p1 = startingXI[pitchDraggingIdx];
-      const p2 = startingXI[hoveredSlotIndex];
-      if (p1 && p2) {
-        onSwap(p1.id, p2.id);
-      }
-    } else if (allowPositionOverrides && dragX !== null && dragY !== null) {
-      customPositions[pitchDraggingIdx] = { x: dragX, y: dragY };
-    }
-    
-    pitchDraggingIdx = null;
-    hoveredSlotIndex = null;
-    dragX = null;
-    dragY = null;
-    dragOffsetX = 0;
-    dragOffsetY = 0;
-  }
+// --- Pure Pointer Events (Pitch Dots) ---
+function handlePointerDown(e: PointerEvent, idx: number) {
+	if (!editable) return;
+	if (baseFormationPositions[idx]?.role === "GK") return;
 
-  function getStatColor(val: number) {
-    if (val >= 16) return 'text-green-600';
-    if (val >= 12) return 'text-amber-600';
-    return 'text-red-600';
-  }
+	pitchDraggingIdx = idx;
+	const pos = getPos(idx);
+
+	// Explicitly set these BEFORE calculating offsets to ensure reactive coherence
+	dragX = pos.x;
+	dragY = pos.y;
+	dragOffsetX = 0;
+	dragOffsetY = 0;
+
+	if (svgElement) {
+		const pt = svgElement.createSVGPoint();
+		pt.x = e.clientX;
+		pt.y = e.clientY;
+		const screenCTM = svgElement.getScreenCTM();
+		if (screenCTM) {
+			const svgP = pt.matrixTransform(screenCTM.inverse());
+			dragOffsetX = pos.x - svgP.x / 105;
+			dragOffsetY = pos.y - svgP.y / 68;
+		}
+	}
+
+	(e.target as Element).setPointerCapture(e.pointerId);
+}
+
+function handlePointerMove(e: PointerEvent) {
+	if (pitchDraggingIdx === null || !svgElement) return;
+
+	const pt = svgElement.createSVGPoint();
+	pt.x = e.clientX;
+	pt.y = e.clientY;
+	const screenCTM = svgElement.getScreenCTM();
+	if (!screenCTM) return;
+	const svgP = pt.matrixTransform(screenCTM.inverse());
+
+	let nx = svgP.x / 105 + dragOffsetX;
+	let ny = svgP.y / 68 + dragOffsetY;
+	nx = Math.max(0.05, Math.min(0.95, nx));
+	ny = Math.max(0.05, Math.min(0.95, ny));
+
+	dragX = nx;
+	dragY = ny;
+
+	let closestIdx = -1;
+	let minDist = Infinity;
+	for (let i = 0; i < 11; i++) {
+		if (i === pitchDraggingIdx) continue;
+		const pos = getPos(i);
+		const dx = pos.x - nx;
+		const dy = pos.y - ny;
+		const aspectDist = Math.sqrt(dx * dx + dy * dy * (68 / 105) * (68 / 105));
+		if (aspectDist < minDist) {
+			minDist = aspectDist;
+			closestIdx = i;
+		}
+	}
+
+	if (minDist < 0.05) {
+		hoveredSlotIndex = closestIdx;
+	} else {
+		hoveredSlotIndex = null;
+	}
+}
+
+function handlePointerUp() {
+	if (pitchDraggingIdx === null) return;
+
+	if (hoveredSlotIndex !== null) {
+		const p1 = startingXI[pitchDraggingIdx];
+		const p2 = startingXI[hoveredSlotIndex];
+		if (p1 && p2) {
+			onSwap(p1.id, p2.id);
+		}
+	} else if (allowPositionOverrides && dragX !== null && dragY !== null) {
+		customPositions[pitchDraggingIdx] = { x: dragX, y: dragY };
+	}
+
+	pitchDraggingIdx = null;
+	hoveredSlotIndex = null;
+	dragX = null;
+	dragY = null;
+	dragOffsetX = 0;
+	dragOffsetY = 0;
+}
+
+function getStatColor(val: number) {
+	if (val >= 16) return "text-green-600";
+	if (val >= 12) return "text-amber-600";
+	return "text-red-600";
+}
 </script>
 
 <div class="flex flex-col gap-6">

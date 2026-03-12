@@ -1,6 +1,6 @@
 <script lang="ts">
-  import '../app.css';
-  let { data, children } = $props();
+import "../app.css";
+let { data, children } = $props();
 </script>
 
 {#if data.hasSave}
@@ -15,7 +15,8 @@
       </a>
       <div class="h-4 w-[1px] bg-white/20"></div>
       <div class="flex items-center gap-6 text-[0.65rem] font-black uppercase tracking-widest text-light-subtle">
-        <a href="/league" class="hover:text-white transition-colors">Standings</a>
+        <a href="/league" class="hover:text-white transition-colors">Overview</a>
+        <a href="/scouting" class="hover:text-white transition-colors">Recruitment Hub</a>
         <a href="/formation" class="hover:text-white transition-colors">Tactics</a>
         <a href="/inbox" class="hover:text-white transition-colors flex items-center gap-2">
           Inbox

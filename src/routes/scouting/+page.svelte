@@ -1,33 +1,44 @@
 <script lang="ts">
-  import { enhance } from '$app/forms';
-  import type { PageData } from './$types';
-  import { calculateAge } from '$lib/data/ratings';
-  import PlayerModal from '$lib/components/PlayerModal.svelte';
+import { enhance } from "$app/forms";
+import PlayerModal from "$lib/components/PlayerModal.svelte";
+import { calculateAge } from "$lib/data/ratings";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  const shortlist = $derived((data.shortlist as string[]) || []);
-  const currentPage = $derived(Number(data.currentPage) || 1);
-  const totalPages = $derived(Number(data.totalPages) || 1);
+const shortlist = $derived((data.shortlist as string[]) || []);
+const currentPage = $derived(Number(data.currentPage) || 1);
+const totalPages = $derived(Number(data.totalPages) || 1);
 
-  let activeTab = $state<'search' | 'shortlist'>('search');
-  let selectedPlayerId = $state<string | null>(null);
-  const selectedPlayer = $derived(selectedPlayerId ? (data.players.find((p: any) => p.id === selectedPlayerId) || data.shortlistedPlayers.find((p: any) => p.id === selectedPlayerId)) : null);
+let activeTab = $state<"search" | "shortlist">("search");
+let selectedPlayerId = $state<string | null>(null);
+const selectedPlayer = $derived(
+	selectedPlayerId
+		? data.players.find((p: any) => p.id === selectedPlayerId) ||
+				data.shortlistedPlayers.find((p: any) => p.id === selectedPlayerId)
+		: null,
+);
 
-  function getKnowledgeLevel(playerId: string) {
-    const report = (data.scoutingReports || []).find((r: any) => r.playerId === playerId && r.teamId === data.managerTeamId);
-    const player = data.players.find((p: any) => p.id === playerId) || data.shortlistedPlayers.find((p: any) => p.id === playerId);
-    if (player?.teamId === data.managerTeamId) return 2;
-    return report?.level || 0;
-  }
+function getKnowledgeLevel(playerId: string) {
+	const report = (data.scoutingReports || []).find(
+		(r: any) => r.playerId === playerId && r.teamId === data.managerTeamId,
+	);
+	const player =
+		data.players.find((p: any) => p.id === playerId) ||
+		data.shortlistedPlayers.find((p: any) => p.id === playerId);
+	if (player?.teamId === data.managerTeamId) return 2;
+	return report?.level || 0;
+}
 
-  const priorityScouts = $derived((data.scoutingReports || []).filter((r: any) => r.isPriority));
-  const activeSlotsCount = $derived(priorityScouts.length);
+const priorityScouts = $derived(
+	(data.scoutingReports || []).filter((r: any) => r.isPriority),
+);
+const activeSlotsCount = $derived(priorityScouts.length);
 
-  function getTeamName(teamId: string | null) {
-    if (!teamId) return 'Free Agent';
-    return (data.teams as any)[teamId]?.name || teamId;
-  }
+function getTeamName(teamId: string | null) {
+	if (!teamId) return "Free Agent";
+	return (data.teams as any)[teamId]?.name || teamId;
+}
 </script>
 
 <div class="max-w-7xl mx-auto p-4 sm:p-8">

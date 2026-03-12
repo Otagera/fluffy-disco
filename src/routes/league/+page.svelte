@@ -1,98 +1,97 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import { browserDB } from '$lib/data/dexie';
-  import { onMount } from 'svelte';
+import { onMount } from "svelte";
+import { browserDB } from "$lib/data/dexie";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  let activeTab = $state<'table' | 'fixtures' | 'stats' | 'news'>('table');
-  let selectedWeek = $state(data.currentWeek > 0 ? data.currentWeek : 1);
-  let availableReplays = $state<Set<string>>(new Set());
+let activeTab = $state<"table" | "fixtures" | "stats">("table");
+let selectedWeek = $state(data.currentWeek > 0 ? data.currentWeek : 1);
+let availableReplays = $state<Set<string>>(new Set());
 
-  // Top 3 news for the snippet
-  let topNews = $derived((data.activeLeague.news || []).slice(0, 3));
+function getPlayerName(playerId: string) {
+	return data.save.players?.[playerId]?.name || "Unknown Player";
+}
 
-  function getPlayerName(playerId: string) {
-    return data.save.players?.[playerId]?.name || 'Unknown Player';
-  }
+// Check for local replays on mount
+onMount(async () => {
+	try {
+		const replays = await browserDB.replays.toArray();
+		const replayIds = replays.map((r) => r.matchId);
+		availableReplays = new Set(replayIds);
+	} catch (e) {
+		console.error("Failed to load replays from DB", e);
+	}
+});
 
-  function getNewsIcon(type: string) {
-    switch (type) {
-      case 'BIG_RESULT': return '🔥';
-      case 'HAT_TRICK': return '⚽️';
-      case 'GOLDEN_BOOT': return '🏆';
-      case 'TOP_CLASH': return '⚔️';
-      default: return '📰';
-    }
-  }
+let sortedStandings = $derived(
+	[...data.activeLeague.standings].sort((a: any, b: any) => {
+		if (b.points !== a.points) return b.points - a.points;
+		const gdA = a.goalsFor - a.goalsAgainst;
+		const gdB = b.goalsFor - b.goalsAgainst;
+		return gdB - gdA;
+	}),
+);
 
-  // Check for local replays on mount
-  onMount(async () => {
-    try {
-      const replays = await browserDB.replays.toArray();
-      const replayIds = replays.map(r => r.matchId);
-      availableReplays = new Set(replayIds);
-    } catch (e) {
-      console.error('Failed to load replays from DB', e);
-    }
-  });
+let currentWeekFixtures = $derived(
+	data.leagueFixtures.filter((f: any) => f.week === selectedWeek),
+);
 
-  let sortedStandings = $derived([...data.activeLeague.standings].sort((a: any, b: any) => {
-    if (b.points !== a.points) return b.points - a.points;
-    const gdA = a.goalsFor - a.goalsAgainst;
-    const gdB = b.goalsFor - b.goalsAgainst;
-    return gdB - gdA;
-  }));
+let totalWeeks = $derived(
+	Math.max(...data.leagueFixtures.map((f: any) => f.week), 1),
+);
 
-  let currentWeekFixtures = $derived(
-    data.leagueFixtures.filter((f: any) => f.week === selectedWeek)
-  );
+let weeksArray = $derived(Array.from({ length: totalWeeks }, (_, i) => i + 1));
 
-  let totalWeeks = $derived(
-    Math.max(...data.leagueFixtures.map((f: any) => f.week), 1)
-  );
-  
-  let weeksArray = $derived(Array.from({ length: totalWeeks }, (_, i) => i + 1));
+function getTeamName(teamId: string) {
+	return data.save.teams?.[teamId]?.name || teamId;
+}
 
-  function getTeamName(teamId: string) {
-    return data.save.teams?.[teamId]?.name || teamId;
-  }
+function getTopPerformers(
+	statKey: "goals" | "assists" | "cleanSheets",
+	limit: number = 5,
+	roleFilter?: string,
+) {
+	const players = Object.values(data.save.players) as any[];
+	return players
+		.filter((p) => {
+			// Only include players from teams in the active league
+			const isInLeague = data.activeLeague.teams.some((tid: string) =>
+				data.save.teams[tid]?.players.includes(p.id),
+			);
+			if (!isInLeague) return false;
+			if (roleFilter && p.role !== roleFilter) return false;
+			return p.seasonStats && p.seasonStats[statKey] > 0;
+		})
+		.map((p) => {
+			const teamId =
+				data.activeLeague.teams.find((tid: string) =>
+					data.save.teams[tid]?.players.includes(p.id),
+				) || "";
+			return {
+				id: p.id,
+				name: p.name,
+				teamId,
+				stat: p.seasonStats[statKey],
+			};
+		})
+		.sort((a, b) => b.stat - a.stat)
+		.slice(0, limit);
+}
 
-  function getTopPerformers(statKey: 'goals' | 'assists' | 'cleanSheets', limit: number = 5, roleFilter?: string) {
-    const players = Object.values(data.save.players) as any[];
-    return players
-      .filter(p => {
-        // Only include players from teams in the active league
-        const isInLeague = data.activeLeague.teams.some((tid: string) => data.save.teams[tid]?.players.includes(p.id));
-        if (!isInLeague) return false;
-        if (roleFilter && p.role !== roleFilter) return false;
-        return p.seasonStats && p.seasonStats[statKey] > 0;
-      })
-      .map(p => {
-        const teamId = data.activeLeague.teams.find((tid: string) => data.save.teams[tid]?.players.includes(p.id)) || '';
-        return {
-          id: p.id,
-          name: p.name,
-          teamId,
-          stat: p.seasonStats[statKey]
-        };
-      })
-      .sort((a, b) => b.stat - a.stat)
-      .slice(0, limit);
-  }
-
-  function getZoneClass(level: number, pos: number) {
-    if (!level) return '';
-    if (level === 1) {
-      if (pos < 4) return 'border-l-4 border-blue-500 bg-blue-50/50';
-      if (pos >= 17) return 'border-l-4 border-red-500 bg-red-50/50';
-    } else if (level === 2) {
-      if (pos < 2) return 'border-l-4 border-green-500 bg-green-50/50';
-      if (pos >= 2 && pos < 6) return 'border-l-4 border-amber-500 bg-amber-50/50';
-      if (pos >= 21) return 'border-l-4 border-red-500 bg-red-50/50';
-    }
-    return '';
-  }
+function getZoneClass(level: number, pos: number) {
+	if (!level) return "";
+	if (level === 1) {
+		if (pos < 4) return "border-l-4 border-blue-500 bg-blue-50/50";
+		if (pos >= 17) return "border-l-4 border-red-500 bg-red-50/50";
+	} else if (level === 2) {
+		if (pos < 2) return "border-l-4 border-green-500 bg-green-50/50";
+		if (pos >= 2 && pos < 6)
+			return "border-l-4 border-amber-500 bg-amber-50/50";
+		if (pos >= 21) return "border-l-4 border-red-500 bg-red-50/50";
+	}
+	return "";
+}
 </script>
 
 <div class="min-h-screen bg-light-bg p-4 sm:p-8">
@@ -134,12 +133,6 @@
         Fixtures & Results
       </button>
       <button 
-        class="px-4 py-3 text-sm font-black uppercase tracking-widest border-b-4 transition-all {activeTab === 'news' ? 'border-primary text-primary' : 'border-transparent subtle hover:border-light-border'}"
-        onclick={() => activeTab = 'news'}
-      >
-        News Feed
-      </button>
-      <button 
         class="px-4 py-3 text-sm font-black uppercase tracking-widest border-b-4 transition-all {activeTab === 'stats' ? 'border-primary text-primary' : 'border-transparent subtle hover:border-light-border'}"
         onclick={() => activeTab = 'stats'}
       >
@@ -151,23 +144,6 @@
     <div class="bg-white rounded-3xl shadow-xl border border-light-border overflow-hidden">
       
       {#if activeTab === 'table'}
-        {#if topNews.length > 0}
-          <!-- News Snippet Ticker -->
-          <div class="bg-black text-white px-6 py-3 flex items-center gap-4 overflow-hidden border-b border-white/10 relative">
-            <div class="flex-shrink-0 bg-yellow-400 text-black px-2 py-0.5 rounded text-[0.65rem] font-black uppercase tracking-widest flex items-center gap-1 z-10 shadow-lg">
-              <span class="animate-pulse text-red-600">●</span> BREAKING
-            </div>
-            <div class="flex gap-12 whitespace-nowrap animate-ticker py-1">
-              {#each [...topNews, ...topNews] as news}
-                <div class="flex items-center gap-2 text-sm font-bold tracking-tight">
-                  <span class="text-yellow-400">{getNewsIcon(news.type)}</span>
-                  {news.headline}
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
         <div class="p-6 overflow-x-auto">
           <table class="w-full text-left border-collapse text-sm">
             <thead class="bg-white">
@@ -205,54 +181,6 @@
               {/each}
             </tbody>
           </table>
-        </div>
-      {/if}
-
-      {#if activeTab === 'news'}
-        <div class="flex flex-col h-[70vh] bg-light-bg">
-          <div class="flex-1 overflow-y-auto p-6 sm:p-12">
-            <div class="max-w-3xl mx-auto space-y-8">
-              {#if !data.activeLeague.news || data.activeLeague.news.length === 0}
-                <div class="p-12 text-center subtle font-bold italic bg-white rounded-3xl border border-light-border shadow-lg">
-                  <div class="text-4xl mb-4">📭</div>
-                  The season has just begun. No news reports yet.
-                </div>
-              {:else}
-                {@const newsByWeek = Object.entries(
-                  (data.activeLeague.news || []).reduce((acc: any, n: any) => {
-                    if (!acc[n.week]) acc[n.week] = [];
-                    acc[n.week].push(n);
-                    return acc;
-                  }, {})
-                ).sort((a, b) => Number(b[0]) - Number(a[0]))}
-
-                {#each newsByWeek as [week, items]}
-                  <div class="relative">
-                    <div class="flex items-center gap-4 mb-6">
-                      <div class="h-px flex-1 bg-light-border"></div>
-                      <span class="text-[0.65rem] font-black subtle uppercase tracking-[0.2em] bg-white px-4 py-1 rounded-full border border-light-border shadow-sm">Matchweek {week}</span>
-                      <div class="h-px flex-1 bg-light-border"></div>
-                    </div>
-                    <div class="space-y-4">
-                      {#each items as news}
-                        <div class="bg-white p-6 rounded-2xl border border-light-border shadow-sm flex gap-6 hover:shadow-md transition-all hover:-translate-y-0.5 group">
-                          <div class="text-3xl flex-shrink-0 bg-light-bg w-16 h-16 rounded-2xl flex items-center justify-center shadow-inner group-hover:bg-primary/5 transition-colors">
-                            {getNewsIcon(news.type)}
-                          </div>
-                          <div class="flex-1">
-                            <div class="flex justify-between items-start mb-1">
-                              <div class="text-[0.6rem] font-black text-primary uppercase tracking-widest">{news.type.replace('_', ' ')}</div>
-                            </div>
-                            <h3 class="text-xl font-black tracking-tight leading-tight group-hover:text-primary transition-colors">{news.headline}</h3>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          </div>
         </div>
       {/if}
 

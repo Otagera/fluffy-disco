@@ -1,67 +1,73 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import PlayerModal from '$lib/components/PlayerModal.svelte';
-  import FormationBoard from '$lib/components/FormationBoard.svelte';
-  import { enhance } from '$app/forms';
-  import { calculateAge } from '$lib/data/ratings';
+import { enhance } from "$app/forms";
+import FormationBoard from "$lib/components/FormationBoard.svelte";
+import PlayerModal from "$lib/components/PlayerModal.svelte";
+import { calculateAge } from "$lib/data/ratings";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  const isMyTeam = data.managerTeamId === data.team?.id;
-  const currentDate = $derived(data.currentDate ?? '');
-  const managerTeamId = $derived(data.managerTeamId ?? '');
+const isMyTeam = data.managerTeamId === data.team?.id;
+const currentDate = $derived(data.currentDate ?? "");
+const managerTeamId = $derived(data.managerTeamId ?? "");
 
-  // Local state for editing if it's my team
-  let currentTeam = $state(data.team ? { ...data.team } : {} as any);
-  let currentPlayers = $state([...(data.players ?? [])]);
+// Local state for editing if it's my team
+let currentTeam = $state(data.team ? { ...data.team } : ({} as any));
+let currentPlayers = $state([...(data.players ?? [])]);
 
-  // If it's NOT my team, we show a "Probable XI" based on OVR
-  // If it IS my team, we show the actual squad order (Starting XI = first 11)
-  const displayPlayers = $derived.by(() => {
-    if (isMyTeam) return currentPlayers;
-    
-    // Balanced selection logic for other teams
-    const all = [...(data.players ?? [])].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
-    const gks = all.filter(p => p.role === 'GK').slice(0, 1);
-    const defs = all.filter(p => p.role === 'DEF').slice(0, 4);
-    const mids = all.filter(p => p.role === 'MID').slice(0, 3);
-    const fwds = all.filter(p => p.role === 'FWD').slice(0, 3);
-    const xi = [...gks, ...defs, ...mids, ...fwds];
-    const bench = all.filter(p => !xi.includes(p));
-    return [...xi, ...bench];
-  });
+// If it's NOT my team, we show a "Probable XI" based on OVR
+// If it IS my team, we show the actual squad order (Starting XI = first 11)
+const displayPlayers = $derived.by(() => {
+	if (isMyTeam) return currentPlayers;
 
-  let selectedPlayerId = $state<string | null>(null);
-  const selectedPlayer = $derived(currentPlayers.find((player) => player.id === selectedPlayerId) ?? null);
-  const selectedPlayerScoutingLevel = $derived.by(() => {
-    if (!selectedPlayerId) return 0;
-    const report = (data.scoutingReports || []).find(r => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId);
-    return report ? report.level : 0;
-  });
+	// Balanced selection logic for other teams
+	const all = [...(data.players ?? [])].sort(
+		(a, b) => (b.overall ?? 0) - (a.overall ?? 0),
+	);
+	const gks = all.filter((p) => p.role === "GK").slice(0, 1);
+	const defs = all.filter((p) => p.role === "DEF").slice(0, 4);
+	const mids = all.filter((p) => p.role === "MID").slice(0, 3);
+	const fwds = all.filter((p) => p.role === "FWD").slice(0, 3);
+	const xi = [...gks, ...defs, ...mids, ...fwds];
+	const bench = all.filter((p) => !xi.includes(p));
+	return [...xi, ...bench];
+});
 
-  function handleSwap(id1: string, id2: string) {
-    if (!isMyTeam) return;
-    const idx1 = currentPlayers.findIndex(p => p.id === id1);
-    const idx2 = currentPlayers.findIndex(p => p.id === id2);
-    if (idx1 !== -1 && idx2 !== -1) {
-      const newPlayers = [...currentPlayers];
-      const temp = newPlayers[idx1];
-      newPlayers[idx1] = newPlayers[idx2];
-      newPlayers[idx2] = temp;
-      currentPlayers = newPlayers;
-    }
-  }
+let selectedPlayerId = $state<string | null>(null);
+const selectedPlayer = $derived(
+	currentPlayers.find((player) => player.id === selectedPlayerId) ?? null,
+);
+const selectedPlayerScoutingLevel = $derived.by(() => {
+	if (!selectedPlayerId) return 0;
+	const report = (data.scoutingReports || []).find(
+		(r) => r.playerId === selectedPlayerId && r.teamId === data.managerTeamId,
+	);
+	return report ? report.level : 0;
+});
 
-  function handleFormationChange(name: string) {
-    if (!isMyTeam) return;
-    currentTeam.formation = name;
-  }
+function handleSwap(id1: string, id2: string) {
+	if (!isMyTeam) return;
+	const idx1 = currentPlayers.findIndex((p) => p.id === id1);
+	const idx2 = currentPlayers.findIndex((p) => p.id === id2);
+	if (idx1 !== -1 && idx2 !== -1) {
+		const newPlayers = [...currentPlayers];
+		const temp = newPlayers[idx1];
+		newPlayers[idx1] = newPlayers[idx2];
+		newPlayers[idx2] = temp;
+		currentPlayers = newPlayers;
+	}
+}
 
-  function getStatColor(val: number) {
-    if (val >= 16) return 'text-green-600';
-    if (val >= 12) return 'text-amber-600';
-    return 'text-red-600';
-  }
+function handleFormationChange(name: string) {
+	if (!isMyTeam) return;
+	currentTeam.formation = name;
+}
+
+function getStatColor(val: number) {
+	if (val >= 16) return "text-green-600";
+	if (val >= 12) return "text-amber-600";
+	return "text-red-600";
+}
 </script>
 
 <div class="max-w-6xl mx-auto p-4 sm:p-8">

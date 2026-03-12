@@ -1,102 +1,121 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import { PITCH_W, PITCH_H } from '$lib/engine/core/match-constants';
+import { PITCH_H, PITCH_W } from "$lib/engine/core/match-constants";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  let activeTab = $state<'passes' | 'shots' | 'heatmap'>('passes');
-  let selectedTeam = $state<'home' | 'away'>('home');
+let activeTab = $state<"passes" | "shots" | "heatmap">("passes");
+let selectedTeam = $state<"home" | "away">("home");
 
-  // Passing Network Logic
-  // Aggregate passes to find strong connections and average positions
-  const getPassingNetwork = (team: 'home' | 'away') => {
-    if (!data.hasAnalytics || !data.analytics) return { nodes: [], links: [] };
-    
-    const passes = data.analytics.passes.filter(p => p.team === team);
-    
-    const nodePositions: Record<string, { x: number, y: number, count: number, name: string }> = {};
-    const linkCounts: Record<string, number> = {};
+// Passing Network Logic
+// Aggregate passes to find strong connections and average positions
+const getPassingNetwork = (team: "home" | "away") => {
+	if (!data.hasAnalytics || !data.analytics) return { nodes: [], links: [] };
 
-    passes.forEach(p => {
-      // Record start position for 'from' node
-      if (!nodePositions[p.fromId]) nodePositions[p.fromId] = { x: 0, y: 0, count: 0, name: p.fromName };
-      nodePositions[p.fromId].x += p.startX;
-      nodePositions[p.fromId].y += p.startY;
-      nodePositions[p.fromId].count++;
+	const passes = data.analytics.passes.filter((p) => p.team === team);
 
-      // Record end position for 'to' node (less accurate than start, but helps anchor receivers)
-      if (!nodePositions[p.toId]) nodePositions[p.toId] = { x: 0, y: 0, count: 0, name: p.toName };
-      nodePositions[p.toId].x += p.endX;
-      nodePositions[p.toId].y += p.endY;
-      nodePositions[p.toId].count++;
+	const nodePositions: Record<
+		string,
+		{ x: number; y: number; count: number; name: string }
+	> = {};
+	const linkCounts: Record<string, number> = {};
 
-      // Record link
-      const linkKey = [p.fromId, p.toId].sort().join('-');
-      linkCounts[linkKey] = (linkCounts[linkKey] || 0) + 1;
-    });
+	passes.forEach((p) => {
+		// Record start position for 'from' node
+		if (!nodePositions[p.fromId])
+			nodePositions[p.fromId] = { x: 0, y: 0, count: 0, name: p.fromName };
+		nodePositions[p.fromId].x += p.startX;
+		nodePositions[p.fromId].y += p.startY;
+		nodePositions[p.fromId].count++;
 
-    const nodes = Object.entries(nodePositions)
-      .filter(([id]) => id !== 'unknown') // Don't draw a giant 'Teammate' node
-      .map(([id, pos]) => ({
-        id,
-        name: pos.name,
-        x: pos.x / pos.count,
-        y: pos.y / pos.count,
-        radius: Math.min(10, 2 + (pos.count * 0.1)) // Size node by involvement
-      }));
+		// Record end position for 'to' node (less accurate than start, but helps anchor receivers)
+		if (!nodePositions[p.toId])
+			nodePositions[p.toId] = { x: 0, y: 0, count: 0, name: p.toName };
+		nodePositions[p.toId].x += p.endX;
+		nodePositions[p.toId].y += p.endY;
+		nodePositions[p.toId].count++;
 
-    const maxLinkCount = Math.max(1, ...Object.values(linkCounts));
-    
-    const links = Object.entries(linkCounts).map(([key, count]) => {
-      const [id1, id2] = key.split('-');
-      const n1 = nodes.find(n => n.id === id1);
-      const n2 = nodes.find(n => n.id === id2);
-      if (!n1 || !n2) return null;
-      return {
-        x1: n1.x, y1: n1.y,
-        x2: n2.x, y2: n2.y,
-        weight: (count / maxLinkCount) * 5 // Max thickness of 5
-      };
-    }).filter(Boolean) as {x1: number, y1: number, x2: number, y2: number, weight: number}[];
+		// Record link
+		const linkKey = [p.fromId, p.toId].sort().join("-");
+		linkCounts[linkKey] = (linkCounts[linkKey] || 0) + 1;
+	});
 
-    return { nodes, links };
-  };
+	const nodes = Object.entries(nodePositions)
+		.filter(([id]) => id !== "unknown") // Don't draw a giant 'Teammate' node
+		.map(([id, pos]) => ({
+			id,
+			name: pos.name,
+			x: pos.x / pos.count,
+			y: pos.y / pos.count,
+			radius: Math.min(10, 2 + pos.count * 0.1), // Size node by involvement
+		}));
 
-  // Heatmap Logic
-  const getHeatmapBins = (team: 'home' | 'away') => {
-    if (!data.hasAnalytics || !data.analytics) return [];
-    
-    const samples = data.analytics.heatmapSamples.filter(s => s.team === team);
-    const cols = 21; // 5m bins
-    const rows = 14; // ~5m bins
-    
-    const bins = Array(cols * rows).fill(0);
-    let maxBin = 0;
+	const maxLinkCount = Math.max(1, ...Object.values(linkCounts));
 
-    samples.forEach(s => {
-      const c = Math.min(cols - 1, Math.floor(s.x * cols));
-      const r = Math.min(rows - 1, Math.floor(s.y * rows));
-      const idx = r * cols + c;
-      bins[idx]++;
-      if (bins[idx] > maxBin) maxBin = bins[idx];
-    });
+	const links = Object.entries(linkCounts)
+		.map(([key, count]) => {
+			const [id1, id2] = key.split("-");
+			const n1 = nodes.find((n) => n.id === id1);
+			const n2 = nodes.find((n) => n.id === id2);
+			if (!n1 || !n2) return null;
+			return {
+				x1: n1.x,
+				y1: n1.y,
+				x2: n2.x,
+				y2: n2.y,
+				weight: (count / maxLinkCount) * 5, // Max thickness of 5
+			};
+		})
+		.filter(Boolean) as {
+		x1: number;
+		y1: number;
+		x2: number;
+		y2: number;
+		weight: number;
+	}[];
 
-    return bins.map((count, i) => {
-      const c = i % cols;
-      const r = Math.floor(i / cols);
-      return {
-        x: (c / cols) * PITCH_W,
-        y: (r / rows) * PITCH_H,
-        w: PITCH_W / cols,
-        h: PITCH_H / rows,
-        opacity: maxBin === 0 ? 0 : Math.min(0.8, count / (maxBin * 0.8)) // Soft cap so very hot areas are solid
-      };
-    });
-  };
+	return { nodes, links };
+};
 
-  let passingNetwork = $derived(getPassingNetwork(selectedTeam));
-  let heatmapBins = $derived(getHeatmapBins(selectedTeam));
-  let teamShots = $derived(data.hasAnalytics && data.analytics ? data.analytics.shots.filter(s => s.team === selectedTeam) : []);
+// Heatmap Logic
+const getHeatmapBins = (team: "home" | "away") => {
+	if (!data.hasAnalytics || !data.analytics) return [];
+
+	const samples = data.analytics.heatmapSamples.filter((s) => s.team === team);
+	const cols = 21; // 5m bins
+	const rows = 14; // ~5m bins
+
+	const bins = Array(cols * rows).fill(0);
+	let maxBin = 0;
+
+	samples.forEach((s) => {
+		const c = Math.min(cols - 1, Math.floor(s.x * cols));
+		const r = Math.min(rows - 1, Math.floor(s.y * rows));
+		const idx = r * cols + c;
+		bins[idx]++;
+		if (bins[idx] > maxBin) maxBin = bins[idx];
+	});
+
+	return bins.map((count, i) => {
+		const c = i % cols;
+		const r = Math.floor(i / cols);
+		return {
+			x: (c / cols) * PITCH_W,
+			y: (r / rows) * PITCH_H,
+			w: PITCH_W / cols,
+			h: PITCH_H / rows,
+			opacity: maxBin === 0 ? 0 : Math.min(0.8, count / (maxBin * 0.8)), // Soft cap so very hot areas are solid
+		};
+	});
+};
+
+let passingNetwork = $derived(getPassingNetwork(selectedTeam));
+let heatmapBins = $derived(getHeatmapBins(selectedTeam));
+let teamShots = $derived(
+	data.hasAnalytics && data.analytics
+		? data.analytics.shots.filter((s) => s.team === selectedTeam)
+		: [],
+);
 </script>
 
 <div class="container">

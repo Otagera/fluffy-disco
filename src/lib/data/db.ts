@@ -1,9 +1,9 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import path from 'path';
-import * as schema from './schema';
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import path from "path";
+import * as schema from "./schema";
 
-const DB_PATH = path.join(process.cwd(), 'data', 'savegame.db');
+const DB_PATH = path.join(process.cwd(), "data", "savegame.db");
 
 // Forced refresh to fix SQLITE_READONLY_DBMOVED after schema push
 // HMR Trigger: 2026-03-10

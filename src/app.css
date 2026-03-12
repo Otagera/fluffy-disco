@@ -3,42 +3,48 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --pitch-green: #2d8a4a;
-    --pitch-lines: rgba(255, 255, 255, 0.5);
-  }
+	:root {
+		--pitch-green: #2d8a4a;
+		--pitch-lines: rgba(255, 255, 255, 0.5);
+	}
 
-  body {
-    @apply bg-light-bg text-light-text font-sans antialiased min-h-screen;
-  }
-  
-  h1 { @apply text-4xl font-black tracking-tighter mb-4; }
-  h2 { @apply text-2xl font-extrabold tracking-tight mb-3; }
-  h3 { @apply text-xl font-bold mb-2; }
+	body {
+		@apply bg-light-bg text-light-text font-sans antialiased min-h-screen;
+	}
+
+	h1 {
+		@apply text-4xl font-black tracking-tighter mb-4;
+	}
+	h2 {
+		@apply text-2xl font-extrabold tracking-tight mb-3;
+	}
+	h3 {
+		@apply text-xl font-bold mb-2;
+	}
 }
 
 @layer components {
-  .card {
-    @apply bg-light-card border border-light-border rounded-xl p-6 shadow-sm;
-  }
+	.card {
+		@apply bg-light-card border border-light-border rounded-xl p-6 shadow-sm;
+	}
 
-  .btn {
-    @apply inline-block px-6 py-3 rounded-lg font-bold text-center transition-all duration-200 ease-out cursor-pointer;
-  }
+	.btn {
+		@apply inline-block px-6 py-3 rounded-lg font-bold text-center transition-all duration-200 ease-out cursor-pointer;
+	}
 
-  .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-light hover:-translate-y-px hover:shadow-lg shadow-primary/30;
-  }
+	.btn-primary {
+		@apply btn bg-primary text-white hover:bg-primary-light hover:-translate-y-px hover:shadow-lg shadow-primary/30;
+	}
 
-  .btn-secondary {
-    @apply btn bg-gray-100 text-light-text border border-gray-300 hover:bg-gray-200;
-  }
+	.btn-secondary {
+		@apply btn bg-gray-100 text-light-text border border-gray-300 hover:bg-gray-200;
+	}
 
-  .input-field {
-    @apply w-full px-4 py-3 rounded-lg border border-light-border bg-white text-light-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
-  }
+	.input-field {
+		@apply w-full px-4 py-3 rounded-lg border border-light-border bg-white text-light-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
+	}
 
-  .subtle {
-    @apply text-light-subtle;
-  }
+	.subtle {
+		@apply text-light-subtle;
+	}
 }

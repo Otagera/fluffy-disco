@@ -1,13 +1,19 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { browserDB } from '$lib/data/dexie';
-    import { MatchMemory } from '$lib/engine/core/MatchMemory';
-    import { 
-        PLAYER_COUNT, PLAYER_STRIDE, PLAYER_OFFSET_X, PLAYER_OFFSET_Y, 
-        BALL_OFFSET_X, BALL_OFFSET_Y, BALL_OFFSET_Z 
-    } from '$lib/engine/core/constants';
-    import PixiPitch from '$lib/components/PixiPitch.svelte';
-    import type { PageData } from './$types';
+import { onDestroy, onMount } from "svelte";
+import PixiPitch from "$lib/components/PixiPitch.svelte";
+import { browserDB } from "$lib/data/dexie";
+import {
+	BALL_OFFSET_X,
+	BALL_OFFSET_Y,
+	BALL_OFFSET_Z,
+	PLAYER_COUNT,
+	PLAYER_OFFSET_X,
+	PLAYER_OFFSET_Y,
+	PLAYER_STRIDE,
+} from "$lib/engine/core/constants";
+import { MatchMemory } from "$lib/engine/core/MatchMemory";
+import type { PageData } from "./$types";
+
 let { data }: { data: PageData } = $props();
 
 let memory = new MatchMemory();
@@ -20,41 +26,41 @@ let isPlaying = $state(false);
 let fps = 10;
 
 let loading = $state(true);
-let errorMsg = $state('');
+let errorMsg = $state("");
 
-let labels = Array.from({length: 22}, (_, i) => ((i%11)+1).toString());
+let labels = Array.from({ length: 22 }, (_, i) => ((i % 11) + 1).toString());
 let currentLabels = [...labels]; // To track what is currently rendered
 let analytics: any = null;
 let pitchComponent: any = $state(null);
 
 onMount(async () => {
-    try {
-        const replay = await browserDB.replays.where({ matchId: data.id }).first();
-        if (!replay) {
-            errorMsg = 'Replay not found in local database.';
-            loading = false;
-            return;
-        }
+	try {
+		const replay = await browserDB.replays.where({ matchId: data.id }).first();
+		if (!replay) {
+			errorMsg = "Replay not found in local database.";
+			loading = false;
+			return;
+		}
 
-        fps = replay.fps;
-        const arrayBuffer = await replay.blob.arrayBuffer();
-        combined = new Float32Array(arrayBuffer);
-        totalFrames = replay.frameCount;
+		fps = replay.fps;
+		const arrayBuffer = await replay.blob.arrayBuffer();
+		combined = new Float32Array(arrayBuffer);
+		totalFrames = replay.frameCount;
 
-        if (replay.startingLabels) {
-            labels = [...replay.startingLabels];
-            currentLabels = [...labels];
-        }
-        if (replay.analytics) {
-            analytics = replay.analytics;
-        }
+		if (replay.startingLabels) {
+			labels = [...replay.startingLabels];
+			currentLabels = [...labels];
+		}
+		if (replay.analytics) {
+			analytics = replay.analytics;
+		}
 
-        applyFrame(0);
-        loading = false;
-    } catch (e: any) {
-        errorMsg = e.message;
-        loading = false;
-    }
+		applyFrame(0);
+		loading = false;
+	} catch (e: any) {
+		errorMsg = e.message;
+		loading = false;
+	}
 });
 
 let animationId: number;
@@ -62,111 +68,121 @@ let lastTime = 0;
 let startTime = 0;
 
 function loop(time: number) {
-        if (!isPlaying) return;
-        if (!startTime) startTime = time - (currentFrame / fps) * 1000;
-        
-        const elapsed = time - startTime;
-        const exactFrame = (elapsed / 1000) * fps;
-        
-        if (exactFrame < totalFrames - 1) {
-            currentFrame = exactFrame;
-            applyInterpolatedFrame(currentFrame);
-            animationId = requestAnimationFrame(loop);
-        } else {
-            currentFrame = totalFrames - 1;
-            applyFrame(totalFrames - 1);
-            isPlaying = false;
-        }
-    }
+	if (!isPlaying) return;
+	if (!startTime) startTime = time - (currentFrame / fps) * 1000;
 
-    $effect(() => {
-        if (isPlaying) {
-            startTime = 0; // will be set in loop
-            animationId = requestAnimationFrame(loop);
-        } else {
-            if (animationId) cancelAnimationFrame(animationId);
-        }
-    });
+	const elapsed = time - startTime;
+	const exactFrame = (elapsed / 1000) * fps;
 
-    onDestroy(() => {
-        if (animationId) cancelAnimationFrame(animationId);
-    });
+	if (exactFrame < totalFrames - 1) {
+		currentFrame = exactFrame;
+		applyInterpolatedFrame(currentFrame);
+		animationId = requestAnimationFrame(loop);
+	} else {
+		currentFrame = totalFrames - 1;
+		applyFrame(totalFrames - 1);
+		isPlaying = false;
+	}
+}
 
-    function applyFrame(idx: number) {
-        if (!combined) return;
-        const i = Math.floor(idx);
-        const offset = i * 48;
-        
-        const time = combined[offset];
-        syncLabels(time);
+$effect(() => {
+	if (isPlaying) {
+		startTime = 0; // will be set in loop
+		animationId = requestAnimationFrame(loop);
+	} else {
+		if (animationId) cancelAnimationFrame(animationId);
+	}
+});
 
-        memory.ballBuffer[BALL_OFFSET_X] = combined[offset + 1];
-        memory.ballBuffer[BALL_OFFSET_Y] = combined[offset + 2];
-        memory.ballBuffer[BALL_OFFSET_Z] = combined[offset + 3];
+onDestroy(() => {
+	if (animationId) cancelAnimationFrame(animationId);
+});
 
-        for (let i = 0; i < PLAYER_COUNT; i++) {
-            const memOffset = i * PLAYER_STRIDE;
-            const fOffset = offset + 4 + (i * 2);
-            memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOffset];
-            memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOffset + 1];
-        }
-    }
+function applyFrame(idx: number) {
+	if (!combined) return;
+	const i = Math.floor(idx);
+	const offset = i * 48;
 
-    function applyInterpolatedFrame(exactIdx: number) {
-        if (!combined) return;
-        const i1 = Math.floor(exactIdx);
-        const i2 = Math.min(i1 + 1, totalFrames - 1);
-        const t = exactIdx - i1;
+	const time = combined[offset];
+	syncLabels(time);
 
-        const off1 = i1 * 48;
-        const off2 = i2 * 48;
+	memory.ballBuffer[BALL_OFFSET_X] = combined[offset + 1];
+	memory.ballBuffer[BALL_OFFSET_Y] = combined[offset + 2];
+	memory.ballBuffer[BALL_OFFSET_Z] = combined[offset + 3];
 
-        const time = combined[off1];
-        syncLabels(time);
+	for (let i = 0; i < PLAYER_COUNT; i++) {
+		const memOffset = i * PLAYER_STRIDE;
+		const fOffset = offset + 4 + i * 2;
+		memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOffset];
+		memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOffset + 1];
+	}
+}
 
-        // Ball Interpolation
-        memory.ballBuffer[BALL_OFFSET_X] = combined[off1 + 1] + (combined[off2 + 1] - combined[off1 + 1]) * t;
-        memory.ballBuffer[BALL_OFFSET_Y] = combined[off1 + 2] + (combined[off2 + 2] - combined[off1 + 2]) * t;
-        memory.ballBuffer[BALL_OFFSET_Z] = combined[off1 + 3] + (combined[off2 + 3] - combined[off1 + 3]) * t;
+function applyInterpolatedFrame(exactIdx: number) {
+	if (!combined) return;
+	const i1 = Math.floor(exactIdx);
+	const i2 = Math.min(i1 + 1, totalFrames - 1);
+	const t = exactIdx - i1;
 
-        // Player Interpolation
-        for (let p = 0; p < PLAYER_COUNT; p++) {
-            const memOffset = p * PLAYER_STRIDE;
-            const fOff1 = off1 + 4 + (p * 2);
-            const fOff2 = off2 + 4 + (p * 2);
-            memory.playerBuffer[memOffset + PLAYER_OFFSET_X] = combined[fOff1] + (combined[fOff2] - combined[fOff1]) * t;
-            memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] = combined[fOff1 + 1] + (combined[fOff2 + 1] - combined[fOff1 + 1]) * t;
-        }
-    }
+	const off1 = i1 * 48;
+	const off2 = i2 * 48;
 
-    function syncLabels(time: number) {
-        if (!analytics || !analytics.events || !pitchComponent) return;
+	const time = combined[off1];
+	syncLabels(time);
 
-        // Start from base labels
-        const calculatedLabels = [...labels];
+	// Ball Interpolation
+	memory.ballBuffer[BALL_OFFSET_X] =
+		combined[off1 + 1] + (combined[off2 + 1] - combined[off1 + 1]) * t;
+	memory.ballBuffer[BALL_OFFSET_Y] =
+		combined[off1 + 2] + (combined[off2 + 2] - combined[off1 + 2]) * t;
+	memory.ballBuffer[BALL_OFFSET_Z] =
+		combined[off1 + 3] + (combined[off2 + 3] - combined[off1 + 3]) * t;
 
-        // Apply all sub events that happened before or exactly at current time
-        for (const event of analytics.events) {
-            if (event.type === 'sub' && event.time <= time && event.playerId !== undefined && event.incomingPlayerNumber !== undefined) {
-                calculatedLabels[event.playerId] = event.incomingPlayerNumber.toString();
-            }
-        }
+	// Player Interpolation
+	for (let p = 0; p < PLAYER_COUNT; p++) {
+		const memOffset = p * PLAYER_STRIDE;
+		const fOff1 = off1 + 4 + p * 2;
+		const fOff2 = off2 + 4 + p * 2;
+		memory.playerBuffer[memOffset + PLAYER_OFFSET_X] =
+			combined[fOff1] + (combined[fOff2] - combined[fOff1]) * t;
+		memory.playerBuffer[memOffset + PLAYER_OFFSET_Y] =
+			combined[fOff1 + 1] + (combined[fOff2 + 1] - combined[fOff1 + 1]) * t;
+	}
+}
 
-        // Apply changes to renderer
-        for (let i = 0; i < calculatedLabels.length; i++) {
-            if (calculatedLabels[i] !== currentLabels[i]) {
-                currentLabels[i] = calculatedLabels[i];
-                pitchComponent.updateLabel(i, currentLabels[i]);
-            }
-        }
-    }
+function syncLabels(time: number) {
+	if (!analytics || !analytics.events || !pitchComponent) return;
 
-    function handleSeek(e: Event) {
-        const val = parseFloat((e.target as HTMLInputElement).value);
-        currentFrame = val;
-        isPlaying = false;
-        applyInterpolatedFrame(currentFrame);
-    }
+	// Start from base labels
+	const calculatedLabels = [...labels];
+
+	// Apply all sub events that happened before or exactly at current time
+	for (const event of analytics.events) {
+		if (
+			event.type === "sub" &&
+			event.time <= time &&
+			event.playerId !== undefined &&
+			event.incomingPlayerNumber !== undefined
+		) {
+			calculatedLabels[event.playerId] = event.incomingPlayerNumber.toString();
+		}
+	}
+
+	// Apply changes to renderer
+	for (let i = 0; i < calculatedLabels.length; i++) {
+		if (calculatedLabels[i] !== currentLabels[i]) {
+			currentLabels[i] = calculatedLabels[i];
+			pitchComponent.updateLabel(i, currentLabels[i]);
+		}
+	}
+}
+
+function handleSeek(e: Event) {
+	const val = parseFloat((e.target as HTMLInputElement).value);
+	currentFrame = val;
+	isPlaying = false;
+	applyInterpolatedFrame(currentFrame);
+}
 </script>
 
 <div class="min-h-screen bg-light-bg flex flex-col items-center p-8">

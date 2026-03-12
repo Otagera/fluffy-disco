@@ -1,37 +1,37 @@
-import { loadSaveGame } from '$lib/data/store';
-import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import { error } from "@sveltejs/kit";
+import { loadSaveGame } from "$lib/data/store";
+import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params }) => {
-  const save = loadSaveGame();
-  
-  if (!save) {
-    throw error(404, 'No save game found');
-  }
+	const save = loadSaveGame();
 
-  const fixture = save.fixtures.find(f => f.id === params.id);
-  if (!fixture) {
-    throw error(404, 'Fixture not found');
-  }
+	if (!save) {
+		throw error(404, "No save game found");
+	}
 
-  const homeTeam = save.teams[fixture.homeTeamId];
-  const awayTeam = save.teams[fixture.awayTeamId];
+	const fixture = save.fixtures.find((f) => f.id === params.id);
+	if (!fixture) {
+		throw error(404, "Fixture not found");
+	}
 
-  if (!homeTeam || !awayTeam) {
-    throw error(500, 'Teams for fixture not found in save data');
-  }
+	const homeTeam = save.teams[fixture.homeTeamId];
+	const awayTeam = save.teams[fixture.awayTeamId];
 
-  const homePlayers = homeTeam.players.map(pid => save.players[pid]);
-  const awayPlayers = awayTeam.players.map(pid => save.players[pid]);
+	if (!homeTeam || !awayTeam) {
+		throw error(500, "Teams for fixture not found in save data");
+	}
 
-  return {
-    fixture,
-    homeTeam,
-    awayTeam,
-    homePlayers,
-    awayPlayers,
-    managerTeamId: save.manager.teamId,
-    currentDate: save.currentDate,
-    scoutingReports: save.scoutingReports || []
-  };
+	const homePlayers = homeTeam.players.map((pid) => save.players[pid]);
+	const awayPlayers = awayTeam.players.map((pid) => save.players[pid]);
+
+	return {
+		fixture,
+		homeTeam,
+		awayTeam,
+		homePlayers,
+		awayPlayers,
+		managerTeamId: save.manager.teamId,
+		currentDate: save.currentDate,
+		scoutingReports: save.scoutingReports || [],
+	};
 };

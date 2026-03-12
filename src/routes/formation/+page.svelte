@@ -1,60 +1,68 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import FormationBoard from '$lib/components/FormationBoard.svelte';
-  import { enhance } from '$app/forms';
+import { enhance } from "$app/forms";
+import FormationBoard from "$lib/components/FormationBoard.svelte";
+import type { PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-  let currentTeam = $state({ ...data.team });
-  let currentPlayers = $state([...data.players]);
-  let currentPositions = $state(data.team.customPositions || {});
-  let currentRoles = $state(data.team.customRoles || {});
-  
-  let isDirty = $state(false);
-  let showToast = $state(false);
+let currentTeam = $state({ ...data.team });
+let currentPlayers = $state([...data.players]);
+let currentPositions = $state(data.team.customPositions || {});
+let currentRoles = $state(data.team.customRoles || {});
 
-  function handleSwap(id1: string, id2: string) {
-    const idx1 = currentPlayers.findIndex(p => p.id === id1);
-    const idx2 = currentPlayers.findIndex(p => p.id === id2);
-    
-    if (idx1 !== -1 && idx2 !== -1) {
-      const newPlayers = [...currentPlayers];
-      const temp = newPlayers[idx1];
-      newPlayers[idx1] = newPlayers[idx2];
-      newPlayers[idx2] = temp;
-      currentPlayers = newPlayers;
-      isDirty = true;
-    }
-  }
+let isDirty = $state(false);
+let showToast = $state(false);
 
-  function handleFormationChange(name: string) {
-    currentTeam.formation = name;
-    isDirty = true;
-  }
+function handleSwap(id1: string, id2: string) {
+	const idx1 = currentPlayers.findIndex((p) => p.id === id1);
+	const idx2 = currentPlayers.findIndex((p) => p.id === id2);
 
-  function handleOverridesChange(positions: Record<number, {x: number, y: number}>, roles: Record<number, string>, style: string, mentality: string) {
-    currentPositions = positions;
-    currentRoles = roles;
-    currentTeam.tacticalStyle = style;
-    currentTeam.mentality = mentality;
+	if (idx1 !== -1 && idx2 !== -1) {
+		const newPlayers = [...currentPlayers];
+		const temp = newPlayers[idx1];
+		newPlayers[idx1] = newPlayers[idx2];
+		newPlayers[idx2] = temp;
+		currentPlayers = newPlayers;
+		isDirty = true;
+	}
+}
 
-    const styleChanged = style !== data.team.tacticalStyle;
-    const mentalityChanged = mentality !== data.team.mentality;
-    const posChanged = JSON.stringify(positions) !== JSON.stringify(data.team.customPositions || {});
-    const rolesChanged = JSON.stringify(roles) !== JSON.stringify(data.team.customRoles || {});
+function handleFormationChange(name: string) {
+	currentTeam.formation = name;
+	isDirty = true;
+}
 
-    if (styleChanged || mentalityChanged || posChanged || rolesChanged) {
-        isDirty = true;
-    }
-  }
+function handleOverridesChange(
+	positions: Record<number, { x: number; y: number }>,
+	roles: Record<number, string>,
+	style: string,
+	mentality: string,
+) {
+	currentPositions = positions;
+	currentRoles = roles;
+	currentTeam.tacticalStyle = style;
+	currentTeam.mentality = mentality;
 
-  function resetPositions() {
-    currentTeam = { ...data.team };
-    currentPlayers = [...data.players];
-    currentPositions = data.team.customPositions || {};
-    currentRoles = data.team.customRoles || {};
-    isDirty = false;
-  }
+	const styleChanged = style !== data.team.tacticalStyle;
+	const mentalityChanged = mentality !== data.team.mentality;
+	const posChanged =
+		JSON.stringify(positions) !==
+		JSON.stringify(data.team.customPositions || {});
+	const rolesChanged =
+		JSON.stringify(roles) !== JSON.stringify(data.team.customRoles || {});
+
+	if (styleChanged || mentalityChanged || posChanged || rolesChanged) {
+		isDirty = true;
+	}
+}
+
+function resetPositions() {
+	currentTeam = { ...data.team };
+	currentPlayers = [...data.players];
+	currentPositions = data.team.customPositions || {};
+	currentRoles = data.team.customRoles || {};
+	isDirty = false;
+}
 </script>
 
 {#if showToast}
