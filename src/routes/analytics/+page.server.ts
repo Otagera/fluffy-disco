@@ -61,18 +61,39 @@ export const load: PageServerLoad = () => {
 			};
 		});
 
+	const goals = (rawAnalytics.events || []).filter(
+		(e: any) => e.type === "goal",
+	);
+	const saves = (rawAnalytics.events || []).filter(
+		(e: any) => e.type === "save",
+	);
+
 	const shots = (rawAnalytics.events || [])
 		.filter((e: any) => e.type === "shot")
 		.map((e: any) => {
 			const player = getPlayerName(e.playerId);
+			let result = "MISS";
+			const goalMatch = goals.find(
+				(g: any) =>
+					g.team === e.team && g.time >= e.time && g.time <= e.time + 15,
+			);
+			if (goalMatch) result = "GOAL";
+			else {
+				const saveMatch = saves.find(
+					(s: any) =>
+						s.team !== e.team && s.time >= e.time && s.time <= e.time + 15,
+				);
+				if (saveMatch) result = "SAVE";
+			}
 			return {
 				playerId: player.id,
 				playerName: player.name,
 				x: e.x / 105,
 				y: e.y / 68,
-				xg: 0.1, // Placeholder
-				result: e.result || "MISS",
+				xg: e.xg || 0.1,
+				result: result,
 				team: e.team === 0 ? "home" : "away",
+				minute: Math.floor(e.time / 60),
 			};
 		});
 

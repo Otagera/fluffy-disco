@@ -246,6 +246,8 @@ export const scoutingReports = sqliteTable("scouting_reports", {
 	isPriority: integer("isPriority", { mode: "boolean" })
 		.notNull()
 		.default(false),
+	perceivedMin: integer("perceivedMin"),
+	perceivedMax: integer("perceivedMax"),
 });
 
 export const scoutingReportsRelations = relations(

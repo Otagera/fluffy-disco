@@ -1,5 +1,7 @@
 import {
 	BALL_OFFSET_FRICTION,
+	BALL_OFFSET_SPIN_X,
+	BALL_OFFSET_SPIN_Y,
 	BALL_OFFSET_VX,
 	BALL_OFFSET_VY,
 	BALL_OFFSET_VZ,
@@ -203,10 +205,26 @@ export class PhysicsEngine {
 		let vy = buffer[BALL_OFFSET_VY];
 		let vz = buffer[BALL_OFFSET_VZ];
 		const friction = buffer[BALL_OFFSET_FRICTION]; // Linear deceleration (m/s^2)
+		let spinX = buffer[BALL_OFFSET_SPIN_X];
+		let spinY = buffer[BALL_OFFSET_SPIN_Y];
 
 		// 1. Apply Gravity to VZ
 		const GRAVITY = -9.81;
 		vz += GRAVITY * dt;
+
+		// Apply Magnus Effect
+		const speed = Math.sqrt(vx * vx + vy * vy);
+		if (speed > 0.1 && (Math.abs(spinX) > 0 || Math.abs(spinY) > 0)) {
+			const perpX = -vy / speed;
+			const perpY = vx / speed;
+			const curlForce = spinX * speed * 0.15; // Adjusted curl multiplier
+
+			vx += perpX * curlForce * dt;
+			vy += perpY * curlForce * dt;
+
+			spinX *= 0.95 ** dt;
+			spinY *= 0.95 ** dt;
+		}
 
 		// 2. Update Positions
 		px += vx * dt;
@@ -218,12 +236,16 @@ export class PhysicsEngine {
 			pz = 0;
 			vz *= -0.6; // Bounce coefficient (energy loss)
 
+			// Ground hit kills spin
+			spinX *= 0.5;
+			spinY *= 0.5;
+
 			// Apply Linear Friction when on ground
-			const speed = Math.sqrt(vx * vx + vy * vy);
-			if (speed > 0.01) {
+			const groundSpeed = Math.sqrt(vx * vx + vy * vy);
+			if (groundSpeed > 0.01) {
 				const deceleration = friction * dt;
-				const newSpeed = Math.max(0, speed - deceleration);
-				const ratio = newSpeed / speed;
+				const newSpeed = Math.max(0, groundSpeed - deceleration);
+				const ratio = newSpeed / groundSpeed;
 				vx *= ratio;
 				vy *= ratio;
 			} else {
@@ -251,5 +273,7 @@ export class PhysicsEngine {
 		buffer[BALL_OFFSET_VX] = vx;
 		buffer[BALL_OFFSET_VY] = vy;
 		buffer[BALL_OFFSET_VZ] = vz;
+		buffer[BALL_OFFSET_SPIN_X] = spinX;
+		buffer[BALL_OFFSET_SPIN_Y] = spinY;
 	}
 }

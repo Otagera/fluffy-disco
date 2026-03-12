@@ -169,6 +169,8 @@ export interface ScoutingReport {
 	level: number;
 	progressDays: number;
 	isPriority: boolean;
+	perceivedMin?: number | null;
+	perceivedMax?: number | null;
 }
 
 export interface SkipConfig {

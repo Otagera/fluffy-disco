@@ -117,6 +117,7 @@ function getTeamName(teamId: string | null) {
           <tbody class="divide-y divide-light-border">
             {#each data.players as player}
               {@const knowledge = getKnowledgeLevel(player.id)}
+              {@const report = (data.scoutingReports || []).find((r: any) => r.playerId === player.id && r.teamId === data.managerTeamId)}
               <tr class="hover:bg-primary/5 transition-colors group">
                 <td class="py-4 px-6">
                   <button onclick={() => selectedPlayerId = player.id} class="text-left">
@@ -136,6 +137,8 @@ function getTeamName(teamId: string | null) {
                 <td class="py-4 px-2 text-center">
                   {#if knowledge === 2}
                     <span class="text-xs font-black text-primary">{player.overall}</span>
+                  {:else if knowledge === 1 && report}
+                    <span class="text-xs font-black subtle">{report.perceivedMin}-{report.perceivedMax}</span>
                   {:else}
                     <span class="text-xs font-black subtle opacity-30">?</span>
                   {/if}
@@ -177,8 +180,16 @@ function getTeamName(teamId: string | null) {
           
           <div class="card p-6 bg-white flex justify-between items-center hover:border-primary transition-all border-l-4 {report?.isPriority ? 'border-l-primary' : 'border-l-transparent'}">
             <div class="flex gap-6 items-center">
-              <div class="text-center w-12">
-                <div class="text-2xl font-black text-primary">{knowledge === 2 ? player.overall : '?'}</div>
+              <div class="text-center w-16">
+                <div class="text-2xl font-black text-primary">
+                  {#if knowledge === 2}
+                    {player.overall}
+                  {:else if knowledge === 1 && report}
+                    <span class="text-lg">{report.perceivedMin}-{report.perceivedMax}</span>
+                  {:else}
+                    ?
+                  {/if}
+                </div>
                 <div class="text-[0.5rem] font-black uppercase subtle tracking-tighter">OVR</div>
               </div>
               <div>

@@ -22,16 +22,17 @@ import type {
 
 export function saveNewGameToDB(save: SaveGame) {
 	db.transaction((tx) => {
-		// 1. Clear existing data
-		tx.delete(schema.gamestate).run();
-		tx.delete(schema.standings).run();
+		// 1. Clear existing data in correct foreign key order
 		tx.delete(schema.fixtureGoals).run();
 		tx.delete(schema.leagueNews).run();
-		tx.delete(schema.fixtures).run();
+		tx.delete(schema.standings).run();
 		tx.delete(schema.scoutingReports).run();
+		tx.delete(schema.inboxMessages).run();
+		tx.delete(schema.fixtures).run();
 		tx.delete(schema.players).run();
 		tx.delete(schema.teams).run();
 		tx.delete(schema.leagues).run();
+		tx.delete(schema.gamestate).run();
 
 		// 2. Insert Leagues
 		for (const l of save.leagues) {
@@ -420,6 +421,8 @@ export function writeSaveGame(saveData: SaveGame) {
 							level: r.level,
 							progressDays: r.progressDays,
 							isPriority: r.isPriority,
+							perceivedMin: r.perceivedMin,
+							perceivedMax: r.perceivedMax,
 						})
 						.onConflictDoUpdate({
 							target: [schema.scoutingReports.id],
@@ -427,6 +430,8 @@ export function writeSaveGame(saveData: SaveGame) {
 								level: r.level,
 								progressDays: r.progressDays,
 								isPriority: r.isPriority,
+								perceivedMin: r.perceivedMin,
+								perceivedMax: r.perceivedMax,
 							},
 						})
 						.run();
@@ -657,10 +662,17 @@ function advanceScouting(save: SaveGame) {
 
 			if (newLevel > report.level) {
 				report.level = newLevel;
+				const player = save.players[report.playerId];
+
+				if (newLevel === 1 && player) {
+					const minOffset = Math.floor(Math.random() * 6) + 2; // 2 to 7
+					const maxOffset = Math.floor(Math.random() * 6) + 2; // 2 to 7
+					report.perceivedMin = Math.max(1, player.overall - minOffset);
+					report.perceivedMax = Math.min(99, player.overall + maxOffset);
+				}
 				if (newLevel === 2) {
 					report.isPriority = false; // Free up slot when fully scouted
 				}
-				const player = save.players[report.playerId];
 				if (player) {
 					addInboxMessage(save, {
 						teamId: save.manager.teamId,
@@ -828,6 +840,11 @@ export function advanceOneDay(
 	// Recalculate ratings in case of aging
 	recalculateOverallRatings(save);
 
+	// If we delegated and potentially simulated matches, we must persist the full state
+	if (skipConfig?.delegate) {
+		writeSaveGame(save);
+	}
+
 	return { mustStop, reason, delegatedActions };
 }
 
@@ -991,8 +1008,14 @@ export function processWeekResults(save: any, playerMatchResult: any) {
 			generateNews(save, save.currentWeek);
 			save.currentWeek++;
 		} else {
-			simFixtures(save, (f) => !f.played, teamsPlayed);
+			// When delegating or skipping, simulate all unplayed matches for the current week
+			simFixtures(
+				save,
+				(f: any) => f.week === save.currentWeek && !f.played,
+				teamsPlayed,
+			);
 			generateNews(save, save.currentWeek);
+			save.currentWeek++;
 		}
 		Object.values(save.players).forEach((p: any) => {
 			const recovery = 15 + p.attributes.stamina / 2;

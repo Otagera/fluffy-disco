@@ -22,6 +22,8 @@ export class MatchMemory {
 		this.ballBuffer[5] = 0; // VZ
 		this.ballBuffer[6] = 0.45; // Mass (kg)
 		this.ballBuffer[7] = 5.0; // Linear Friction (m/s^2 deceleration)
+		this.ballBuffer[8] = 0; // Spin X
+		this.ballBuffer[9] = 0; // Spin Y
 	}
 
 	/**

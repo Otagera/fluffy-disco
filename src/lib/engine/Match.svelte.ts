@@ -9,6 +9,9 @@ import {
 	BALL_OFFSET_Y,
 	BALL_OFFSET_Z,
 	PLAYER_COUNT,
+	PLAYER_OFFSET_GK_X,
+	PLAYER_OFFSET_GK_Y,
+	PLAYER_OFFSET_GK_Z,
 	PLAYER_OFFSET_STAMINA,
 	PLAYER_OFFSET_VX,
 	PLAYER_OFFSET_VY,
@@ -700,6 +703,7 @@ export class Match {
 					x: px,
 					y: py,
 					time: this.currentTime,
+					xg: shotQuality,
 				});
 
 				this.possessionCooldown = 2.0;
@@ -1165,39 +1169,78 @@ export class Match {
 			const isGoal = by > 30.34 && by < 37.66 && bz < 2.44 && movingTowardGoal;
 
 			if (isGoal) {
-				// Virtual Goalkeeper Save Mechanic
-				// Because we shoot from 35m out and have no physical IK for goalkeepers,
-				// we roll a virtual save chance so the match doesn't end 200-0.
-				const speedSq =
-					this.memory.ballBuffer[BALL_OFFSET_VX] ** 2 +
-					this.memory.ballBuffer[BALL_OFFSET_VY] ** 2;
+				const vy = this.memory.ballBuffer[BALL_OFFSET_VY];
+				const speedSq = vx ** 2 + vy ** 2;
 				const ballSpeed = Math.sqrt(speedSq);
 
-				const defendingGkIdx = bx < 0 ? 0 : 11;
+				// Determine which team is defending this goal
+				// If bx < 0, goal is at X=0. Defending team is the one whose attackDir is 1 (attacks 105)
+				const defendingTeam = bx < 0 
+					? (this.getAttackDir(0) === 1 ? 0 : 1)
+					: (this.getAttackDir(0) === -1 ? 0 : 1);
+
+				const defendingGkIdx = defendingTeam === 0 ? 0 : 11;
 				const gkStats = this.playerStats[defendingGkIdx] || {
 					reflexes: 50,
 					handling: 50,
+					jumping: 50,
 				};
 
-				// Calculate dynamic save chance based on GK stats
-				// Example: A GK with 90 Reflexes and 80 Handling = (0.6 * 0.9) + (0.4 * 0.8) = 0.54 + 0.32 = 0.86 (86% base save chance)
-				const reflexesFactor = (gkStats.reflexes || 50) / 100;
-				const handlingFactor = (gkStats.handling || 50) / 100;
-				let saveChance = reflexesFactor * 0.92 + handlingFactor * 0.08;
+				// Physical Goalkeeper IK Calculation
+				const gkOffset = defendingGkIdx * PLAYER_STRIDE;
+				const gkY = this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_Y];
 
-				// Faster shots reduce the save chance, but keep realistic floor/ceiling.
-				if (ballSpeed > 14) saveChance -= 0.01;
-				if (ballSpeed > 22) saveChance -= 0.02;
-				if (ballSpeed > 29) saveChance -= 0.04;
-				saveChance = MathUtils.clamp(saveChance, 0.92, 0.999);
+				// IK logic: Update the buffer to represent the GK's extended hands at the goal line
+				const goalLineX = bx < 0 ? 0 : 105;
+				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_X] = goalLineX;
+				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Y] = by;
+				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Z] = bz;
 
-				if (Math.random() < saveChance) {
-					// SAVE!
-					const defendingGkIdx = bx < 0 ? 0 : 11;
+				const diveReachY = 1.5 + ((gkStats.reflexes || 50) / 100) * 1.5;
+				const diveReachZ = 2.0 + ((gkStats.jumping || 50) / 100) * 0.5;
+				const distY = Math.abs(gkY - by);
+				const distZ = bz;
 
+				let saved = false;
+
+				if (distY <= diveReachY && distZ <= diveReachZ) {
+					const diveDistance = Math.sqrt(distY ** 2 + distZ ** 2);
+					const handlingFactor = (gkStats.handling || 50) / 100;
+
+					const reachStretch =
+						diveDistance / Math.sqrt(diveReachY ** 2 + diveReachZ ** 2);
+					const fumbleChance =
+						reachStretch * 0.5 +
+						(ballSpeed > 25 ? 0.3 : 0.0) -
+						handlingFactor * 0.2;
+
+					if (Math.random() > fumbleChance) {
+						saved = true;
+					} else {
+						// Deflection
+						this.memory.ballBuffer[BALL_OFFSET_VX] *= -0.5;
+						this.memory.ballBuffer[BALL_OFFSET_VY] +=
+							(Math.random() - 0.5) * 10;
+						this.memory.ballBuffer[BALL_OFFSET_VZ] = Math.random() * 5;
+						this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 0.5 : 104.5;
+
+						this.analytics.events.push({
+							type: "save",
+							team: defendingTeam,
+							playerId: defendingGkIdx,
+							x: bx,
+							y: by,
+							time: this.currentTime,
+						});
+
+						return;
+					}
+				}
+
+				if (saved) {
 					this.analytics.events.push({
 						type: "save",
-						team: bx < 0 ? 0 : 1, // team that saved it
+						team: defendingTeam,
 						playerId: defendingGkIdx,
 						x: bx,
 						y: by,
@@ -1212,9 +1255,9 @@ export class Match {
 					this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
 					this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
 					this.lastPossessorIdx = defendingGkIdx;
-					this.possessionCooldown = 2.0; // Give GK time to clear it
+					this.possessionCooldown = 2.0;
 
-					return; // Abort the goal sequence
+					return;
 				}
 
 				let scoringTeam;

@@ -116,6 +116,44 @@ let teamShots = $derived(
 		? data.analytics.shots.filter((s) => s.team === selectedTeam)
 		: [],
 );
+
+const getXgTimeline = () => {
+	if (!data.hasAnalytics || !data.analytics)
+		return {
+			home: [{ minute: 0, xg: 0 }],
+			away: [{ minute: 0, xg: 0 }],
+			max: 1,
+		};
+	const shots = [...data.analytics.shots].sort((a, b) => a.minute - b.minute);
+
+	let homeTotal = 0;
+	let awayTotal = 0;
+	const homeTimeline = [{ minute: 0, xg: 0 }];
+	const awayTimeline = [{ minute: 0, xg: 0 }];
+
+	for (const s of shots) {
+		if (s.team === "home") {
+			homeTimeline.push({ minute: s.minute, xg: homeTotal });
+			homeTotal += s.xg;
+			homeTimeline.push({ minute: s.minute, xg: homeTotal });
+		} else {
+			awayTimeline.push({ minute: s.minute, xg: awayTotal });
+			awayTotal += s.xg;
+			awayTimeline.push({ minute: s.minute, xg: awayTotal });
+		}
+	}
+
+	homeTimeline.push({ minute: 95, xg: homeTotal });
+	awayTimeline.push({ minute: 95, xg: awayTotal });
+
+	return {
+		home: homeTimeline,
+		away: awayTimeline,
+		max: Math.max(1, homeTotal, awayTotal),
+	};
+};
+
+let xgTimeline = $derived(getXgTimeline());
 </script>
 
 <div class="container">
@@ -234,6 +272,56 @@ let teamShots = $derived(
         <p>Shows the spatial density of the team's movements throughout the match. Red areas indicate high concentration and activity.</p>
       {/if}
     </div>
+
+    {#if activeTab === 'shots'}
+    <div class="card mt-1" style="background: #111; border: 1px solid #222; padding: 1.5rem; margin-top: 1rem;">
+      <h3 style="color: white; margin-top: 0; text-align: center; margin-bottom: 1.5rem;">Cumulative xG Timeline</h3>
+      <svg viewBox="0 0 100 40" style="width: 100%; height: auto; max-height: 300px; display: block;">
+        <!-- Axes -->
+        <line x1="5" y1="35" x2="95" y2="35" stroke="#444" stroke-width="0.5" />
+        <line x1="5" y1="5" x2="5" y2="35" stroke="#444" stroke-width="0.5" />
+        
+        <!-- Y-Axis Labels -->
+        <text x="4" y="5" font-size="2" fill="#888" text-anchor="end" alignment-baseline="middle">{xgTimeline.max.toFixed(1)}</text>
+        <text x="4" y="20" font-size="2" fill="#888" text-anchor="end" alignment-baseline="middle">{(xgTimeline.max / 2).toFixed(1)}</text>
+        <text x="4" y="35" font-size="2" fill="#888" text-anchor="end" alignment-baseline="middle">0</text>
+        
+        <!-- X-Axis Labels -->
+        <text x="5" y="38" font-size="2" fill="#888" text-anchor="middle">0'</text>
+        <text x="50" y="38" font-size="2" fill="#888" text-anchor="middle">45'</text>
+        <text x="95" y="38" font-size="2" fill="#888" text-anchor="middle">90'</text>
+
+        <!-- Timeline Paths -->
+        {#if xgTimeline.home.length > 0}
+          <polyline 
+            points={xgTimeline.home.map(p => `${5 + (p.minute / 95) * 90},${35 - (p.xg / xgTimeline.max) * 30}`).join(' ')} 
+            fill="none" stroke="#4caf50" stroke-width="0.8" stroke-linejoin="round"
+          />
+        {/if}
+        {#if xgTimeline.away.length > 0}
+          <polyline 
+            points={xgTimeline.away.map(p => `${5 + (p.minute / 95) * 90},${35 - (p.xg / xgTimeline.max) * 30}`).join(' ')} 
+            fill="none" stroke="#dc3545" stroke-width="0.8" stroke-linejoin="round" stroke-dasharray="1,1"
+          />
+        {/if}
+        
+        <!-- Goal markers -->
+        {#each data.analytics.shots.filter(s => s.result === 'GOAL') as shot}
+            <circle 
+              cx={5 + (shot.minute / 95) * 90} 
+              cy={35 - ((shot.team === 'home' ? xgTimeline.home.find(p => p.minute === shot.minute && p.xg > 0)?.xg || 0 : xgTimeline.away.find(p => p.minute === shot.minute && p.xg > 0)?.xg || 0) / xgTimeline.max) * 30} 
+              r="1.2" 
+              fill={shot.team === 'home' ? '#4caf50' : '#dc3545'}
+              stroke="#111" stroke-width="0.3"
+            />
+        {/each}
+      </svg>
+      <div class="flex gap-1 mt-1 justify-center" style="font-size: 0.8rem; margin-top: 1rem;">
+        <span style="color: #4caf50; font-weight: bold;">Home Team ({xgTimeline.home[xgTimeline.home.length-1].xg.toFixed(2)} xG)</span>
+        <span style="color: #dc3545; font-weight: bold;">Away Team ({xgTimeline.away[xgTimeline.away.length-1].xg.toFixed(2)} xG)</span>
+      </div>
+    </div>
+    {/if}
   {/if}
 </div>
 
