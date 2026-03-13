@@ -100,6 +100,9 @@ export class Match {
 	private offsideLineTeam1: number = 52.5;
 	private lastShotTimeByTeam: [number, number] = [-10, -10];
 
+	// Ball history for interpolation and interception (e.g., GKs)
+	private ballHistory: { x: number; y: number; z: number }[] = [];
+
 	public recorder: MatchRecorder | null = null;
 
 	get formattedTime(): string {
@@ -219,7 +222,24 @@ export class Match {
 		this.spatialMapUpdateTimer += dt;
 		if (this.spatialMapUpdateTimer >= 0.2) {
 			this.spatialMapUpdateTimer = 0;
-			this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
+
+			// Phase-aware ball weight:
+			// 0.8 during settled possession (discourage excessive swarming)
+			// 1.5 during loose balls or set pieces (encourage convergence to action)
+			// 1.2 during immediate transition
+			let ballWeightMultiplier = 1.0;
+			const possessionIdx = this.resolvePossession();
+
+			if (this.status === MatchStatus.SET_PIECE || this.status === MatchStatus.FREE_KICK || possessionIdx === null) {
+				ballWeightMultiplier = 1.5;
+			} else {
+				const team = possessionIdx < 11 ? 0 : 1;
+				const phase = this.tactics.getPhase(team);
+				if (phase === "possession") ballWeightMultiplier = 0.8;
+				else if (phase === "transition") ballWeightMultiplier = 1.2;
+			}
+
+			this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer, ballWeightMultiplier);
 		}
 
 		// 1.5 AI Substitutions (CPU)
@@ -798,6 +818,14 @@ export class Match {
 			this.recorder.captureFrame(this.memory, this.currentTime);
 		}
 
+		// Update Ball History for GK window
+		this.ballHistory.push({
+			x: this.memory.ballBuffer[BALL_OFFSET_X],
+			y: this.memory.ballBuffer[BALL_OFFSET_Y],
+			z: this.memory.ballBuffer[BALL_OFFSET_Z],
+		});
+		if (this.ballHistory.length > 5) this.ballHistory.shift();
+
 		this.checkBoundariesAndGoals();
 
 		this.currentTime += dt;
@@ -829,11 +857,11 @@ export class Match {
 
 		// Find lower-pressure side channel so dribbles look like intentional carries.
 		const lateralProbe = 3.5;
-		const rightControl = this.spatialMap.getControlAt(
+		const rightControl = this.spatialMap.getControlAtFast(
 			px + attackDir * 2.5,
 			py + lateralProbe,
 		);
-		const leftControl = this.spatialMap.getControlAt(
+		const leftControl = this.spatialMap.getControlAtFast(
 			px + attackDir * 2.5,
 			py - lateralProbe,
 		);
@@ -894,7 +922,7 @@ export class Match {
 		const distToGoal = Math.max(Math.sqrt((goalX - px) ** 2 + (34 - py) ** 2), 0.1);
 		const centrality = 1.0 - Math.min(1.0, Math.abs(py - 34) / 24);
 		const distanceScore = 1.0 - Math.min(1.0, distToGoal / 32);
-		const localControl = this.spatialMap.getControlAt(px, py);
+		const localControl = this.spatialMap.getControlAtFast(px, py);
 		const teamControl = team === 0 ? localControl : -localControl;
 		const pressureScore = MathUtils.clamp((teamControl + 1.5) / 3.0, 0, 1);
 		return MathUtils.clamp(
@@ -1141,7 +1169,7 @@ export class Match {
 				const sampleX = px + dx * t;
 				const sampleY = py + dy * t;
 				// Team influence: Team 0 is +, Team 1 is -
-				const control = this.spatialMap.getControlAt(sampleX, sampleY);
+				const control = this.spatialMap.getControlAtFast(sampleX, sampleY);
 				laneSafety += team === 0 ? control : -control;
 			}
 			laneSafety /= steps;
@@ -1181,15 +1209,14 @@ export class Match {
 			// Must also be below crossbar height (roughly 2.44m) and moving toward that goal line.
 			const vx = this.memory.ballBuffer[BALL_OFFSET_VX];
 			const movingTowardGoal = bx < 0 ? vx < 0 : vx > 0;
-			const isGoal = by > 30.34 && by < 37.66 && bz < 2.44 && movingTowardGoal;
+			const isGoalArea = by > 30.34 && by < 37.66 && bz < 2.44;
 
-			if (isGoal) {
+			if (isGoalArea && movingTowardGoal) {
 				const vy = this.memory.ballBuffer[BALL_OFFSET_VY];
 				const speedSq = vx ** 2 + vy ** 2;
 				const ballSpeed = Math.sqrt(speedSq);
 
 				// Determine which team is defending this goal
-				// If bx < 0, goal is at X=0. Defending team is the one whose attackDir is 1 (attacks 105)
 				const defendingTeam = bx < 0 
 					? (this.getAttackDir(0) === 1 ? 0 : 1)
 					: (this.getAttackDir(0) === -1 ? 0 : 1);
@@ -1201,49 +1228,70 @@ export class Match {
 					jumping: 50,
 				};
 
-				// Physical Goalkeeper IK Calculation
+				// GK Position
 				const gkOffset = defendingGkIdx * PLAYER_STRIDE;
 				const gkY = this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_Y];
-
-				// IK logic: Update the buffer to represent the GK's extended hands at the goal line
 				const goalLineX = bx < 0 ? 0 : 105;
-				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_X] = goalLineX;
-				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Y] = by;
-				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Z] = bz;
 
-				const diveReachY = 2.0 + ((gkStats.reflexes || 50) / 100) * 2.0; 
-				const diveReachZ = 1.5 + ((gkStats.jumping || 50) / 100) * 1.5; 
-				const distY = Math.abs(gkY - by);
-				const distZ = bz;
+				// --- Interception Window Logic ---
+				// Find where the ball actually crossed the goal line using ballHistory
+				let crossingY = by;
+				let crossingZ = bz;
 
-				// Reaction Penalty: If the ball is far from the GK's standing position, 
-				// they have a harder time reaching it in time.
-				const reactionDifficulty = Math.max(0, distY - 1.0) * 0.1; 
-				
-				let saved = false;
+				if (this.ballHistory.length >= 2) {
+					const prev = this.ballHistory[this.ballHistory.length - 2];
+					const curr = this.ballHistory[this.ballHistory.length - 1];
+					const dx = curr.x - prev.x;
+					if (Math.abs(dx) > 0.001) {
+						const t = (goalLineX - prev.x) / dx;
+						crossingY = prev.y + (curr.y - prev.y) * t;
+						crossingZ = prev.z + (curr.z - prev.z) * t;
+					}
+				}
 
-				if (distY <= diveReachY && distZ <= diveReachZ) {
-					const diveDistance = Math.sqrt(distY ** 2 + distZ ** 2);
-					const handlingFactor = (gkStats.handling || 50) / 100;
+				// Check if it's actually in the goal after interpolation
+				if (crossingY > 30.34 && crossingY < 37.66 && crossingZ < 2.44) {
+					// Snap GK Hands for visual rendering
+					this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_X] = goalLineX;
+					this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Y] = crossingY;
+					this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Z] = crossingZ;
 
-					const reachStretch =
-						diveDistance / Math.sqrt(diveReachY ** 2 + diveReachZ ** 2);
-					const fumbleChance =
-						reachStretch * 0.4 + 
-						(ballSpeed > 25 ? 0.3 : 0.0) - 
-						handlingFactor * 0.2 + 
-						reactionDifficulty; 
+					const diveReachY = 2.0 + ((gkStats.reflexes || 50) / 100) * 2.5; 
+					const diveReachZ = 1.6 + ((gkStats.jumping || 50) / 100) * 1.6; 
+					const distY = Math.abs(gkY - crossingY);
+					const distZ = crossingZ;
 
-					if (Math.random() > fumbleChance) {
-						saved = true;
-					} else {
-						// Deflection
-						this.memory.ballBuffer[BALL_OFFSET_VX] *= -0.5;
-						this.memory.ballBuffer[BALL_OFFSET_VY] +=
-							(Math.random() - 0.5) * 10;
-						this.memory.ballBuffer[BALL_OFFSET_VZ] = Math.random() * 5;
-						this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 0.5 : 104.5;
+					// Reaction Difficulty based on distance and ball speed
+					const reactionDifficulty = (distY / diveReachY) * 0.4 + (ballSpeed / 40) * 0.3;
+					
+					let saved = false;
 
+					if (distY <= diveReachY && distZ <= diveReachZ) {
+						const handlingFactor = (gkStats.handling || 50) / 100;
+						const fumbleChance = 0.5 - (handlingFactor * 0.3) + reactionDifficulty;
+
+						if (Math.random() > MathUtils.clamp(fumbleChance, 0.05, 0.95)) {
+							saved = true;
+						} else {
+							// Deflection
+							this.memory.ballBuffer[BALL_OFFSET_VX] *= -0.4;
+							this.memory.ballBuffer[BALL_OFFSET_VY] += (Math.random() - 0.5) * 15;
+							this.memory.ballBuffer[BALL_OFFSET_VZ] = Math.random() * 6;
+							this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 0.5 : 104.5;
+
+							this.analytics.events.push({
+								type: "save",
+								team: defendingTeam,
+								playerId: defendingGkIdx,
+								x: bx,
+								y: by,
+								time: this.currentTime,
+							});
+							return;
+						}
+					}
+
+					if (saved) {
 						this.analytics.events.push({
 							type: "save",
 							team: defendingTeam,
@@ -1253,84 +1301,58 @@ export class Match {
 							time: this.currentTime,
 						});
 
+						// GK catches the ball
+						this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 2.0 : 103.0;
+						this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
+						this.memory.ballBuffer[BALL_OFFSET_Z] = 0;
+						this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
+						this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
+						this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
+						this.lastPossessorIdx = defendingGkIdx;
+						this.possessionCooldown = 2.0;
 						return;
 					}
-				}
 
-				if (saved) {
+					// If not saved, it's a Goal
+					let scoringTeam;
+					if (this.currentHalf === 1) {
+						scoringTeam = bx < 0 ? 1 : 0;
+						if (bx < 0) this.awayScore++;
+						else this.homeScore++;
+					} else {
+						scoringTeam = bx < 0 ? 0 : 1;
+						if (bx < 0) this.homeScore++;
+						else this.awayScore++;
+					}
+
+					console.log(`[Engine] GOAL! Score now ${this.homeScore}-${this.awayScore} (Half: ${this.currentHalf}, X: ${bx.toFixed(2)})`);
+
 					this.analytics.events.push({
-						type: "save",
-						team: defendingTeam,
-						playerId: defendingGkIdx,
+						type: "goal",
+						team: scoringTeam,
+						playerId: this.lastPossessorIdx !== null ? this.lastPossessorIdx : undefined,
 						x: bx,
 						y: by,
 						time: this.currentTime,
 					});
 
-					// GK catches the ball
-					this.memory.ballBuffer[BALL_OFFSET_X] = bx < 0 ? 2.0 : 103.0;
-					this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
-					this.memory.ballBuffer[BALL_OFFSET_Z] = 0;
-					this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
-					this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
-					this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
-					this.lastPossessorIdx = defendingGkIdx;
-					this.possessionCooldown = 2.0;
-
+					// Reset positions
+					this.setup(this.initialAnchors, this.playerStats, undefined, undefined, undefined, false);
+					
+					// Reset GK Sentinels
+					this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+					this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+					this.status = MatchStatus.KICKOFF;
 					return;
 				}
-
-				let scoringTeam;
-				if (this.currentHalf === 1) {
-					scoringTeam = bx < 0 ? 1 : 0;
-					if (bx < 0) this.awayScore++;
-					else this.homeScore++;
-				} else {
-					scoringTeam = bx < 0 ? 0 : 1;
-					if (bx < 0) this.homeScore++;
-					else this.awayScore++;
-				}
-
-				console.log(`[Engine] GOAL! Score now ${this.homeScore}-${this.awayScore} (Half: ${this.currentHalf}, X: ${bx.toFixed(2)})`);
-
-				this.analytics.events.push({
-					type: "goal",
-					team: scoringTeam,
-					playerId:
-						this.lastPossessorIdx !== null ? this.lastPossessorIdx : undefined,
-					x: bx,
-					y: by,
-					time: this.currentTime,
-				});
-
-				// Reset positions
-				this.setup(
-					this.initialAnchors,
-					this.playerStats,
-					undefined,
-					undefined,
-					undefined,
-					false,
-				);
-				
-				// Reset GK Sentinels
-				this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
-				this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
-
-				this.status = MatchStatus.KICKOFF;
-			} else {
-				// Out of bounds - Goal Kick / Corner
-				const lastTeam =
-					this.lastPossessorIdx !== null
-						? this.lastPossessorIdx < 11
-							? 0
-							: 1
-						: 0;
-
+			}
+			
+			// If it crossed the goal line but wasn't a goal area -> Goal Kick / Corner
+			if (bx < -0.5 || bx > 105.5) {
+				const lastTeam = this.lastPossessorIdx !== null ? (this.lastPossessorIdx < 11 ? 0 : 1) : 0;
 				const leftDefendingTeam = this.currentHalf === 1 ? 0 : 1;
 				const rightDefendingTeam = this.currentHalf === 1 ? 1 : 0;
 				const defendingSide = bx < 0 ? leftDefendingTeam : rightDefendingTeam;
-
 				const attackingTeam = lastTeam === 0 ? 1 : 0;
 
 				if (lastTeam === defendingSide) {
@@ -1351,7 +1373,6 @@ export class Match {
 				// Reset GK Sentinels
 				this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
 				this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
-
 				this.triggerSetPiece(attackingTeam);
 			}
 		}
@@ -1370,12 +1391,7 @@ export class Match {
 			this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
 			this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
 
-			const lastTeam =
-				this.lastPossessorIdx !== null
-					? this.lastPossessorIdx < 11
-						? 0
-						: 1
-					: 0;
+			const lastTeam = this.lastPossessorIdx !== null ? (this.lastPossessorIdx < 11 ? 0 : 1) : 0;
 			const attackingTeam = lastTeam === 0 ? 1 : 0;
 			this.triggerSetPiece(attackingTeam);
 		}

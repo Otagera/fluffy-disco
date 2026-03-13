@@ -150,8 +150,9 @@ export class PhysicsEngine {
 			}
 
 			// 3. Acceleration = Force / Mass
-			const ax = force.fx / mass;
-			const ay = force.fy / mass;
+			const safeMass = Math.max(mass, 0.01);
+			const ax = force.fx / safeMass;
+			const ay = force.fy / safeMass;
 
 			// 4. Integrate (Euler)
 			vx += ax * dt;
@@ -219,12 +220,18 @@ export class PhysicsEngine {
 		// Apply Magnus Effect
 		const speed = Math.sqrt(vx * vx + vy * vy);
 		if (speed > 0.1 && (Math.abs(spinX) > 0 || Math.abs(spinY) > 0)) {
+			// Lateral curl (Sidespin - spinY)
 			const perpX = -vy / speed;
 			const perpY = vx / speed;
-			const curlForce = spinX * speed * 0.15; // Adjusted curl multiplier
+			const sidespinCurl = spinY * speed * 0.15; 
 
-			vx += perpX * curlForce * dt;
-			vy += perpY * curlForce * dt;
+			// Vertical lift/dip (Topspin/Backspin - spinX)
+			// Affects VZ directly
+			const liftForce = spinX * speed * 0.05;
+
+			vx += perpX * sidespinCurl * dt;
+			vy += perpY * sidespinCurl * dt;
+			vz += liftForce * dt;
 
 			spinX *= 0.95 ** dt;
 			spinY *= 0.95 ** dt;

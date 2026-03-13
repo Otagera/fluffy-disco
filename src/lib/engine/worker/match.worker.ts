@@ -143,7 +143,7 @@ self.onmessage = (e) => {
 		}
 		sendBuffersAndStatus();
 	} else if (type === "SIMULATE_MATCH") {
-		if (intervalId) clearInterval(intervalId);
+		if (intervalId) clearTimeout(intervalId);
 		const results = match.simulateMatch();
 		sendBuffersAndStatus(); // Final sync for replay/final UI
 		self.postMessage({

@@ -29,16 +29,25 @@ export class TacticalManager {
 	updatePhase(ballBuffer: Float32Array, possessionPlayerIdx: number | null) {
 		if (possessionPlayerIdx === null) {
 			this.phase = PlayPhase.TRANSITION;
-			// Do not clear this.possessionTeam so the attacking team doesn't instantly retreat when a pass is in the air.
 		} else {
 			const team = possessionPlayerIdx < 11 ? 0 : 1;
-			if (team !== this.possessionTeam) {
-				this.phase = PlayPhase.TRANSITION; // Could trigger a "Counter Attack" state
+			if (this.possessionTeam !== null && team !== this.possessionTeam) {
+				this.phase = PlayPhase.TRANSITION;
 				this.possessionTeam = team;
 			} else {
+				this.possessionTeam = team;
 				this.phase = PlayPhase.POSSESSION;
 			}
 		}
+	}
+
+	/**
+	 * Returns the current phase for a specific team as a lowercase string.
+	 */
+	getPhase(team: number): "possession" | "transition" | "defending" {
+		if (this.phase === PlayPhase.TRANSITION) return "transition";
+		if (this.possessionTeam === team) return "possession";
+		return "defending";
 	}
 
 	/**
