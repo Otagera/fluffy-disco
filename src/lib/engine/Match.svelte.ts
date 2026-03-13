@@ -52,10 +52,10 @@ export class Match {
 	public memory: MatchMemory;
 	public spatialMap: SpatialMap;
 	public tactics: TacticalManager;
-	public homeScore: number = $state(0);
-	public awayScore: number = $state(0);
-	public status: MatchStatus = $state(MatchStatus.KICKOFF);
-	public currentHalf: number = $state(1);
+	public homeScore: number = 0;
+	public awayScore: number = 0;
+	public status: MatchStatus = MatchStatus.KICKOFF;
+	public currentHalf: number = 1;
 	public managedTeam: number | null = null; // 0 for Home, 1 for Away, null for sim
 
 	// Card Tracking
@@ -74,19 +74,21 @@ export class Match {
 	private playerRoles: string[] = []; // corresponding roles for each stat index
 	private tacticalStyles: string[] = ["Balanced", "Balanced"]; // [HomeStyle, AwayStyle]
 	private mentalities: string[] = ["BALANCED", "BALANCED"];
+	private formationNames: string[] = ["4-4-2 Wide", "4-4-2 Wide"];
 
 	// system bonuses based on compatibility
 	private systemBonuses: [number, number] = [1.0, 1.0]; // multipliers for error (1.0 = normal, 0.8 = 20% more accurate)
 
-	// bench storage (also index-aligned)
-	public benchStats: any[] = [];
-	public benchRoles: string[] = [];
+	// bench storage (separate for each team)
+	public benchStats: [any[], any[]] = [[], []];
+	public benchRoles: [string[], string[]] = [[], []];
 	public subsUsed: [number, number] = [0, 0];
 	private lastSubCheckMinute: number = -1;
 
 	private analyticsSampleTimer: number = 0;
+	private spatialMapUpdateTimer: number = 0;
 
-	public currentTime: number = $state(0);
+	public currentTime: number = 0;
 	private maxDuration: number = 90 * 60; // 90 minutes in seconds
 	private possessionCooldown: number = 0; // Cooldown after a kick/shot
 	private lastPossessorIdx: number | null = null;
@@ -213,8 +215,12 @@ export class Match {
 		this.offsideLineTeam0 = offsideLineTeam0;
 		this.offsideLineTeam1 = offsideLineTeam1;
 
-		// 1. Update AI Spatial Awareness (Influence Map)
-		this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
+		// 1. Update AI Spatial Awareness (Influence Map) - Throttled for performance
+		this.spatialMapUpdateTimer += dt;
+		if (this.spatialMapUpdateTimer >= 0.2) {
+			this.spatialMapUpdateTimer = 0;
+			this.spatialMap.update(this.memory.playerBuffer, this.memory.ballBuffer);
+		}
 
 		// 1.5 AI Substitutions (CPU)
 		this.handleCPUSubs();
@@ -269,6 +275,7 @@ export class Match {
 			);
 
 			// Override taker's target to be exactly the ball's position
+			let hasArrived = false;
 			if (this.setPieceTakerIdx !== null) {
 				const bx = this.memory.ballBuffer[BALL_OFFSET_X];
 				const by = this.memory.ballBuffer[BALL_OFFSET_Y];
@@ -335,7 +342,7 @@ export class Match {
 					const attackDir = this.getAttackDir(takerTeam);
 					const goalX = attackDir === 1 ? 105 : 0;
 					const goalY = 34;
-					const distToGoal = Math.sqrt((goalX - bx) ** 2 + (goalY - by) ** 2);
+					const distToGoal = Math.max(Math.sqrt((goalX - bx) ** 2 + (goalY - by) ** 2), 0.1);
 
 					if (distToGoal < 30) {
 						// Assemble a wall 9.15m away
@@ -368,23 +375,15 @@ export class Match {
 						}
 					}
 				}
-			}
 
-			// Update players to move into position
-			PhysicsEngine.updatePlayers(this.memory.playerBuffer, targets, dt);
-
-			// Check if taker has arrived at the ball
-			let hasArrived = false;
-			if (this.setPieceTakerIdx !== null) {
+				// Check if taker has arrived at the ball
 				const offset = this.setPieceTakerIdx * PLAYER_STRIDE;
 				const px = this.memory.playerBuffer[offset + PLAYER_OFFSET_X];
 				const py = this.memory.playerBuffer[offset + PLAYER_OFFSET_Y];
-				const bx = this.memory.ballBuffer[BALL_OFFSET_X];
-				const by = this.memory.ballBuffer[BALL_OFFSET_Y];
 				const distSq = (px - bx) ** 2 + (py - by) ** 2;
 
-				if (distSq < 2.25) {
-					// within 1.5m
+				if (distSq < 6.25) {
+					// within 2.5m (increased from 1.5m for reliability at high speeds)
 					hasArrived = true;
 					// Snap the taker exactly to the ball to prevent orbiting
 					this.memory.playerBuffer[offset + PLAYER_OFFSET_X] = bx;
@@ -394,15 +393,18 @@ export class Match {
 				}
 			}
 
+			// Update players to move into position
+			PhysicsEngine.updatePlayers(this.memory.playerBuffer, targets, dt);
+
 			// Resume play only after timer expires AND taker has arrived
+			// Safety Timeout: Force resume if stuck in set piece for more than 10 seconds
 			if (
-				this.setPieceTimer <= 0 &&
-				hasArrived &&
-				this.setPieceTakerIdx !== null
+				(this.setPieceTimer <= 0 && hasArrived && this.setPieceTakerIdx !== null) ||
+				this.setPieceTimer < -10.0
 			) {
-				const team = this.setPieceTakerIdx < 11 ? 0 : 1;
+				const team = this.setPieceTakerIdx !== null ? (this.setPieceTakerIdx < 11 ? 0 : 1) : 0;
 				const attackDir = this.getAttackDir(team);
-				const stats = this.playerStats[this.setPieceTakerIdx] || {
+				const stats = (this.setPieceTakerIdx !== null ? this.playerStats[this.setPieceTakerIdx] : null) || {
 					passing: 50,
 					finishing: 50,
 				};
@@ -410,7 +412,7 @@ export class Match {
 				const by = this.memory.ballBuffer[BALL_OFFSET_Y];
 
 				const goalX = attackDir === 1 ? 105 : 0;
-				const distToGoal = Math.sqrt((goalX - bx) ** 2 + (34 - by) ** 2);
+				const distToGoal = Math.max(Math.sqrt((goalX - bx) ** 2 + (34 - by) ** 2), 0.1);
 
 				if (this.status === MatchStatus.FREE_KICK && distToGoal < 30) {
 					// Direct shot on goal
@@ -421,9 +423,9 @@ export class Match {
 					const consistencyMultiplier = 1.0 + (10 - consistency) * 0.05;
 
 					const errorSpread = MathUtils.clamp(
-						2.0 * (1.0 - stats.finishing / 100) * consistencyMultiplier,
-						0.1,
-						2.0,
+						5.0 * (1.0 - stats.finishing / 100) * consistencyMultiplier,
+						0.5,
+						8.0,
 					);
 					const ty = 34 + MathUtils.nextGaussian(0, errorSpread);
 					const targetedDy = ty - by;
@@ -436,15 +438,15 @@ export class Match {
 					this.memory.ballBuffer[BALL_OFFSET_VZ] = 4.0; // Loft it over the wall
 				} else {
 					// Execute pass to resume play
-					const passTarget = this.findPassTarget(
+					const passTarget = this.setPieceTakerIdx !== null ? this.findPassTarget(
 						this.setPieceTakerIdx,
 						team,
 						this.status === MatchStatus.SET_PIECE,
-					);
+					) : null;
 					if (passTarget) {
 						const dx = passTarget.x - bx;
 						const dy = passTarget.y - by;
-						const dist = Math.sqrt(dx * dx + dy * dy);
+						const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.1);
 
 						const passPower = 12.0;
 						this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * passPower;
@@ -541,7 +543,7 @@ export class Match {
 			const inShootingRange = attackDir === 1 ? px > 80 : px < 25; // Restrict to more realistic shot zones
 
 			let basePassChance = 0.65;
-			let baseShotChance = 0.18;
+			let baseShotChance = 0.22; // Increased from 0.18
 
 			const mentality = this.mentalities[team];
 			const style = this.tacticalStyles[team];
@@ -680,11 +682,11 @@ export class Match {
 					targetGoalY + gkBias + MathUtils.nextGaussian(0, errorSpread);
 
 				const dy = ty - py;
-				const dist = Math.sqrt(dx * dx + dy * dy);
+				const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.1);
 
 				// Variable shot power based on finishing + distance context.
 				const shotPower =
-					13.0 +
+					18.0 +
 					(stats.finishing / 100) * 12.0 +
 					MathUtils.clamp(dist / 30.0, 0, 0.45) * 8.0;
 				this.memory.ballBuffer[BALL_OFFSET_VX] = (dx / dist) * shotPower;
@@ -734,7 +736,7 @@ export class Match {
 
 					const dx = tx - px;
 					const dy = ty - py;
-					const dist = Math.sqrt(dx * dx + dy * dy);
+					const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.1);
 
 					// Variable pass power based on passing rating (10.0 to 20.0)
 					const passPower = 10.0 + (stats.passing / 100) * 10.0;
@@ -799,6 +801,15 @@ export class Match {
 		this.checkBoundariesAndGoals();
 
 		this.currentTime += dt;
+
+		// Catch-all: If ball position becomes NaN, reset it to prevent full freeze
+		if (isNaN(this.memory.ballBuffer[BALL_OFFSET_X])) {
+			console.error("[Engine] CRITICAL: Ball position became NaN! Resetting...");
+			this.memory.ballBuffer[BALL_OFFSET_X] = 52.5;
+			this.memory.ballBuffer[BALL_OFFSET_Y] = 34.0;
+			this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
+			this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
+		}
 	}
 
 	private dribbleBall(
@@ -880,7 +891,7 @@ export class Match {
 	private evaluateShotQuality(px: number, py: number, team: number): number {
 		const attackDir = this.getAttackDir(team);
 		const goalX = attackDir === 1 ? 105 : 0;
-		const distToGoal = Math.sqrt((goalX - px) ** 2 + (34 - py) ** 2);
+		const distToGoal = Math.max(Math.sqrt((goalX - px) ** 2 + (34 - py) ** 2), 0.1);
 		const centrality = 1.0 - Math.min(1.0, Math.abs(py - 34) / 24);
 		const distanceScore = 1.0 - Math.min(1.0, distToGoal / 32);
 		const localControl = this.spatialMap.getControlAt(px, py);
@@ -913,12 +924,12 @@ export class Match {
 		const homeComp = getTacticalCompatibility(
 			this.tacticalStyles[0],
 			this.mentalities[0],
-			"",
+			this.formationNames[0],
 		);
 		const awayComp = getTacticalCompatibility(
 			this.tacticalStyles[1],
 			this.mentalities[1],
-			"",
+			this.formationNames[1],
 		);
 
 		// Bonus: 1.0 (at 50% comp) to 0.8 (at 100% comp) or 1.2 (at 0% comp)
@@ -926,18 +937,22 @@ export class Match {
 		this.systemBonuses[1] = 1.2 - awayComp * 0.4;
 	}
 
+	public get homeStyle(): string { return this.tacticalStyles[0]; }
 	public set homeStyle(s: string) {
 		this.tacticalStyles[0] = s;
 		this.updateSystemBonuses();
 	}
+	public get awayStyle(): string { return this.tacticalStyles[1]; }
 	public set awayStyle(s: string) {
 		this.tacticalStyles[1] = s;
 		this.updateSystemBonuses();
 	}
+	public get homeMentality(): string { return this.mentalities[0]; }
 	public set homeMentality(m: string) {
 		this.mentalities[0] = m;
 		this.updateSystemBonuses();
 	}
+	public get awayMentality(): string { return this.mentalities[1]; }
 	public set awayMentality(m: string) {
 		this.mentalities[1] = m;
 		this.updateSystemBonuses();
@@ -974,9 +989,9 @@ export class Match {
 			}
 
 			// stamina is stored 0..1 so threshold around 0.6 corresponds to 60%
-			if (tiredIdx !== -1 && minStam < 0.6 && this.benchStats.length > 0) {
+			if (tiredIdx !== -1 && minStam < 0.6 && this.benchStats[team].length > 0) {
 				const tiredRole = this.playerRoles[tiredIdx] || "";
-				const benchIdx = this.benchRoles.findIndex((r) => r === tiredRole);
+				const benchIdx = this.benchRoles[team].findIndex((r) => r === tiredRole);
 				if (benchIdx !== -1) {
 					// perform substitution
 					this.makeSub(team, tiredIdx - startIdx, benchIdx);
@@ -995,9 +1010,9 @@ export class Match {
 		if (outIdx < 0 || outIdx > 10) return false;
 		if (this.redCards[globalIdx] > 0) return false; // Cannot sub off a sent-off player
 		if (this.subsUsed[team] >= 5) return false;
-		if (benchIdx < 0 || benchIdx >= this.benchStats.length) return false;
-		const incomingStats = this.benchStats.splice(benchIdx, 1)[0];
-		const incomingRole = this.benchRoles.splice(benchIdx, 1)[0];
+		if (benchIdx < 0 || benchIdx >= this.benchStats[team].length) return false;
+		const incomingStats = this.benchStats[team].splice(benchIdx, 1)[0];
+		const incomingRole = this.benchRoles[team].splice(benchIdx, 1)[0];
 
 		// replace starter stats/role
 		this.playerStats[globalIdx] = incomingStats;
@@ -1196,11 +1211,15 @@ export class Match {
 				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Y] = by;
 				this.memory.playerBuffer[gkOffset + PLAYER_OFFSET_GK_Z] = bz;
 
-				const diveReachY = 1.5 + ((gkStats.reflexes || 50) / 100) * 1.5;
-				const diveReachZ = 2.0 + ((gkStats.jumping || 50) / 100) * 0.5;
+				const diveReachY = 2.0 + ((gkStats.reflexes || 50) / 100) * 2.0; 
+				const diveReachZ = 1.5 + ((gkStats.jumping || 50) / 100) * 1.5; 
 				const distY = Math.abs(gkY - by);
 				const distZ = bz;
 
+				// Reaction Penalty: If the ball is far from the GK's standing position, 
+				// they have a harder time reaching it in time.
+				const reactionDifficulty = Math.max(0, distY - 1.0) * 0.1; 
+				
 				let saved = false;
 
 				if (distY <= diveReachY && distZ <= diveReachZ) {
@@ -1210,9 +1229,10 @@ export class Match {
 					const reachStretch =
 						diveDistance / Math.sqrt(diveReachY ** 2 + diveReachZ ** 2);
 					const fumbleChance =
-						reachStretch * 0.5 +
-						(ballSpeed > 25 ? 0.3 : 0.0) -
-						handlingFactor * 0.2;
+						reachStretch * 0.4 + 
+						(ballSpeed > 25 ? 0.3 : 0.0) - 
+						handlingFactor * 0.2 + 
+						reactionDifficulty; 
 
 					if (Math.random() > fumbleChance) {
 						saved = true;
@@ -1271,6 +1291,8 @@ export class Match {
 					else this.awayScore++;
 				}
 
+				console.log(`[Engine] GOAL! Score now ${this.homeScore}-${this.awayScore} (Half: ${this.currentHalf}, X: ${bx.toFixed(2)})`);
+
 				this.analytics.events.push({
 					type: "goal",
 					team: scoringTeam,
@@ -1290,6 +1312,11 @@ export class Match {
 					undefined,
 					false,
 				);
+				
+				// Reset GK Sentinels
+				this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+				this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+
 				this.status = MatchStatus.KICKOFF;
 			} else {
 				// Out of bounds - Goal Kick / Corner
@@ -1320,6 +1347,11 @@ export class Match {
 				this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
 				this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
 				this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
+
+				// Reset GK Sentinels
+				this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+				this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+
 				this.triggerSetPiece(attackingTeam);
 			}
 		}
@@ -1333,6 +1365,10 @@ export class Match {
 			this.memory.ballBuffer[BALL_OFFSET_VX] = 0;
 			this.memory.ballBuffer[BALL_OFFSET_VY] = 0;
 			this.memory.ballBuffer[BALL_OFFSET_VZ] = 0;
+
+			// Reset GK Sentinels
+			this.memory.playerBuffer[0 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
+			this.memory.playerBuffer[11 * PLAYER_STRIDE + PLAYER_OFFSET_GK_X] = -1;
 
 			const lastTeam =
 				this.lastPossessorIdx !== null
@@ -1377,6 +1413,24 @@ export class Match {
 		this.setPieceTakerIdx = closest;
 	}
 
+	public updateRoleOverrides(team: number, roles: any) {
+		const teamIdx = team === 0 ? 0 : 11;
+		for (let i = 0; i < 11; i++) {
+			if (roles[i]) {
+				this.playerRoles[teamIdx + i] = roles[i];
+			}
+		}
+	}
+
+	public updatePositionOverrides(team: number, anchors: any) {
+		const teamIdx = team === 0 ? 0 : 11;
+		for (let i = 0; i < 11; i++) {
+			if (anchors[i]) {
+				this.initialAnchors[teamIdx + i] = anchors[i];
+			}
+		}
+	}
+
 	/**
 	 * Runs a full match simulation at maximum CPU speed.
 	 */
@@ -1385,10 +1439,12 @@ export class Match {
 		awayScore: number;
 		duration: number;
 	} {
-		const step = 0.1;
+		const step = 0.2; // Increased from 0.1 for faster background sim
 		const totalSteps = this.maxDuration / step;
 
 		for (let i = 0; i < totalSteps; i++) {
+			if (this.currentTime >= this.maxDuration) break;
+			
 			if (this.status === MatchStatus.HALF_TIME) {
 				// Auto-start second half in simulation
 				this.currentHalf = 2;

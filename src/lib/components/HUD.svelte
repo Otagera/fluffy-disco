@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { TeamProfile } from "../data/types";
-import type { Match } from "../engine/Match.svelte.ts";
+import type { MatchController as Match } from "../engine/MatchController.svelte.ts";
 
 let { currentTime, homeTeam, awayTeam, match, cinematicUi, forceShowControls } =
 	$props<{

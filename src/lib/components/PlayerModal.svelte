@@ -10,6 +10,8 @@ let {
 	managerTeamId,
 	scoutingLevel = 0,
 	isShortlisted = false,
+	perceivedMin = null,
+	perceivedMax = null,
 }: {
 	player: any;
 	onclose: () => void;
@@ -17,6 +19,8 @@ let {
 	managerTeamId?: string;
 	scoutingLevel?: number;
 	isShortlisted?: boolean;
+	perceivedMin?: number | null;
+	perceivedMax?: number | null;
 } = $props();
 
 let showOfferForm = $state(false);
@@ -27,6 +31,13 @@ let isSubmitting = $state(false);
 const effectiveScoutLevel = $derived(
 	player.teamId === managerTeamId ? 2 : scoutingLevel,
 );
+
+// Derived spread from the overall perceived range if level 1
+const attributeSpread = $derived.by(() => {
+	if (effectiveScoutLevel !== 1 || !perceivedMin || !perceivedMax) return 0;
+	// Spread is roughly half the overall range, but at least 2
+	return Math.max(2, Math.ceil((perceivedMax - perceivedMin) / 2));
+});
 
 function getStatColor(val: number) {
 	if (val >= 15) return "text-green-600";
@@ -45,8 +56,9 @@ function formatCurrency(val: number) {
 function renderStatValue(val: number) {
 	if (effectiveScoutLevel >= 2) return val.toString();
 	if (effectiveScoutLevel === 1) {
-		const low = Math.max(1, val - 2);
-		const high = Math.min(20, val + 2);
+		const spread = attributeSpread;
+		const low = Math.max(1, val - spread);
+		const high = Math.min(20, val + spread);
 		return `${low}-${high}`;
 	}
 	return "?";

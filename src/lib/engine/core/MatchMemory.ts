@@ -42,6 +42,9 @@ export class MatchMemory {
 			this.playerBuffer[offset + 4] = 10.5; // Max Speed 10.5m/s (~38km/h)
 			this.playerBuffer[offset + 5] = 850.0; // High acceleration force (increased for maneuverability/braking)
 			this.playerBuffer[offset + 6] = 75.0; // Mass
+			this.playerBuffer[offset + 8] = -1; // GK_X sentinel
+			this.playerBuffer[offset + 9] = -1; // GK_Y sentinel
+			this.playerBuffer[offset + 10] = -1; // GK_Z sentinel
 			if (resetStamina) {
 				this.playerBuffer[offset + 7] = 1.0; // 100% stamina
 			}

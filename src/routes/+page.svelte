@@ -283,10 +283,17 @@ async function handleContinue(fastForward = false) {
           </div>
           
           <div class="mt-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <a href="/match/{data.nextFixture.id}/tactics" class="btn-primary flex items-center justify-center gap-2">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              PLAY MATCH
-            </a>
+            {#if data.nextFixture.date === data.currentDate || (new Date(data.currentDate).getDay() === 6 && !data.nextFixture.date)}
+              <a href="/match/{data.nextFixture.id}/tactics" class="btn-primary flex items-center justify-center gap-2">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                PLAY MATCH
+              </a>
+            {:else}
+              <button disabled class="btn-primary opacity-50 cursor-not-allowed flex items-center justify-center gap-2">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                NOT MATCHDAY
+              </button>
+            {/if}
             
             <a href="/formation" class="btn-secondary flex items-center justify-center gap-2">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
