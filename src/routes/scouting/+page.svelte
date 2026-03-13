@@ -269,12 +269,15 @@ function getTeamName(teamId: string | null) {
 </div>
 
 {#if selectedPlayer}
+  {@const report = (data.scoutingReports || []).find((r: any) => r.playerId === selectedPlayer.id && r.teamId === data.managerTeamId)}
   <PlayerModal 
     player={selectedPlayer} 
     currentDate={data.currentDate}
     managerTeamId={data.managerTeamId}
     scoutingLevel={getKnowledgeLevel(selectedPlayer.id)}
     isShortlisted={shortlist.includes(selectedPlayer.id)}
+    perceivedMin={report?.perceivedMin}
+    perceivedMax={report?.perceivedMax}
     onclose={() => selectedPlayerId = null} 
   />
 {/if}

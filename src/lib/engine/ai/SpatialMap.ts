@@ -39,11 +39,18 @@ export class SpatialMap {
 		const cellW = this.pitchWidth / this.cols;
 		const cellH = this.pitchHeight / this.rows;
 
+		const bx = ballBuffer[BALL_OFFSET_X];
+		const by = ballBuffer[BALL_OFFSET_Y];
+
 		for (let i = 0; i < PLAYER_COUNT; i++) {
 			const offset = i * PLAYER_STRIDE;
 			const px = playerBuffer[offset + PLAYER_OFFSET_X];
 			const py = playerBuffer[offset + PLAYER_OFFSET_Y];
 			const team = i < 11 ? 0 : 1; // Team A (0-10), Team B (11-21)
+
+			// Calculate weight based on distance to ball (players near the ball have more "impact")
+			const distToBallSq = (px - bx) ** 2 + (py - by) ** 2;
+			const ballWeight = 1.0 + 1.5 / (1.0 + Math.sqrt(distToBallSq) / 10.0);
 
 			// Calculate grid bounds for influence falloff (e.g., 15m radius)
 			const radius = 15;
@@ -61,7 +68,7 @@ export class SpatialMap {
 					const distSq = dx * dx + dy * dy;
 
 					if (distSq < radius * radius) {
-						const influence = 1.0 - Math.sqrt(distSq) / radius;
+						const influence = (1.0 - Math.sqrt(distSq) / radius) * ballWeight;
 						const gridIdx = (r * this.cols + c) * 2 + team;
 						this.grid[gridIdx] += influence;
 					}

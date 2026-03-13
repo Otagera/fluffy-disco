@@ -20,13 +20,13 @@ const selectedPlayer = $derived(
 	selectedPlayerId ? data.players[selectedPlayerId] : null,
 );
 
-const selectedPlayerScoutingLevel = $derived.by(() => {
-	if (!selectedPlayerId) return 0;
-	const report = (data.scoutingReports || []).find(
+const selectedPlayerScoutingLevel = $derived(selectedPlayerReport?.level ?? 0);
+const selectedPlayerReport = $derived.by(() => {
+	if (!selectedPlayerId) return null;
+	return (data.scoutingReports || []).find(
 		(r: any) =>
 			r.playerId === selectedPlayerId && r.teamId === data.managerTeamId,
 	);
-	return report ? report.level : 0;
 });
 
 function formatDate(dateStr: string) {
@@ -284,6 +284,8 @@ function getPlayerIdFromMessage(msg: any) {
     currentDate={data.currentDate}
     managerTeamId={data.managerTeamId}
     scoutingLevel={selectedPlayerScoutingLevel}
+    perceivedMin={selectedPlayerReport?.perceivedMin}
+    perceivedMax={selectedPlayerReport?.perceivedMax}
     isShortlisted={(data.shortlist as string[] || []).includes(selectedPlayer.id)}
     onclose={() => selectedPlayerId = null} 
   />

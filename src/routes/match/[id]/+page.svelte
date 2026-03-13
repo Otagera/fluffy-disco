@@ -14,7 +14,8 @@ import {
 	PLAYER_OFFSET_Y,
 	PLAYER_STRIDE,
 } from "$lib/engine/core/constants";
-import { Match, MatchStatus } from "$lib/engine/Match.svelte.ts";
+import { MatchStatus } from "$lib/engine/Match.svelte.ts";
+import { MatchController as Match } from "$lib/engine/MatchController.svelte.ts";
 import { MatchRecorder } from "$lib/engine/MatchRecorder";
 import type { PageData } from "./$types";
 
@@ -27,11 +28,6 @@ const isHome = data.managerTeamId === data.homeTeam.id;
 
 // New Engine Instance
 const match = new Match();
-match.recorder = new MatchRecorder(
-	matchIdStr,
-	data.homeTeam.id,
-	data.awayTeam.id,
-);
 
 let currentTime = $state(0);
 let playerLabels = $state<string[]>([]);
@@ -49,8 +45,21 @@ let isPaused = $state(false);
 let hasKickedOff = $state(false);
 let showTacticsModal = $state(false);
 
+$effect(() => {
+	// Sync speed and pause state to worker
+	if (!hasKickedOff) return;
+	
+	if (isPaused || showTacticsModal) {
+		match.pause();
+	} else {
+		match.start();
+		match.setSpeed(gameSpeed);
+	}
+});
+
 let finalHomeScore = $state(0);
 let finalAwayScore = $state(0);
+let isSavingReplay = $state(false);
 
 // Keep original formations for swapping sides
 let homeStartPositions: { x: number; y: number }[] = [];
@@ -99,19 +108,11 @@ function gameLoop(time: number) {
 		match.status !== MatchStatus.PAUSED &&
 		match.status !== MatchStatus.HALF_TIME
 	) {
-		// Sub-step the physics to prevent Euler integration overshoot at high game speeds
-		let simulatedTime = 0;
-		const targetTime = dt * gameSpeed;
-		const fixedDt = 0.05; // 50ms per step max
-
-		while (simulatedTime < targetTime) {
-			const step = Math.min(fixedDt, targetTime - simulatedTime);
-			match.tick(step);
-			simulatedTime += step;
-		}
-
+		// When using Web Worker Engine, we do NOT call match.tick() here.
+		// The worker ticks itself and sends STATE_UPDATE back via postMessage.
+		
 		// Periodically sync engine stamina back to the UI squad array
-		syncTimer += targetTime;
+		syncTimer += dt * gameSpeed;
 		if (syncTimer > 2) {
 			// Sync every 2 engine seconds
 			syncTimer = 0;
@@ -153,15 +154,27 @@ function gameLoop(time: number) {
 		finalHomeScore = match.homeScore;
 		finalAwayScore = match.awayScore;
 		showFinalOverlay = true;
+		
+		// Stop the worker from ticking further once we hit 90 mins in the UI
+		match.pause();
 
 		// Save Replay
-		if (match.recorder) {
-			match.recorder.saveToIndexedDB(match.analytics, playerLabels);
-		}
+		isSavingReplay = true;
+		match.saveReplay(playerLabels).then(() => {
+			isSavingReplay = false;
+		});
 	}
 
-	requestAnimationFrame(gameLoop);
+	animationFrameId = requestAnimationFrame(gameLoop);
 }
+
+import { onDestroy } from "svelte";
+let animationFrameId: number;
+
+onDestroy(() => {
+	if (animationFrameId) cancelAnimationFrame(animationFrameId);
+	if (match) match.terminate();
+});
 
 onMount(() => {
 	// apply any tactical overrides saved earlier
@@ -239,8 +252,12 @@ onMount(() => {
 	starterRoles = isHome
 		? [...managedRoles.slice(0, 11), ...opponentRoles.slice(0, 11)]
 		: [...opponentRoles.slice(0, 11), ...managedRoles.slice(0, 11)];
-	const benchStatsArr = managedStats.slice(11);
-	const benchRolesArr = managedRoles.slice(11);
+	
+	const managedBenchStats = managedStats.slice(11);
+	const managedBenchRoles = managedRoles.slice(11);
+	const opponentBenchStats = opponentStats.slice(11);
+	const opponentBenchRoles = opponentRoles.slice(11);
+	
 	benchPlayers = squad.slice(11);
 
 	// assign to match instance after setup
@@ -270,21 +287,29 @@ onMount(() => {
 			? overrides.mentality || data.awayTeam.mentality
 			: data.awayTeam.mentality;
 
+	// The match worker will initialize the recorder if we pass the ids
 	match.setup(
 		[...homeStartPositions, ...awayStartPositions],
 		playerStats,
 		starterRoles,
 		[homeStyle, awayStyle],
 		[homeMentality, awayMentality],
+		[data.homeTeam.formation, data.awayTeam.formation],
 		true,
+		matchIdStr,
+		data.homeTeam.id,
+		data.awayTeam.id,
+		isHome ? 0 : 1
 	);
 
-	// Assign managed team so the engine can skip AI auto-subs for the user
-	match.managedTeam = isHome ? 0 : 1;
-
-	// attach bench if provided
-	match.benchStats = benchStatsArr;
-	match.benchRoles = benchRolesArr;
+	// attach benches
+	const managedTeamIdx = isHome ? 0 : 1;
+	const opponentTeamIdx = isHome ? 1 : 0;
+	
+	match.setBenchStats(managedTeamIdx, managedBenchStats);
+	match.setBenchRoles(managedTeamIdx, managedBenchRoles);
+	match.setBenchStats(opponentTeamIdx, opponentBenchStats);
+	match.setBenchRoles(opponentTeamIdx, opponentBenchRoles);
 
 	requestAnimationFrame(gameLoop);
 });
@@ -300,32 +325,49 @@ function startSecondHalf() {
 		y: 68 - p.y,
 	}));
 
-	// Half-time Stamina Recovery (approx +15%)
-	for (let i = 0; i < 22; i++) {
-		const offset = i * PLAYER_STRIDE + PLAYER_OFFSET_STAMINA;
-		const currentStamina = match.memory.playerBuffer[offset];
-		match.memory.playerBuffer[offset] = Math.min(1.0, currentStamina + 0.15);
-	}
-
-	match.currentHalf = 2;
-	// We pass empty arrays for styles/mentalities during half time so they don't overwrite current live states
-	match.setup(
+	// Delegate to Worker
+	match.startSecondHalf(
 		[...swappedHome, ...swappedAway],
 		playerStats,
 		starterRoles,
 		undefined,
 		undefined,
-		false,
+		[data.homeTeam.formation, data.awayTeam.formation]
 	);
-	match.status = MatchStatus.KICKOFF;
 }
 
 function startMatch() {
 	// user pressed kickoff – enable ticking and force PLAYING state
 	hasKickedOff = true;
-	match.status = MatchStatus.PLAYING;
+	match.start();
+	match.setSpeed(gameSpeed);
 	// The ball is already placed at the center (52.5, 34.0) by match.setup()
 	// The closest player (usually the forward) will automatically pick it up.
+}
+
+function handleFormationChange(name: string) {
+	const team = isHome ? data.homeTeam : data.awayTeam;
+	team.formation = name; // Update local data for subsequent renders
+
+	const newForm = formations[name] || formations["4-4-2 Wide"];
+	const newAnchors: Record<number, { x: number; y: number }> = {};
+
+	for (let i = 0; i < 11; i++) {
+		newAnchors[i] = { x: newForm[i].x, y: newForm[i].y };
+	}
+
+	// Update the engine with default anchors for this formation
+	const currentStyle = isHome ? data.homeTeam.tacticalStyle : data.awayTeam.tacticalStyle;
+	const currentMentality = isHome ? data.homeTeam.mentality : data.awayTeam.mentality;
+	
+	// FormationBoard's resetOverrides() will have cleared local roles/positions
+	// So we send the default roles for the new formation too.
+	const roles: Record<number, string> = {};
+	for (let i = 0; i < 11; i++) {
+		roles[i] = newForm[i].role;
+	}
+
+	match.updateTactics(isHome, roles, currentStyle, currentMentality, name, newAnchors);
 }
 
 function handleTacticsOverrides(
@@ -334,21 +376,9 @@ function handleTacticsOverrides(
 	style: string,
 	mentality: string,
 ) {
-	if (isHome) {
-		match.homeStyle = style;
-		match.homeMentality = mentality;
-	} else {
-		match.awayStyle = style;
-		match.awayMentality = mentality;
-	}
-
-	// Update engine roles
-	const teamIdx = isHome ? 0 : 11;
-	for (let i = 0; i < 11; i++) {
-		if (roles[i]) {
-			match.roles[teamIdx + i] = roles[i];
-		}
-	}
+	const team = isHome ? data.homeTeam : data.awayTeam;
+	const currentFormation = team.formation;
+	match.updateTactics(isHome, roles, style, mentality, currentFormation, o);
 }
 
 function handleTacticsSwap(id1: string, id2: string) {
@@ -382,6 +412,9 @@ function handleTacticsSwap(id1: string, id2: string) {
 				benchPlayers = [...benchPlayers];
 			}
 		} else {
+			const teamNum = isHome ? 0 : 1;
+			match.swapPlayers(teamNum, idx1, idx2);
+
 			const newSquad = [...squad];
 			const temp = newSquad[idx1];
 			newSquad[idx1] = newSquad[idx2];
@@ -391,20 +424,20 @@ function handleTacticsSwap(id1: string, id2: string) {
 	}
 }
 
-function handleSkip() {
+async function handleSkip() {
 	if (isSimulating) return;
 	isSimulating = true;
 	showTacticsModal = false;
 
-	// Use the high-speed batch simulation method
-	const results = match.simulateMatch();
+	// Use the high-speed batch simulation method (now async via worker)
+	const results = await match.simulateMatch();
 	finalHomeScore = results.homeScore;
 	finalAwayScore = results.awayScore;
 
 	// Save Replay
-	if (match.recorder) {
-		match.recorder.saveToIndexedDB(match.analytics, playerLabels);
-	}
+	isSavingReplay = true;
+	await match.saveReplay(playerLabels);
+	isSavingReplay = false;
 
 	isSimulating = false;
 	showFinalOverlay = true;
@@ -616,9 +649,8 @@ function doManualSub(benchIdx: number) {
             scoutingReports={data.scoutingReports}
             shortlist={data.shortlist}
             onSwap={handleTacticsSwap}
-            onFormationChange={(f) => console.log('Formation', $state.snapshot(f))}
-            onOverridesChange={handleTacticsOverrides}
-          />
+            onFormationChange={handleFormationChange}
+            onOverridesChange={handleTacticsOverrides}          />
         </div>
       </div>
     </div>
@@ -716,20 +748,22 @@ function doManualSub(benchIdx: number) {
             <div class="grid grid-cols-2 gap-3 mt-4">
               <button 
                 type="button"
-                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest"
+                disabled={isSavingReplay}
+                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest disabled:opacity-50"
                 onclick={() => window.location.href = `/replay/${matchIdStr}`}
               >
-                Watch Replay
+                {isSavingReplay ? 'Saving...' : 'Watch Replay'}
               </button>
               <button 
                 type="button"
-                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest"
+                disabled={isSavingReplay}
+                class="btn-secondary py-3 text-xs font-black uppercase tracking-widest disabled:opacity-50"
                 onclick={async () => {
                   const { downloadReplay } = await import('$lib/engine/MatchRecorder');
                   downloadReplay(matchIdStr);
                 }}
               >
-                Export for AI
+                {isSavingReplay ? 'Saving...' : 'Export for AI'}
               </button>
             </div>
           </form>

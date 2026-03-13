@@ -62,7 +62,12 @@ export class MatchRecorder {
 	}
 
 	public async saveToIndexedDB(analytics?: any, startingLabels?: string[]) {
-		if (this.frames.length === 0) return;
+		if (this.frames.length === 0) {
+			console.warn(`[MatchRecorder] Cannot save replay for ${this.matchId}: No frames captured.`);
+			return;
+		}
+
+		console.log(`[MatchRecorder] Saving ${this.frames.length} frames for match ${this.matchId}...`);
 
 		// Concatenate all frames into one giant ArrayBuffer
 		const totalFloats = this.frames.length * FLOATS_PER_FRAME;
@@ -101,7 +106,7 @@ export class MatchRecorder {
 
 export async function downloadReplay(matchId: string) {
 	try {
-		const replay = await browserDB.replays.where({ matchId }).first();
+		const replay = await browserDB.replays.where('matchId').equals(matchId).first();
 		if (!replay) {
 			console.error("No replay found for match:", matchId);
 			return;

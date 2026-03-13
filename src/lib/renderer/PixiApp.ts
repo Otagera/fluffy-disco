@@ -6,6 +6,9 @@ import {
 	PLAYER_OFFSET_STAMINA,
 	PLAYER_OFFSET_X,
 	PLAYER_OFFSET_Y,
+	PLAYER_OFFSET_GK_X,
+	PLAYER_OFFSET_GK_Y,
+	PLAYER_OFFSET_GK_Z,
 	PLAYER_STRIDE,
 } from "../engine/core/constants";
 import type { MatchMemory } from "../engine/core/MatchMemory";
@@ -216,6 +219,28 @@ export class MatchRenderer {
 					fill.tint = 0xffeb3b;
 				} else {
 					fill.tint = 0xffffff;
+				}
+			}
+
+			// Update GK Hands if applicable
+			if (i === 0 || i === 11) {
+				const hands = container.children.find(c => c.label === "gkHands") as PIXI.Graphics;
+				if (hands) {
+					const hx = playerBuf[offset + PLAYER_OFFSET_GK_X];
+					const hy = playerBuf[offset + PLAYER_OFFSET_GK_Y];
+					const hz = playerBuf[offset + PLAYER_OFFSET_GK_Z];
+
+					// Only show hands if they are actually active (hx >= 0)
+					if (hx >= 0) {
+						hands.visible = true;
+						// Coordinates in buffer are absolute, but hands are child of player container
+						hands.x = (hx - playerBuf[offset + PLAYER_OFFSET_X]) * 10;
+						hands.y = (hy - playerBuf[offset + PLAYER_OFFSET_Y]) * 10;
+						// Scale based on height (Z)
+						hands.scale.set(1.0 + hz * 0.2);
+					} else {
+						hands.visible = false;
+					}
 				}
 			}
 		}

@@ -40,9 +40,7 @@ export class PhysicsEngine {
 	): { fx: number; fy: number } {
 		const dx = tx - px;
 		const dy = ty - py;
-		const dist = Math.sqrt(dx * dx + dy * dy);
-
-		if (dist < 0.01) return { fx: -vx, fy: -vy };
+		const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.01);
 
 		// Desired velocity is straight to target at max speed
 		const desiredX = (dx / dist) * maxSpeed;
@@ -69,9 +67,7 @@ export class PhysicsEngine {
 	): { fx: number; fy: number } {
 		const dx = tx - px;
 		const dy = ty - py;
-		const dist = Math.sqrt(dx * dx + dy * dy);
-
-		if (dist < 0.01) return { fx: -vx, fy: -vy };
+		const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.01);
 
 		let speed = maxSpeed;
 		if (dist < slowingRadius) {
@@ -187,10 +183,18 @@ export class PhysicsEngine {
 			}
 
 			// 7. Write back
-			buffer[offset + PLAYER_OFFSET_X] = px;
-			buffer[offset + PLAYER_OFFSET_Y] = py;
-			buffer[offset + PLAYER_OFFSET_VX] = vx;
-			buffer[offset + PLAYER_OFFSET_VY] = vy;
+			// Final NaN check before write
+			if (isNaN(px) || isNaN(py) || isNaN(vx) || isNaN(vy)) {
+				buffer[offset + PLAYER_OFFSET_X] = target.x;
+				buffer[offset + PLAYER_OFFSET_Y] = target.y;
+				buffer[offset + PLAYER_OFFSET_VX] = 0;
+				buffer[offset + PLAYER_OFFSET_VY] = 0;
+			} else {
+				buffer[offset + PLAYER_OFFSET_X] = px;
+				buffer[offset + PLAYER_OFFSET_Y] = py;
+				buffer[offset + PLAYER_OFFSET_VX] = vx;
+				buffer[offset + PLAYER_OFFSET_VY] = vy;
+			}
 		}
 	}
 
@@ -260,7 +264,7 @@ export class PhysicsEngine {
 		// 4. Air Resistance (Simple drag while in air)
 		// Time-independent dampening factor
 		if (pz > 0) {
-			const airDrag = 0.7 ** dt; // 30% velocity loss per second in air
+			const airDrag = 0.85 ** dt; // Nerfed from 0.7 (15% velocity loss per second instead of 30%)
 			vx *= airDrag;
 			vy *= airDrag;
 			vz *= airDrag;

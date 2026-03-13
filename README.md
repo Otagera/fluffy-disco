@@ -1,5 +1,7 @@
 # Football Simulation Engine (v2)
 
+> **👋 New Developers & AI Agents:** Please read the [**ARCHITECTURE.md**](./ARCHITECTURE.md) file first. It is the central onboarding hub explaining the Web Worker concurrency, Data-Oriented Design match engine, and database schema in detail.
+
 A high-performance, statistically driven 2D football management and match simulation overhaul. This version implements a modern, light-themed UI system built with Svelte 5 and Tailwind CSS, backed by a Data-Oriented Design (DOD) match engine.
 
 ## Core Pillars
@@ -37,23 +39,6 @@ node scripts/convert-replay.js <input-file.bin> [options]
 **Example:**
 ```bash
 node scripts/convert-replay.js replay-f_u33s74h7h.bin --format json --output match_data.json
-```
-
-## Architecture
-
-```text
-src/
-├── lib/
-│   ├── components/       # Shared UI (FormationBoard, PlayerModal, HUD)
-│   ├── engine/           # High-Performance Match Engine
-│   │   ├── Match.svelte.ts # Main simulation entry point
-│   │   ├── MatchRecorder.ts # Binary replay capture
-│   │   ├── ai/           # Spatial Maps, Tactics (Formations, Decision Making)
-│   │   ├── core/         # RNG, Memory Buffers, Constants
-│   │   └── physics/      # Steering behaviors & kinematics
-│   ├── data/             # Save Game Store, Realism Generator, Rating Models
-│   └── renderer/         # PixiJS WebGL View Layer
-└── routes/               # SvelteKit App Pages (Home, League, Teams, Match, Replay)
 ```
 
 ## Tech Stack
